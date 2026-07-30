@@ -4,7 +4,7 @@ import { Card, Button, Input } from '../../components/ui';
 import { api } from '../../lib/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
-import { Eye, EyeOff, BarChart3, Users, CheckCircle } from 'lucide-react';
+import { Eye, EyeOff, BarChart3, Users, CheckCircle, Sparkles } from 'lucide-react';
 
 export function AdminLogin() {
   const navigate = useNavigate();
@@ -38,111 +38,128 @@ export function AdminLogin() {
 
   return (
     <div className="min-h-screen flex">
-      {/* Left illustration area */}
-      <div className="hidden lg:flex lg:w-1/2 bg-[#0F172A] items-center justify-center p-12">
-        <div className="text-white max-w-md text-center">
-          <h1 className="text-4xl font-bold mb-2">HireLens AI</h1>
-          <p className="text-slate-400 text-lg mb-12">
-            AI-powered candidate evaluation platform
+      {/* Left — brand panel */}
+      <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden items-center justify-center p-12"
+        style={{
+          background: 'linear-gradient(135deg, #0F172A 0%, #1E293B 50%, #0F172A 100%)',
+        }}
+      >
+        {/* Decorative grid pattern */}
+        <div className="absolute inset-0 opacity-[0.03]"
+          style={{
+            backgroundImage: 'linear-gradient(#4F6EF7 1px, transparent 1px), linear-gradient(90deg, #4F6EF7 1px, transparent 1px)',
+            backgroundSize: '40px 40px',
+          }}
+        />
+
+        {/* Glowing orbs */}
+        <div className="absolute -top-40 -right-40 w-80 h-80 rounded-full bg-[#4F6EF7]/10 blur-3xl" />
+        <div className="absolute -bottom-40 -left-40 w-80 h-80 rounded-full bg-[#22C55E]/5 blur-3xl" />
+
+        <div className="relative text-white max-w-md text-center">
+          {/* Logo mark */}
+          <div className="w-16 h-16 bg-gradient-to-br from-[#4F6EF7] to-[#3D5BD9] rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-[#4F6EF7]/30">
+            <Sparkles className="text-white" size={30} />
+          </div>
+
+          <h1 className="text-3xl font-bold mb-3">Welcome Back</h1>
+          <p className="text-slate-400 text-base mb-10 max-w-sm mx-auto leading-relaxed">
+            Sign in to manage candidates, review evaluations, and make data-driven hiring decisions.
           </p>
 
-          {/* Decorative illustration */}
-          <div className="relative mx-auto w-72">
-            {/* Desk monitor */}
-            <div className="bg-slate-800 rounded-xl p-6 mb-4 text-left">
-              <div className="flex items-center gap-2 mb-4">
-                <div className="w-3 h-3 rounded-full bg-red-500" />
-                <div className="w-3 h-3 rounded-full bg-yellow-500" />
-                <div className="w-3 h-3 rounded-full bg-green-500" />
-              </div>
-              {/* Bar chart */}
-              <div className="flex items-end gap-2 h-20">
-                <div className="w-8 bg-[#4F6EF7] rounded-t" style={{ height: '70%' }} />
-                <div className="w-8 bg-[#22C55E] rounded-t" style={{ height: '90%' }} />
-                <div className="w-8 bg-[#F59E0B] rounded-t" style={{ height: '50%' }} />
-                <div className="w-8 bg-[#4F6EF7] rounded-t opacity-60" style={{ height: '80%' }} />
-                <div className="w-8 bg-[#22C55E] rounded-t opacity-60" style={{ height: '60%' }} />
-              </div>
-              {/* Radar dots */}
-              <div className="flex justify-center gap-6 mt-6">
-                <div className="flex flex-col items-center">
-                  <div className="w-10 h-10 rounded-full bg-[#4F6EF7]/20 flex items-center justify-center">
-                    <Users size={20} className="text-[#4F6EF7]" />
-                  </div>
-                  <span className="text-xs text-slate-400 mt-1">Candidates</span>
+          {/* Feature cards */}
+          <div className="grid grid-cols-3 gap-4 max-w-sm mx-auto">
+            {[
+              { icon: Users, label: 'Candidates', color: '#4F6EF7', desc: 'Track all applicants' },
+              { icon: BarChart3, label: 'Reports', color: '#22C55E', desc: 'AI-powered insights' },
+              { icon: CheckCircle, label: 'Decisions', color: '#F59E0B', desc: 'Hire with confidence' },
+            ].map(({ icon: Icon, label, color, desc }) => (
+              <div key={label} className="text-center p-3 rounded-xl bg-white/5 backdrop-blur-sm border border-white/10">
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center mx-auto mb-2" style={{ backgroundColor: `${color}20` }}>
+                  <Icon size={20} style={{ color }} />
                 </div>
-                <div className="flex flex-col items-center">
-                  <div className="w-10 h-10 rounded-full bg-[#22C55E]/20 flex items-center justify-center">
-                    <BarChart3 size={20} className="text-[#22C55E]" />
-                  </div>
-                  <span className="text-xs text-slate-400 mt-1">Reports</span>
-                </div>
-                <div className="flex flex-col items-center">
-                  <div className="w-10 h-10 rounded-full bg-[#F59E0B]/20 flex items-center justify-center">
-                    <CheckCircle size={20} className="text-[#F59E0B]" />
-                  </div>
-                  <span className="text-xs text-slate-400 mt-1">Decisions</span>
-                </div>
+                <p className="text-xs font-medium text-white mb-0.5">{label}</p>
+                <p className="text-[10px] text-slate-500">{desc}</p>
               </div>
-            </div>
+            ))}
           </div>
         </div>
       </div>
 
-      {/* Right form area */}
-      <div className="flex-1 flex items-center justify-center p-8" style={{ backgroundColor: 'var(--color-bg)' }}>
-        <Card className="max-w-sm w-full">
-          <h1 className="text-2xl font-bold mb-1" style={{ color: 'var(--color-heading)' }}>Admin Login</h1>
-          <p className="text-sm mb-8" style={{ color: 'var(--color-body)' }}>Sign in to your admin account</p>
+      {/* Right — form panel */}
+      <div className="flex-1 flex items-center justify-center p-8"
+        style={{
+          background: 'linear-gradient(135deg, var(--color-bg) 0%, #EDF0F7 100%)',
+        }}
+      >
+        <Card className="max-w-sm w-full relative overflow-hidden" hover={false}>
+          {/* Top accent bar */}
+          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-[#4F6EF7] via-[#22C55E] to-[#F59E0B]" />
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <Input
-              label="Email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-            />
+          <div className="pt-4">
+            {/* Mobile-only logo */}
+            <div className="lg:hidden w-14 h-14 bg-gradient-to-br from-[#4F6EF7] to-[#3D5BD9] rounded-xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-[#4F6EF7]/20">
+              <Sparkles className="text-white" size={24} />
+            </div>
 
-            <div className="relative">
+            <h1 className="text-2xl font-bold mb-1" style={{ color: 'var(--color-heading)' }}>Admin Login</h1>
+            <p className="text-sm mb-8" style={{ color: 'var(--color-body)' }}>Sign in to access your dashboard</p>
+
+            <form onSubmit={handleSubmit} className="space-y-5">
               <Input
-                label="Password"
-                type={showPassword ? 'text' : 'password'}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                label="Email"
+                type="email"
+                placeholder="admin@gmail.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
                 required
-                className="pr-10"
               />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-[38px] text-gray-400 hover:text-gray-600"
-              >
-                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-              </button>
-            </div>
 
-            <div className="flex items-center justify-between text-sm">
-              <label className="flex items-center gap-2" style={{ color: 'var(--color-body)' }}>
-                <input
-                  type="checkbox"
-                  checked={remember}
-                  onChange={(e) => setRemember(e.target.checked)}
-                  className="rounded border-gray-300 text-[#4F6EF7] focus:ring-[#4F6EF7]"
+              <div className="relative">
+                <Input
+                  label="Password"
+                  type={showPassword ? 'text' : 'password'}
+                  placeholder="Enter your password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  className="pr-10"
                 />
-                Remember me
-              </label>
-              <a href="#" className="text-[#4F6EF7] hover:underline">Forgot password?</a>
-            </div>
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-[38px] text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
 
-            {error && (
-              <p className="text-sm text-red-600 bg-red-50 dark:bg-red-900/20 rounded-lg p-3">{error}</p>
-            )}
+              <div className="flex items-center justify-between text-sm">
+                <label className="flex items-center gap-2 cursor-pointer" style={{ color: 'var(--color-body)' }}>
+                  <input
+                    type="checkbox"
+                    checked={remember}
+                    onChange={(e) => setRemember(e.target.checked)}
+                    className="rounded border-gray-300 text-[#4F6EF7] focus:ring-[#4F6EF7] cursor-pointer"
+                  />
+                  Remember me
+                </label>
+                <a href="#" className="text-[#4F6EF7] hover:underline font-medium">Forgot password?</a>
+              </div>
 
-            <Button type="submit" fullWidth disabled={loading}>
-              {loading ? 'Signing in...' : 'Sign In'}
-            </Button>
-          </form>
+              {error && (
+                <p className="text-sm text-red-600 bg-red-50 dark:bg-red-900/20 rounded-lg p-3">{error}</p>
+              )}
+
+              <Button type="submit" fullWidth disabled={loading}>
+                {loading ? 'Signing in...' : 'Sign In'}
+              </Button>
+            </form>
+
+            <p className="mt-6 text-xs text-center" style={{ color: 'var(--color-muted)' }}>
+              © {new Date().getFullYear()} HireLens AI. All rights reserved.
+            </p>
+          </div>
         </Card>
       </div>
     </div>

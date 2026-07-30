@@ -4,6 +4,7 @@
 - Prefers cross-checking/reconciling outputs from multiple AI providers before persisting, to reduce hallucination. Confidence: 0.9
 - Prefers lightweight charting libraries (e.g. Recharts) over heavier alternatives. Confidence: 0.7
 - Prefers a clean SaaS aesthetic: white/light-gray cards, rounded-xl corners, soft shadows, blue primary accent. Confidence: 0.9
+- Demands championship-level design polish — the site should look as premium as ChatGPT/Linear/Notion, with subtle gradients, micro-interactions (hover lift, button press scale, row accent), and professional-grade shadow elevation systems. Confidence: 0.9
 - Prefers shadcn/ui as the base component library with lucide-react for icons. Confidence: 0.9
 - Prefers reusable component architecture — builds Button, Card, Badge, ProgressRing, etc. as shared components rather than duplicating UI across pages. Confidence: 0.9
 - Prefers two distinct layout modes per user flow: public/candidate-facing pages use centered minimal layouts with top navbar only, while admin/internal pages use a persistent dark sidebar layout. Confidence: 0.8
@@ -20,4 +21,6 @@
 - Prefers a single self-contained database migration file (e.g. migration.sql) that can be pasted directly into a SQL editor, rather than multiple script files or CLI-run migrations. Confidence: 0.8
 - Prefers users to have self-service profile editing capabilities (name, photo) with inline editing UI and a backend PUT endpoint. Confidence: 0.8
 - Prefers a consistent site-wide footer on all page types (public, admin, candidate) with copyright, privacy/terms links, and brand attribution. Confidence: 0.8
+- Demands pixel-perfect consistency in design implementation — every hardcoded color value is unacceptable; all pages must use CSS variables so dark/light mode works flawlessly across the entire app. Confidence: 0.9
 - Prefers embedding step-by-step setup documentation directly as comments inside configuration/migration files, so users don't need to consult separate docs. Confidence: 0.8
+- Prefers proactively testing and verifying auth flows end-to-end (admin login, Google OAuth sign-in, token expiry) as a routine part of any auth-related work, not just assuming previously written code still works. Confidence: 0.8
