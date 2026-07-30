@@ -10,9 +10,9 @@ export function ScoreRing({ score, size = 120, strokeWidth = 8 }: ScoreRingProps
   const offset = circumference - (score / 100) * circumference;
 
   const getColor = () => {
-    if (score >= 70) return '#16a34a'; // green
-    if (score >= 50) return '#d97706'; // amber
-    return '#dc2626'; // red
+    if (score >= 80) return '#16A34A'; // green
+    if (score >= 60) return '#D97706'; // amber
+    return '#DC2626'; // red
   };
 
   return (

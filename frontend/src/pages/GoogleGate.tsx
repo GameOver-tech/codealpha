@@ -1,6 +1,6 @@
 import { useAuth } from '../contexts/AuthContext';
 import { Card, Button } from '../components/ui';
-import { Lock } from 'lucide-react';
+import { Lock, Shield } from 'lucide-react';
 
 export function GoogleGate() {
   const { signInWithGoogle } = useAuth();
@@ -9,13 +9,13 @@ export function GoogleGate() {
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
       <Card className="max-w-md w-full text-center">
         <div className="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-6">
-          <Lock className="text-blue-600" size={28} />
+          <Lock className="text-[#4F6EF7]" size={28} />
         </div>
-        <h1 className="text-2xl font-bold text-gray-900 mb-2">
+        <h1 className="text-2xl font-bold text-[#111827] mb-2">
           Sign in with Google to continue
         </h1>
-        <p className="text-gray-500 mb-8">
-          You'll need a Google account to record and submit your interview.
+        <p className="text-[#4B5563] mb-8">
+          You must be signed in to start your interview.
         </p>
 
         <Button
@@ -32,7 +32,8 @@ export function GoogleGate() {
           Continue with Google
         </Button>
 
-        <p className="mt-6 text-xs text-gray-400">
+        <p className="mt-6 text-xs text-[#9CA3AF] flex items-center justify-center gap-1.5">
+          <Shield size={12} />
           Secure · Private · Only your recruiter will see your results
         </p>
       </Card>

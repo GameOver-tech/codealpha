@@ -56,7 +56,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function validateSession(token: string) {
     try {
-      const data = await api.get('/auth/session');
+      const data = await api.get('/auth/verify');
       setUser(data);
     } catch {
       setUser(null);

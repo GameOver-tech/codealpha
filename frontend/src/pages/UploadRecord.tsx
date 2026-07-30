@@ -1,12 +1,14 @@
 import { useState, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Card, Button } from '../components/ui';
 import { api } from '../lib/api';
-import { Upload, File, X, Camera } from 'lucide-react';
+import { useToast } from '../contexts/ToastContext';
+import { Upload, File, X, Camera, ArrowLeft } from 'lucide-react';
 
 export function UploadRecord() {
   const { jobId } = useParams();
   const navigate = useNavigate();
+  const { toast } = useToast();
   const [activeTab, setActiveTab] = useState<'upload' | 'record'>('upload');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -41,19 +43,31 @@ export function UploadRecord() {
       formData.append('job_id', jobId);
 
       const result = await api.upload('/interviews/upload', formData);
+      toast({ title: 'Interview submitted!', description: 'Your recording is being processed.', type: 'success' });
       navigate(`/interview/${jobId}/status/${result.interview_id}`);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Upload failed');
+      const msg = err instanceof Error ? err.message : 'Upload failed';
+      setError(msg);
+      toast({ title: 'Upload failed', description: msg, type: 'error' });
     } finally {
       setUploading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 py-12 px-4">
+    <div className="min-h-screen bg-[#F7F8FC] py-12 px-4">
       <div className="max-w-2xl mx-auto">
+        <Link
+          to={`/interview/${jobId}`}
+          className="inline-flex items-center gap-1.5 text-sm text-[#4B5563] hover:text-[#111827] mb-6 transition-colors"
+        >
+          <ArrowLeft size={16} />
+          Back
+        </Link>
+
         <Card>
-          <h1 className="text-2xl font-bold text-gray-900 mb-6">Submit Your Interview</h1>
+          <h1 className="text-2xl font-bold text-[#111827] mb-2">Upload or Record Your Interview</h1>
+          <p className="text-[#4B5563] text-sm mb-6">Choose how you'd like to submit your interview recording.</p>
 
           {/* Tabs */}
           <div className="flex gap-1 bg-gray-100 rounded-lg p-1 mb-6">
@@ -89,17 +103,19 @@ export function UploadRecord() {
                   onDragOver={handleDragOver}
                   onDrop={handleDrop}
                   onClick={() => fileInputRef.current?.click()}
-                  className="border-2 border-dashed border-gray-300 rounded-xl p-12 text-center cursor-pointer hover:border-blue-400 hover:bg-blue-50/30 transition-colors"
+                  className="border-2 border-dashed border-gray-300 rounded-xl p-12 text-center cursor-pointer hover:border-[#4F6EF7] hover:bg-blue-50/30 transition-colors"
                 >
                   <Upload className="mx-auto mb-4 text-gray-400" size={40} />
                   <p className="text-gray-700 font-medium mb-1">
-                    Drag & drop your recording here
+                    Drag & drop your file here
                   </p>
                   <p className="text-gray-400 text-sm mb-4">
-                    or click to browse files
+                    or
+                    <span className="text-[#4F6EF7] font-medium mx-1">Choose File</span>
+                    to browse
                   </p>
                   <p className="text-gray-400 text-xs">
-                    Supported: MP4, MOV, WebM, MP3, WAV, M4A (max 500MB)
+                    Supports: mp4, mov, mp3, wav — Max 500MB
                   </p>
                   <input
                     ref={fileInputRef}
@@ -115,7 +131,7 @@ export function UploadRecord() {
               {selectedFile && (
                 <div className="flex items-center justify-between bg-gray-50 rounded-lg p-4 mb-4">
                   <div className="flex items-center gap-3">
-                    <File className="text-blue-600" size={24} />
+                    <File className="text-[#4F6EF7]" size={24} />
                     <div>
                       <p className="text-sm font-medium text-gray-900">{selectedFile.name}</p>
                       <p className="text-xs text-gray-500">
@@ -125,7 +141,7 @@ export function UploadRecord() {
                   </div>
                   <button
                     onClick={() => setSelectedFile(null)}
-                    className="text-gray-400 hover:text-gray-600"
+                    className="text-gray-400 hover:text-gray-600 transition-colors"
                   >
                     <X size={20} />
                   </button>
@@ -140,6 +156,7 @@ export function UploadRecord() {
                 fullWidth
                 disabled={!selectedFile || uploading}
                 onClick={handleSubmit}
+                className="mt-2"
               >
                 {uploading ? 'Uploading...' : 'Submit Interview'}
               </Button>

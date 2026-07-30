@@ -1,6 +1,6 @@
 from fastapi import Depends, HTTPException, Header, status
 from supabase import Client
-from app.services.supabase_service import get_supabase
+from app.services.supabase_service import get_supabase, get_supabase_service
 
 
 async def get_token_from_header(authorization: str = Header(None)) -> str:
@@ -37,11 +37,17 @@ async def get_current_user(token: str = Depends(get_token_from_header)) -> dict:
         )
 
 
+def _get_role(user_id: str) -> str | None:
+    """Get role using service client (bypasses RLS to avoid infinite recursion)."""
+    svc = get_supabase_service()
+    profile = svc.table("profiles").select("role").eq("id", user_id).execute()
+    return profile.data[0]["role"] if profile.data else None
+
+
 async def get_current_candidate(user: dict = Depends(get_current_user)) -> dict:
     """Verify the user has the candidate role."""
-    supabase: Client = get_supabase()
-    profile = supabase.table("profiles").select("role").eq("id", user["id"]).execute()
-    if not profile.data or profile.data[0]["role"] != "candidate":
+    role = _get_role(user["id"])
+    if role != "candidate":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Candidate access required",
@@ -51,9 +57,8 @@ async def get_current_candidate(user: dict = Depends(get_current_user)) -> dict:
 
 async def get_current_admin(user: dict = Depends(get_current_user)) -> dict:
     """Verify the user has the admin role."""
-    supabase: Client = get_supabase()
-    profile = supabase.table("profiles").select("role").eq("id", user["id"]).execute()
-    if not profile.data or profile.data[0]["role"] != "admin":
+    role = _get_role(user["id"])
+    if role != "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Admin access required",

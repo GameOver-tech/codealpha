@@ -82,3 +82,17 @@ class ReportResponse(BaseModel):
     audio_url: Optional[str] = None
     transcript: Optional[dict] = None
     evaluation: Optional[EvaluationResponse] = None
+
+
+class RecommendationOverride(BaseModel):
+    recommendation: str
+
+
+class CandidateInterviewItem(BaseModel):
+    id: UUID
+    job_title: str
+    job_company: str
+    status: str
+    overall_score: Optional[float] = None
+    recommendation: Optional[str] = None
+    interview_date: str

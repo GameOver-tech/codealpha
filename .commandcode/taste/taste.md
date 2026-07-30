@@ -4,6 +4,16 @@
 - Prefers cross-checking/reconciling outputs from multiple AI providers before persisting, to reduce hallucination. Confidence: 0.9
 - Prefers lightweight charting libraries (e.g. Recharts) over heavier alternatives. Confidence: 0.7
 - Prefers a clean SaaS aesthetic: white/light-gray cards, rounded-xl corners, soft shadows, blue primary accent. Confidence: 0.9
+- Prefers shadcn/ui as the base component library with lucide-react for icons. Confidence: 0.9
+- Prefers reusable component architecture — builds Button, Card, Badge, ProgressRing, etc. as shared components rather than duplicating UI across pages. Confidence: 0.9
+- Prefers two distinct layout modes per user flow: public/candidate-facing pages use centered minimal layouts with top navbar only, while admin/internal pages use a persistent dark sidebar layout. Confidence: 0.8
 - Prefers using FastAPI background tasks for async processing pipelines that return immediately while work continues. Confidence: 0.8
+- Prefers dark/light mode with system-default detection on first visit and localStorage persistence. Confidence: 0.9
+- Prefers distinct auth strategies per user role: social/OAuth (e.g. Google) for end-users/candidates, email+password for admin — never mixing strategies across roles. Confidence: 0.9
+- Prefers toast notification feedback (success/error/info) for all user-triggered actions like uploads, form submissions, and state changes. Confidence: 0.9
+- Prefers subtle page transition animations (fade + translateY) for professional-grade polish. Confidence: 0.8
+- Prefers automated decisions (AI scoring, recommendations) to default to a neutral "pending/under review" state, with explicit human/admin action required to finalize them. Confidence: 0.9
+- Prefers including manual override capabilities for admins on any system-generated decision (e.g. AI recommendations), not just read-only display. Confidence: 0.9
 - Prefers organizing backend code by domain (routers/, services/, models/, db/). Confidence: 0.8
 - Prefers providing extremely detailed, comprehensive specifications upfront covering all screens, endpoints, and constraints before code is written. Confidence: 0.9
+- Prefers phased, confirmation-gated builds: propose architecture first, verify before writing, then build piece by piece (database → auth → pipeline → frontend) — never dump everything in one shot. Confidence: 0.9

@@ -39,7 +39,7 @@ def run_migrations(client: Client):
     # so we use the REST API with the service role key
     import httpx
 
-    project_ref = client.supabase_url.split("//")[1].split(".")[0]
+    project_ref = str(client.supabase_url).split("//")[1].split(".")[0]
     rpc_url = f"https://{project_ref}.supabase.co/rest/v1/rpc/"
     headers = {
         "apikey": client.supabase_key,

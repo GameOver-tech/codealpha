@@ -2,12 +2,12 @@ import os
 import uuid
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, BackgroundTasks
 
-from app.middleware.auth import get_current_candidate
+from app.middleware.auth import get_current_candidate, get_current_admin
 from app.models.schemas import InterviewStatusResponse
 from app.services.supabase_service import get_supabase_service
 from app.services.interview_processor import process_interview
 
-router = APIRouter(prefix="/api/v1/interviews", tags=["interviews"])
+router = APIRouter(prefix="/api/interviews", tags=["interviews"])
 
 ALLOWED_EXTENSIONS = {".mp4", ".mov", ".avi", ".webm", ".mkv", ".mp3", ".wav", ".m4a", ".ogg"}
 MAX_FILE_SIZE = 500 * 1024 * 1024  # 500 MB
@@ -91,6 +91,7 @@ async def get_interview_status(
         "transcribing": 25,
         "analyzing": 60,
         "completed": 100,
+        "failed": 0,
     }
 
     return InterviewStatusResponse(
@@ -98,3 +99,34 @@ async def get_interview_status(
         status=status,
         progress_pct=progress_map.get(status, 0),
     )
+
+
+@router.post("/{interview_id}/process")
+async def trigger_process(
+    interview_id: str,
+    background_tasks: BackgroundTasks,
+    admin: dict = Depends(get_current_admin),
+) -> dict:
+    """Manually trigger or retry processing for an interview (admin only)."""
+    supabase = get_supabase_service()
+    result = supabase.table("interviews").select("status, video_url, audio_url").eq("id", interview_id).single().execute()
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Interview not found")
+
+    interview = result.data
+    storage_path = interview.get("video_url") or interview.get("audio_url")
+    if not storage_path:
+        raise HTTPException(status_code=400, detail="No recording file found for this interview")
+
+    is_video = interview.get("video_url") is not None
+
+    # Reset status and trigger processing
+    supabase.table("interviews").update({"status": "uploaded"}).eq("id", interview_id).execute()
+    background_tasks.add_task(
+        process_interview,
+        interview_id=uuid.UUID(interview_id),
+        storage_path=storage_path,
+        is_video=is_video,
+    )
+
+    return {"interview_id": interview_id, "status": "processing triggered"}

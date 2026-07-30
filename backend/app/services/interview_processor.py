@@ -1,16 +1,13 @@
-import asyncio
 import json
 import logging
 import os
+import shutil
 import subprocess
 from uuid import UUID
 
-from app.config import settings
 from app.services.supabase_service import get_supabase_service
-from app.services.deepgram_service import transcribe_audio
-from app.services.groq_service import refine_transcript
-from app.services.openrouter_service import evaluate as openrouter_evaluate
-from app.services.gemini_service import evaluate as gemini_evaluate
+from app.services.whisper_service import transcribe_audio
+from app.services.claude_service import evaluate as claude_evaluate
 
 logger = logging.getLogger(__name__)
 
@@ -39,85 +36,6 @@ def _download_file(client, url: str, local_path: str):
         f.write(res)
 
 
-def _upload_file(client, local_path: str, remote_path: str) -> str:
-    """Upload a file to Supabase Storage and return the public URL."""
-    with open(local_path, "rb") as f:
-        client.storage.from_("interview-files").upload(remote_path, f)
-    # Return the signed URL for the file
-    return client.storage.from_("interview-files").get_public_url(remote_path)
-
-
-def _reconcile_evaluations(or_result: dict, gemini_result: dict) -> dict:
-    """Reconcile OpenRouter and Gemini evaluations into a single result."""
-    reconciled = {}
-
-    # Average scores, log if gap > 15
-    score_fields = [
-        "technical_score", "communication_score", "confidence_score",
-        "problem_solving_score", "experience_score", "overall_score",
-    ]
-    for field in score_fields:
-        o = or_result.get(field, 0) or 0
-        g = gemini_result.get(field, 0) or 0
-        avg = round((float(o) + float(g)) / 2, 2)
-        reconciled[field] = avg
-        if abs(float(o) - float(g)) > 15:
-            logger.warning(
-                f"Score disagreement on {field}: OpenRouter={o}, Gemini={g}, using average={avg}"
-            )
-
-    # Recommendation
-    or_rec = or_result.get("recommendation", "")
-    gem_rec = gemini_result.get("recommendation", "")
-    if or_rec == gem_rec:
-        reconciled["recommendation"] = or_rec
-    else:
-        reconciled["recommendation"] = "Need Further Review"
-        logger.warning(
-            f"Recommendation disagreement: OpenRouter={or_rec}, Gemini={gem_rec}, using Need Further Review"
-        )
-
-    # Merge strengths (deduplicated)
-    strengths = set()
-    for s in or_result.get("strengths", []):
-        strengths.add(s)
-    for s in gemini_result.get("strengths", []):
-        strengths.add(s)
-    reconciled["strengths"] = list(strengths)
-
-    # Merge weaknesses (deduplicated)
-    weaknesses = set()
-    for w in or_result.get("weaknesses", []):
-        weaknesses.add(w)
-    for w in gemini_result.get("weaknesses", []):
-        weaknesses.add(w)
-    reconciled["weaknesses"] = list(weaknesses)
-
-    # Pick the longer AI summary
-    or_summary = or_result.get("ai_summary", "") or ""
-    gem_summary = gemini_result.get("ai_summary", "") or ""
-    reconciled["ai_summary"] = or_summary if len(or_summary) >= len(gem_summary) else gem_summary
-
-    # Merge evidence per category
-    or_evidence = or_result.get("evidence", {}) or {}
-    gem_evidence = gemini_result.get("evidence", {}) or {}
-    all_categories = set(list(or_evidence.keys()) + list(gem_evidence.keys()))
-    merged_evidence = {}
-    for cat in all_categories:
-        items = []
-        seen = set()
-        for item in or_evidence.get(cat, []) + gem_evidence.get(cat, []):
-            quote = item.get("quote", "")
-            if quote and quote not in seen:
-                seen.add(quote)
-                items.append(item)
-        if items:
-            merged_evidence[cat] = items
-    reconciled["evidence"] = merged_evidence
-
-    return reconciled
-
-
 async def process_interview(interview_id: UUID, storage_path: str, is_video: bool):
     """Background task: process an interview through the full pipeline."""
     client = get_supabase_service()
@@ -135,71 +53,43 @@ async def process_interview(interview_id: UUID, storage_path: str, is_video: boo
         if is_video:
             _convert_video_to_audio(local_video, audio_path)
         else:
-            # Already audio — just rename/copy
-            import shutil
             shutil.copy2(local_video, audio_path)
 
-        raw_transcript = await transcribe_audio(audio_path)
+        transcript = await transcribe_audio(audio_path)
         client.table("transcripts").upsert({
             "interview_id": str(interview_id),
-            "raw_transcript": raw_transcript,
+            "raw_transcript": transcript,
+            "refined_transcript": transcript,
         }).execute()
 
         # --- Stage 2: Analyzing ---
         client.table("interviews").update({"status": "analyzing"}).eq("id", str(interview_id)).execute()
-
-        # Refine transcript with Groq
-        refined_transcript = await refine_transcript(raw_transcript)
-        client.table("transcripts").update({
-            "refined_transcript": refined_transcript,
-        }).eq("interview_id", str(interview_id)).execute()
 
         # Get job details for context
         interview = client.table("interviews").select("job_id").eq("id", str(interview_id)).single().execute()
         job = client.table("jobs").select("*").eq("id", interview.data["job_id"]).single().execute()
         job_data = job.data
 
-        # Evaluate with OpenRouter and Gemini in parallel
-        or_task = asyncio.create_task(openrouter_evaluate(refined_transcript, job_data))
-        gemini_task = asyncio.create_task(gemini_evaluate(refined_transcript, job_data))
-        or_result, gemini_result = await asyncio.gather(or_task, gemini_task, return_exceptions=True)
+        # Evaluate with Claude
+        evaluation = await claude_evaluate(transcript, job_data)
 
-        # Handle individual failures gracefully
-        if isinstance(or_result, Exception):
-            logger.error(f"OpenRouter evaluation failed: {or_result}")
-            or_result = {
-                "technical_score": 0, "communication_score": 0, "confidence_score": 0,
-                "problem_solving_score": 0, "experience_score": 0, "overall_score": 0,
-                "recommendation": "Need Further Review", "strengths": [], "weaknesses": [],
-                "ai_summary": "Evaluation from OpenRouter was unavailable.", "evidence": {},
-            }
-        if isinstance(gemini_result, Exception):
-            logger.error(f"Gemini evaluation failed: {gemini_result}")
-            gemini_result = {
-                "technical_score": 0, "communication_score": 0, "confidence_score": 0,
-                "problem_solving_score": 0, "experience_score": 0, "overall_score": 0,
-                "recommendation": "Need Further Review", "strengths": [], "weaknesses": [],
-                "ai_summary": "Evaluation from Gemini was unavailable.", "evidence": {},
-            }
-
-        # Reconcile the two evaluations
-        reconciled = _reconcile_evaluations(or_result, gemini_result)
-
-        # Save evaluation
-        client.table("evaluations").upsert({
+        # Map Claude's field names to database column names (summary -> ai_summary)
+        db_evaluation = {
             "interview_id": str(interview_id),
-            "technical_score": reconciled["technical_score"],
-            "communication_score": reconciled["communication_score"],
-            "confidence_score": reconciled["confidence_score"],
-            "problem_solving_score": reconciled["problem_solving_score"],
-            "experience_score": reconciled["experience_score"],
-            "overall_score": reconciled["overall_score"],
-            "recommendation": reconciled["recommendation"],
-            "strengths": reconciled["strengths"],
-            "weaknesses": reconciled["weaknesses"],
-            "ai_summary": reconciled["ai_summary"],
-            "evidence": json.dumps(reconciled["evidence"]),
-        }).execute()
+            "technical_score": evaluation.get("technical_score", 0),
+            "communication_score": evaluation.get("communication_score", 0),
+            "confidence_score": evaluation.get("confidence_score", 0),
+            "problem_solving_score": evaluation.get("problem_solving_score", 0),
+            "experience_score": evaluation.get("experience_score", 0),
+            "overall_score": evaluation.get("overall_score", 0),
+            "recommendation": evaluation.get("recommendation", "Need Further Review"),
+            "strengths": evaluation.get("strengths", []),
+            "weaknesses": evaluation.get("weaknesses", []),
+            "ai_summary": evaluation.get("summary", ""),
+            "evidence": "{}",
+        }
+
+        client.table("evaluations").upsert(db_evaluation).execute()
 
         # --- Stage 3: Completed ---
         client.table("interviews").update({"status": "completed"}).eq("id", str(interview_id)).execute()
@@ -207,8 +97,8 @@ async def process_interview(interview_id: UUID, storage_path: str, is_video: boo
 
     except Exception as e:
         logger.error(f"Interview {interview_id} processing failed: {e}")
-        client.table("interviews").update({"status": "completed"}).eq("id", str(interview_id)).execute()
-        # Save a minimal evaluation so the status page doesn't hang
+        client.table("interviews").update({"status": "failed"}).eq("id", str(interview_id)).execute()
+        # Save a minimal fallback evaluation so the UI doesn't hang
         client.table("evaluations").upsert({
             "interview_id": str(interview_id),
             "technical_score": 0, "communication_score": 0, "confidence_score": 0,
@@ -219,9 +109,7 @@ async def process_interview(interview_id: UUID, storage_path: str, is_video: boo
             "evidence": "{}",
         }).execute()
     finally:
-        # Clean up temp files
         try:
-            import shutil
             shutil.rmtree(temp_dir, ignore_errors=True)
         except Exception:
             pass

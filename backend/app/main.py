@@ -2,7 +2,7 @@ import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routers import auth, jobs, interviews, admin
+from app.routers import auth, jobs, interviews, admin, candidates
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -27,6 +27,7 @@ app.include_router(auth.router)
 app.include_router(jobs.router)
 app.include_router(interviews.router)
 app.include_router(admin.router)
+app.include_router(candidates.router)
 
 
 @app.get("/")

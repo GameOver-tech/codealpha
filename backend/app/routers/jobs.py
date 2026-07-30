@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException
 from app.services.supabase_service import get_supabase
 
-router = APIRouter(prefix="/api/v1/jobs", tags=["jobs"])
+router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 
 
 @router.get("")

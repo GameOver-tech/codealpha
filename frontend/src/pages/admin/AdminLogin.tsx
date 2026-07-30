@@ -3,11 +3,13 @@ import { useNavigate } from 'react-router-dom';
 import { Card, Button, Input } from '../../components/ui';
 import { api } from '../../lib/api';
 import { useAuth } from '../../contexts/AuthContext';
-import { Eye, EyeOff } from 'lucide-react';
+import { useToast } from '../../contexts/ToastContext';
+import { Eye, EyeOff, BarChart3, Users, CheckCircle } from 'lucide-react';
 
 export function AdminLogin() {
   const navigate = useNavigate();
   const { setAdminSession } = useAuth();
+  const { toast } = useToast();
   const [email, setEmail] = useState('admin@gmail.com');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -23,31 +25,75 @@ export function AdminLogin() {
     try {
       const result = await api.adminLogin(email, password);
       setAdminSession(result.access_token);
+      toast({ title: 'Login successful', description: 'Welcome to HireLens AI admin.', type: 'success' });
       navigate('/admin/dashboard');
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Login failed');
+      const msg = err instanceof Error ? err.message : 'Login failed';
+      setError(msg);
+      toast({ title: 'Login failed', description: msg, type: 'error' });
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex">
+    <div className="min-h-screen flex">
       {/* Left illustration area */}
-      <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-blue-600 to-blue-800 items-center justify-center p-12">
-        <div className="text-white max-w-md">
-          <h1 className="text-4xl font-bold mb-4">HireLens AI</h1>
-          <p className="text-blue-100 text-lg">
-            AI-powered candidate evaluation platform. Analyze interviews, generate reports, and make data-driven hiring decisions.
+      <div className="hidden lg:flex lg:w-1/2 bg-[#0F172A] items-center justify-center p-12">
+        <div className="text-white max-w-md text-center">
+          <h1 className="text-4xl font-bold mb-2">HireLens AI</h1>
+          <p className="text-slate-400 text-lg mb-12">
+            AI-powered candidate evaluation platform
           </p>
+
+          {/* Decorative illustration */}
+          <div className="relative mx-auto w-72">
+            {/* Desk monitor */}
+            <div className="bg-slate-800 rounded-xl p-6 mb-4 text-left">
+              <div className="flex items-center gap-2 mb-4">
+                <div className="w-3 h-3 rounded-full bg-red-500" />
+                <div className="w-3 h-3 rounded-full bg-yellow-500" />
+                <div className="w-3 h-3 rounded-full bg-green-500" />
+              </div>
+              {/* Bar chart */}
+              <div className="flex items-end gap-2 h-20">
+                <div className="w-8 bg-[#4F6EF7] rounded-t" style={{ height: '70%' }} />
+                <div className="w-8 bg-[#22C55E] rounded-t" style={{ height: '90%' }} />
+                <div className="w-8 bg-[#F59E0B] rounded-t" style={{ height: '50%' }} />
+                <div className="w-8 bg-[#4F6EF7] rounded-t opacity-60" style={{ height: '80%' }} />
+                <div className="w-8 bg-[#22C55E] rounded-t opacity-60" style={{ height: '60%' }} />
+              </div>
+              {/* Radar dots */}
+              <div className="flex justify-center gap-6 mt-6">
+                <div className="flex flex-col items-center">
+                  <div className="w-10 h-10 rounded-full bg-[#4F6EF7]/20 flex items-center justify-center">
+                    <Users size={20} className="text-[#4F6EF7]" />
+                  </div>
+                  <span className="text-xs text-slate-400 mt-1">Candidates</span>
+                </div>
+                <div className="flex flex-col items-center">
+                  <div className="w-10 h-10 rounded-full bg-[#22C55E]/20 flex items-center justify-center">
+                    <BarChart3 size={20} className="text-[#22C55E]" />
+                  </div>
+                  <span className="text-xs text-slate-400 mt-1">Reports</span>
+                </div>
+                <div className="flex flex-col items-center">
+                  <div className="w-10 h-10 rounded-full bg-[#F59E0B]/20 flex items-center justify-center">
+                    <CheckCircle size={20} className="text-[#F59E0B]" />
+                  </div>
+                  <span className="text-xs text-slate-400 mt-1">Decisions</span>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
       {/* Right form area */}
-      <div className="flex-1 flex items-center justify-center p-8">
+      <div className="flex-1 flex items-center justify-center p-8 bg-[#F7F8FC]">
         <Card className="max-w-sm w-full">
-          <h1 className="text-2xl font-bold text-gray-900 mb-1">Welcome back</h1>
-          <p className="text-gray-500 text-sm mb-8">Sign in to your admin account</p>
+          <h1 className="text-2xl font-bold text-[#111827] mb-1">Admin Login</h1>
+          <p className="text-[#4B5563] text-sm mb-8">Sign in to your admin account</p>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <Input
@@ -77,16 +123,16 @@ export function AdminLogin() {
             </div>
 
             <div className="flex items-center justify-between text-sm">
-              <label className="flex items-center gap-2 text-gray-600">
+              <label className="flex items-center gap-2 text-[#4B5563]">
                 <input
                   type="checkbox"
                   checked={remember}
                   onChange={(e) => setRemember(e.target.checked)}
-                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  className="rounded border-gray-300 text-[#4F6EF7] focus:ring-[#4F6EF7]"
                 />
                 Remember me
               </label>
-              <a href="#" className="text-blue-600 hover:underline">Forgot password?</a>
+              <a href="#" className="text-[#4F6EF7] hover:underline">Forgot password?</a>
             </div>
 
             {error && (

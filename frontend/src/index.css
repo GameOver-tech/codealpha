@@ -1,8 +1,48 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  --color-primary: #4F6EF7;
+  --color-success: #22C55E;
+  --color-warning: #F59E0B;
+  --color-danger: #EF4444;
+  --color-bg: #F7F8FC;
+  --color-card: #FFFFFF;
+  --color-border: #E5E7EB;
+  --color-heading: #111827;
+  --color-body: #4B5563;
+  --color-muted: #9CA3AF;
+  --radius-card: 12px;
+  --radius-button: 8px;
+}
+
+.dark {
+  --color-bg: #0F172A;
+  --color-card: #1E293B;
+  --color-border: #334155;
+  --color-heading: #F1F5F9;
+  --color-body: #CBD5E1;
+  --color-muted: #64748B;
+}
+
 body {
   margin: 0;
-  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  background-color: var(--color-bg);
+  color: var(--color-body);
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+/* Page transition */
+.page-enter {
+  opacity: 0;
+  transform: translateY(8px);
+}
+.page-enter-active {
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 0.3s ease, transform 0.3s ease;
 }

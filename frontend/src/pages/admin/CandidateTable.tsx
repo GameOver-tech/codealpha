@@ -1,10 +1,16 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Button, LoadingSpinner } from '../../components/ui';
-import { RecommendationPill } from '../../components/ui';
+import { LoadingSpinner, Avatar, RecommendationPill, StatusPill } from '../../components/ui';
 import { api } from '../../lib/api';
 import { Search, ChevronLeft, ChevronRight } from 'lucide-react';
 import type { CandidateListItem } from '../../types';
+
+function ScoreDisplay({ score }: { score?: number | null }) {
+  if (score == null) return <span className="text-sm text-gray-400">-</span>;
+  const rounded = Math.round(score);
+  const color = rounded >= 80 ? 'text-[#16A34A]' : rounded >= 60 ? 'text-[#D97706]' : 'text-[#DC2626]';
+  return <span className={`text-sm font-semibold ${color}`}>{rounded}/100</span>;
+}
 
 export function CandidateTable() {
   const navigate = useNavigate();
@@ -43,8 +49,10 @@ export function CandidateTable() {
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Candidates</h1>
-        <span className="text-sm text-gray-500">{total} total candidates</span>
+        <div>
+          <h1 className="text-2xl font-bold text-[#111827]">Candidates</h1>
+          <p className="text-sm text-[#4B5563] mt-1">All interview evaluations</p>
+        </div>
       </div>
 
       {/* Filters */}
@@ -56,13 +64,13 @@ export function CandidateTable() {
             placeholder="Search candidates..."
             value={search}
             onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-            className="w-full pl-10 pr-4 py-2.5 rounded-lg border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full pl-10 pr-4 py-2.5 rounded-lg border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-[#4F6EF7]"
           />
         </div>
         <select
           value={jobFilter}
           onChange={(e) => { setJobFilter(e.target.value); setPage(1); }}
-          className="px-4 py-2.5 rounded-lg border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="px-4 py-2.5 rounded-lg border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-[#4F6EF7]"
         >
           <option value="">All Jobs</option>
           {jobs.map((j) => (
@@ -104,13 +112,7 @@ export function CandidateTable() {
                     >
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 bg-gray-200 rounded-full flex items-center justify-center text-sm font-medium text-gray-600 overflow-hidden">
-                            {c.photo_url ? (
-                              <img src={c.photo_url} alt="" className="w-full h-full object-cover" />
-                            ) : (
-                              c.full_name?.charAt(0) || '?'
-                            )}
-                          </div>
+                          <Avatar src={c.photo_url} name={c.full_name} />
                           <div>
                             <p className="text-sm font-medium text-gray-900">{c.full_name}</p>
                             <p className="text-xs text-gray-500">{c.email}</p>
@@ -118,8 +120,8 @@ export function CandidateTable() {
                         </div>
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-700">{c.job_title || '-'}</td>
-                      <td className="px-6 py-4 text-sm font-semibold text-gray-900">
-                        {c.overall_score != null ? `${Math.round(c.overall_score)}/100` : '-'}
+                      <td className="px-6 py-4">
+                        <ScoreDisplay score={c.overall_score} />
                       </td>
                       <td className="px-6 py-4">
                         {c.recommendation ? (
@@ -129,13 +131,11 @@ export function CandidateTable() {
                         )}
                       </td>
                       <td className="px-6 py-4">
-                        <span className={`inline-block px-2.5 py-1 rounded-full text-xs font-medium capitalize
-                          ${c.status === 'completed' ? 'bg-green-100 text-green-800' : ''}
-                          ${c.status === 'analyzing' || c.status === 'transcribing' ? 'bg-blue-100 text-blue-800' : ''}
-                          ${c.status === 'uploaded' ? 'bg-gray-100 text-gray-600' : ''}
-                        `}>
-                          {c.status || '-'}
-                        </span>
+                        {c.status ? (
+                          <StatusPill status={c.status} />
+                        ) : (
+                          <span className="text-sm text-gray-400">-</span>
+                        )}
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-500">
                         {c.interview_date ? new Date(c.interview_date).toLocaleDateString() : '-'}
@@ -166,7 +166,7 @@ export function CandidateTable() {
                     key={p}
                     onClick={() => setPage(p)}
                     className={`px-3 py-1.5 rounded-lg text-sm ${
-                      p === page ? 'bg-blue-600 text-white' : 'border border-gray-300 hover:bg-gray-50'
+                      p === page ? 'bg-[#4F6EF7] text-white' : 'border border-gray-300 hover:bg-gray-50'
                     }`}
                   >
                     {p}

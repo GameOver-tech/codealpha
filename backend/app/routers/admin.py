@@ -1,9 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
-
 from app.middleware.auth import get_current_admin
 from app.services.supabase_service import get_supabase_service
+from app.models.schemas import RecommendationOverride
 
-router = APIRouter(prefix="/api/v1/admin", tags=["admin"])
+router = APIRouter(prefix="/api/admin", tags=["admin"])
 
 
 @router.get("/candidates")
@@ -132,3 +132,37 @@ async def get_candidate_detail(
         "transcript": transcript.data if transcript.data else None,
         "evaluation": evaluation.data if evaluation.data else None,
     }
+
+
+@router.post("/candidates/{candidate_id}/recommendation")
+async def override_recommendation(
+    candidate_id: str,
+    body: RecommendationOverride,
+    admin: dict = Depends(get_current_admin),
+) -> dict:
+    """Manually override a candidate's AI-generated recommendation (admin only)."""
+    supabase = get_supabase_service()
+
+    if body.recommendation not in ("Recommended", "Not Recommended", "Need Further Review"):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid recommendation. Use 'Recommended', 'Not Recommended', or 'Need Further Review'.",
+        )
+
+    # Find the latest interview for this candidate
+    interviews = supabase.table("interviews").select("id").eq("candidate_id", candidate_id).order("created_at", desc=True).execute()
+    if not interviews.data:
+        raise HTTPException(status_code=404, detail="No interviews found for this candidate")
+
+    latest_interview_id = interviews.data[0]["id"]
+
+    # Find and update the evaluation
+    evaluation = supabase.table("evaluations").select("id").eq("interview_id", latest_interview_id).execute()
+    if not evaluation.data:
+        raise HTTPException(status_code=404, detail="No evaluation found for this interview")
+
+    supabase.table("evaluations").update({
+        "recommendation": body.recommendation,
+    }).eq("id", evaluation.data[0]["id"]).execute()
+
+    return {"recommendation": body.recommendation}

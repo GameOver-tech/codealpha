@@ -1,14 +1,22 @@
 -- ============================================================
--- HireLens AI — Run All Migrations
--- Execute this entire file in the Supabase SQL Editor
--- Dashboard → SQL Editor → New Query → Paste → Run
+-- HireLens AI — Complete Database Setup
+-- ============================================================
+-- HOW TO USE:
+-- 1. Go to your Supabase Dashboard → SQL Editor → New Query
+-- 2. Paste this entire file
+-- 3. Click "Run"
+-- 4. Then go to Authentication → Providers → Google
+--    - Enable Google
+--    - Client ID: <your-google-client-id>.apps.googleusercontent.com
+--    - Client Secret: <your-google-client-secret>
+--    - Save
+-- 5. Copy the "Redirect URL" shown in Supabase and add it to Google Cloud Console:
+--    https://console.cloud.google.com/apis/credentials → Edit OAuth client → add to "Authorized redirect URIs"
+-- 6. Run: python seed_admin.py (to create admin user admin@gmail.com / 12345678)
 -- ============================================================
 
--- 001: Schema (tables)
--- 002: RLS policies
-
 -- ============================================================
--- 001_schema.sql — Tables
+-- 1. TABLES
 -- ============================================================
 
 -- Profiles for role-based access
@@ -81,7 +89,10 @@ CREATE TABLE IF NOT EXISTS evaluations (
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
--- Seed jobs
+-- ============================================================
+-- 2. SEED DATA (3 sample jobs)
+-- ============================================================
+
 INSERT INTO jobs (title, company, location, employment_type, description, requirements, expectations) VALUES
 ('Senior Software Engineer', 'TechCorp Inc.', 'San Francisco, CA', 'Full-time',
  'We are looking for a senior software engineer to join our core platform team. You will design, build, and maintain scalable distributed systems that power our SaaS platform.',
@@ -98,7 +109,7 @@ INSERT INTO jobs (title, company, location, employment_type, description, requir
 ON CONFLICT DO NOTHING;
 
 -- ============================================================
--- 002_rls.sql — Row Level Security Policies
+-- 3. ROW LEVEL SECURITY
 -- ============================================================
 
 -- Security definer function to check admin role without triggering RLS recursion
@@ -177,7 +188,10 @@ DROP POLICY IF EXISTS "evaluations_admin" ON evaluations;
 CREATE POLICY "evaluations_admin" ON evaluations
   FOR ALL USING (public.is_admin());
 
--- Storage bucket
+-- ============================================================
+-- 4. STORAGE BUCKET (for interview recordings)
+-- ============================================================
+
 INSERT INTO storage.buckets (id, name, public) VALUES ('interview-files', 'interview-files', false)
 ON CONFLICT (id) DO NOTHING;
 

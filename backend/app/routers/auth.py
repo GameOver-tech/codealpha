@@ -1,15 +1,15 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from app.models.schemas import AdminLoginRequest, SessionResponse
 from app.middleware.auth import get_current_user
-from app.services.supabase_service import get_supabase, ensure_candidate_profile
+from app.services.supabase_service import get_supabase_service, ensure_candidate_profile
 
-router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
+router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
-@router.post("/session")
+@router.post("/verify")
 async def validate_session(user: dict = Depends(get_current_user)) -> SessionResponse:
     """Validate JWT and return user info with role. Auto-creates candidate profile on first login."""
-    supabase = get_supabase()
+    supabase = get_supabase_service()
     profile = supabase.table("profiles").select("role").eq("id", user["id"]).execute()
 
     if not profile.data:
@@ -42,7 +42,7 @@ async def validate_session(user: dict = Depends(get_current_user)) -> SessionRes
 @router.post("/admin-login")
 async def admin_login(request: AdminLoginRequest) -> dict:
     """Admin login with email and password via Supabase Auth."""
-    supabase = get_supabase()
+    supabase = get_supabase_service()
     try:
         response = supabase.auth.sign_in_with_password({
             "email": request.email,
