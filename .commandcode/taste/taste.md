@@ -3,19 +3,30 @@
 - Mandates two-layer auth enforcement: frontend route protection AND backend JWT verification — never trust the client gate alone. Confidence: 1.0
 - Prefers cross-checking/reconciling outputs from multiple AI providers before persisting, to reduce hallucination. Confidence: 0.9
 - Prefers lightweight charting libraries (e.g. Recharts) over heavier alternatives. Confidence: 0.7
+- Prefers TanStack Query for server-state management, React Hook Form for form handling, and Zod for schema validation in React projects — this trio is the canonical data/forms stack. Confidence: 0.85
+- Prefers Framer Motion as the go-to React animation library — for page transitions, hover elevation, entrance animations, and micro-interactions. Confidence: 0.85
+- Prefers an 8px-based spacing system with consistent border-radius (14px default for cards, buttons, and modals) across the entire design system. Confidence: 0.8
+- Every shared/reusable UI component must handle six visual states: hover, focus, disabled, loading, success, and error. Confidence: 0.8
+- Rejects derivative admin-template aesthetics (Bootstrap, AdminLTE, Metronic, TemplateMonster lookalikes) — the design must be original and premium SaaS, not a warmed-over template. Confidence: 0.8
 - Prefers a clean SaaS aesthetic: white/light-gray cards, rounded-xl corners, soft shadows, blue primary accent. Confidence: 0.9
+- Prefers split-screen layout for admin login pages — dark brand panel (with decorative elements like grid patterns, glowing orbs, feature cards) on one side, light/card form panel on the other. Confidence: 0.8
+- Prefers login/authentication pages to include UX conveniences as standard: password visibility toggle, remember me checkbox, and forgot password link. Confidence: 0.8
+- Prefers seed/dummy data scripts that produce realistic, diverse candidate profiles with varied outcomes (Recommended / Need Further Review / Not Recommended), per-dimension scores, strengths/weaknesses, and evidence quotes — over minimal or placeholder data. Confidence: 0.9
 - Demands championship-level design polish — the site should look as premium as ChatGPT/Linear/Notion, with subtle gradients, micro-interactions (hover lift, button press scale, row accent), and professional-grade shadow elevation systems. Confidence: 0.9
 - Prefers shadcn/ui as the base component library with lucide-react for icons. Confidence: 0.9
 - Prefers reusable component architecture — builds Button, Card, Badge, ProgressRing, etc. as shared components rather than duplicating UI across pages. Confidence: 0.9
 - Prefers two distinct layout modes per user flow: public/candidate-facing pages use centered minimal layouts with top navbar only, while admin/internal pages use a persistent dark sidebar layout. Confidence: 0.8
 - Prefers using FastAPI background tasks for async processing pipelines that return immediately while work continues. Confidence: 0.8
 - Prefers dark/light mode with system-default detection on first visit and localStorage persistence. Confidence: 0.9
+- Prefers a semantic color token system (Background, Surface/Card, Border, Primary, Secondary, Success, Warning, Danger) where every token has distinct light-mode and dark-mode values — never inverting colors as a shortcut for dark mode. Confidence: 0.85
+- Demands WCAG AA accessibility as a non-negotiable baseline: keyboard navigation, ARIA labels on icon-only controls, visible focus rings, and proper contrast ratios (≥4.5:1 for text). Confidence: 0.85
 - Prefers distinct auth strategies per user role: social/OAuth (e.g. Google) for end-users/candidates, email+password for admin — never mixing strategies across roles. Confidence: 0.9
 - Prefers toast notification feedback (success/error/info) for all user-triggered actions like uploads, form submissions, and state changes. Confidence: 0.9
 - Prefers subtle page transition animations (fade + translateY) for professional-grade polish. Confidence: 0.8
 - Prefers automated decisions (AI scoring, recommendations) to default to a neutral "pending/under review" state, with explicit human/admin action required to finalize them. Confidence: 0.9
 - Prefers including manual override capabilities for admins on any system-generated decision (e.g. AI recommendations), not just read-only display. Confidence: 0.9
 - Prefers organizing backend code by domain (routers/, services/, models/, db/). Confidence: 0.8
+- Prefers feature-based folder structure on the frontend (grouping by domain/feature rather than by file type). Confidence: 0.75
 - Prefers providing extremely detailed, comprehensive specifications upfront covering all screens, endpoints, and constraints before code is written. Confidence: 0.9
 - Prefers phased, confirmation-gated builds: propose architecture first, verify before writing, then build piece by piece (database → auth → pipeline → frontend) — never dump everything in one shot. Confidence: 0.9
 - Prefers a single self-contained database migration file (e.g. migration.sql) that can be pasted directly into a SQL editor, rather than multiple script files or CLI-run migrations. Confidence: 0.8
@@ -24,3 +35,5 @@
 - Demands pixel-perfect consistency in design implementation — every hardcoded color value is unacceptable; all pages must use CSS variables so dark/light mode works flawlessly across the entire app. Confidence: 0.9
 - Prefers embedding step-by-step setup documentation directly as comments inside configuration/migration files, so users don't need to consult separate docs. Confidence: 0.8
 - Prefers proactively testing and verifying auth flows end-to-end (admin login, Google OAuth sign-in, token expiry) as a routine part of any auth-related work, not just assuming previously written code still works. Confidence: 0.8
+- When a previously-suggested manual fix hasn't resolved the user's issue, prefers taking direct programmatic action — querying cloud provider APIs, testing endpoints, and checking service state programmatically — rather than repeating manual instructions or asking the user to inspect dashboards. Confidence: 0.85
+- When diagnosis reveals the root cause of a bug is external configuration rather than application code, prefers reverting any speculative/in-progress code changes back to their original state, keeping the change set minimal and targeted to the actual fix. Confidence: 0.65
