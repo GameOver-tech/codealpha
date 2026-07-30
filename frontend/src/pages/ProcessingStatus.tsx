@@ -39,19 +39,19 @@ export function ProcessingStatus() {
   }, [status?.status, navigate, jobId, interviewId]);
 
   return (
-    <div className="min-h-screen bg-[#F7F8FC] flex items-center justify-center p-4">
+    <div className="min-h-screen flex items-center justify-center p-4" style={{ backgroundColor: 'var(--color-bg)' }}>
       <Card className="max-w-2xl w-full">
         <div className="text-center mb-8">
-          <h1 className="text-xl font-bold text-[#111827] mb-1">
+          <h1 className="text-xl font-bold mb-1" style={{ color: 'var(--color-heading)' }}>
             Processing Your Interview
           </h1>
-          <p className="text-sm text-[#4B5563]">
+          <p className="text-sm" style={{ color: 'var(--color-body)' }}>
             We're analyzing your responses. This may take a few minutes.
           </p>
         </div>
 
         {error && (
-          <p className="text-sm text-red-600 mb-4 text-center bg-red-50 rounded-lg p-3">{error}</p>
+          <p className="text-sm text-red-600 mb-4 text-center bg-red-50 dark:bg-red-900/20 rounded-lg p-3">{error}</p>
         )}
 
         <div className="flex items-start gap-10">
@@ -73,7 +73,7 @@ export function ProcessingStatus() {
                   </div>
                   {/* Stage content */}
                   <div className="pb-6">
-                    <p className={`text-sm font-medium ${status && stageOrder.indexOf(status.status) >= sIdx ? 'text-[#111827]' : 'text-[#9CA3AF]'}`}>
+                    <p className={`text-sm font-medium ${status && stageOrder.indexOf(status.status) >= sIdx ? 'text-[var(--color-heading)]' : 'text-[var(--color-muted)]'}`}>
                       {stage.label}
                     </p>
                     <p className="text-xs text-[#9CA3AF]">{stage.desc}</p>

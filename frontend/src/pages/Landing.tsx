@@ -76,7 +76,7 @@ export function Landing() {
           <h2 className="text-3xl font-bold text-center mb-12" style={{ color: 'var(--color-heading)' }}>
             How It Works
           </h2>
-          <div className="grid grid-cols-5 gap-0 items-start">
+          <div className="grid grid-cols-5 gap-4 items-start">
             {steps.map((step, i) => {
               const Icon = step.icon;
               return (

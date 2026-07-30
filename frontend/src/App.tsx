@@ -13,19 +13,63 @@ import { CandidateResults } from './pages/CandidateResults';
 import { AdminLogin } from './pages/admin/AdminLogin';
 import { CandidateTable } from './pages/admin/CandidateTable';
 import { CandidateReport } from './pages/admin/CandidateReport';
-import { type ReactNode } from 'react';
+import { type ReactNode, useEffect, useState } from 'react';
 
 function CandidateProtectedRoute({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth();
+  const location = useLocation();
+
   if (loading) return null;
   if (!user || user.role !== 'candidate') return <GoogleGate />;
+
+  // After successful auth, redirect to dashboard instead of interview/new
+  if (location.pathname === '/interview/new') {
+    return <Navigate to="/candidate/dashboard" replace />;
+  }
+
   return <>{children}</>;
 }
 
-function AdminProtectedRoute({ children }: { children: ReactNode }) {
-  const { adminSession, loading } = useAuth();
-  if (loading) return null;
-  if (!adminSession) return <Navigate to="/admin/login" replace />;
+function AdminRouteGuard({ children }: { children: ReactNode }) {
+  const { adminSession, loading, setAdminSession } = useAuth();
+  const [checking, setChecking] = useState(true);
+  const [valid, setValid] = useState(false);
+
+  useEffect(() => {
+    if (loading) return;
+    if (!adminSession) {
+      setChecking(false);
+      setValid(false);
+      return;
+    }
+
+    const adminToken = localStorage.getItem('admin_token');
+    if (!adminToken) {
+      setChecking(false);
+      setValid(false);
+      return;
+    }
+
+    fetch(`${import.meta.env.VITE_API_BASE || 'http://localhost:8000/api'}/admin/jobs`, {
+      headers: {
+        'Authorization': `Bearer ${adminToken}`,
+        'Content-Type': 'application/json',
+      },
+    })
+      .then((res) => {
+        if (res.ok) setValid(true);
+        else {
+          localStorage.removeItem('admin_token');
+          setAdminSession(null);
+          setValid(false);
+        }
+      })
+      .catch(() => setValid(true))
+      .finally(() => setChecking(false));
+  }, [adminSession, loading, setAdminSession]);
+
+  if (loading || (adminSession && checking)) return null;
+  if (!adminSession || !valid) return <Navigate to="/admin/login" replace />;
   return <AdminLayout>{children}</AdminLayout>;
 }
 
@@ -87,17 +131,17 @@ function AnimatedRoutes() {
         <Route
           path="/admin/dashboard"
           element={
-            <AdminProtectedRoute>
+            <AdminRouteGuard>
               <CandidateTable />
-            </AdminProtectedRoute>
+            </AdminRouteGuard>
           }
         />
         <Route
           path="/admin/candidates/:id"
           element={
-            <AdminProtectedRoute>
+            <AdminRouteGuard>
               <CandidateReport />
-            </AdminProtectedRoute>
+            </AdminRouteGuard>
           }
         />
         <Route path="*" element={<Navigate to="/" replace />} />

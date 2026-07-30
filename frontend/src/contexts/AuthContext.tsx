@@ -20,25 +20,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     () => localStorage.getItem('admin_token')
   );
   const [loading, setLoading] = useState(true);
+  const [validated, setValidated] = useState(false);
 
+  // Single source of truth: listen for auth state changes (fires INITIAL_SESSION on mount)
   useEffect(() => {
-    // Check existing session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) {
-        validateSession(session.access_token);
-      } else {
-        setLoading(false);
-      }
-    });
-
-    // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (_event, session) => {
         if (session) {
           validateSession(session.access_token);
         } else {
           setUser(null);
-          setLoading(false);
+          if (!validated) {
+            setLoading(false);
+            setValidated(true);
+          }
         }
       }
     );
@@ -61,7 +56,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch {
       setUser(null);
     } finally {
-      setLoading(false);
+      if (!validated) {
+        setLoading(false);
+        setValidated(true);
+      }
     }
   }
 

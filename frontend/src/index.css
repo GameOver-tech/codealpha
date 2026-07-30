@@ -13,6 +13,7 @@
   --color-heading: #111827;
   --color-body: #4B5563;
   --color-muted: #9CA3AF;
+  --color-sidebar: #0F172A;
   --radius-card: 12px;
   --radius-button: 8px;
 }
@@ -24,6 +25,7 @@
   --color-heading: #F1F5F9;
   --color-body: #CBD5E1;
   --color-muted: #64748B;
+  --color-sidebar: #0B1120;
 }
 
 body {
@@ -31,9 +33,14 @@ body {
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background-color: var(--color-bg);
+  background: linear-gradient(180deg, var(--color-bg) 0%, #EDF0F7 100%);
   color: var(--color-body);
-  transition: background-color 0.2s ease, color 0.2s ease;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.dark body,
+body.dark {
+  background: linear-gradient(180deg, #0F172A 0%, #0B1120 100%);
 }
 
 /* Page transition */
@@ -45,4 +52,11 @@ body {
   opacity: 1;
   transform: translateY(0);
   transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+/* Subtle focus ring for all interactive elements */
+*:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+  border-radius: var(--radius-button);
 }

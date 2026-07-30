@@ -8,7 +8,7 @@ import { Footer } from '../components/layout/Footer';
 import { api } from '../lib/api';
 import { useAuth } from '../contexts/AuthContext';
 import { Avatar } from '../components/ui';
-import { ArrowLeft, CheckCircle, Calendar } from 'lucide-react';
+import { ArrowLeft, Calendar } from 'lucide-react';
 
 interface CandidateResult {
   candidate: { full_name: string; email: string; photo_url?: string };

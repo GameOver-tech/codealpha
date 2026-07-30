@@ -17,3 +17,7 @@
 - Prefers organizing backend code by domain (routers/, services/, models/, db/). Confidence: 0.8
 - Prefers providing extremely detailed, comprehensive specifications upfront covering all screens, endpoints, and constraints before code is written. Confidence: 0.9
 - Prefers phased, confirmation-gated builds: propose architecture first, verify before writing, then build piece by piece (database → auth → pipeline → frontend) — never dump everything in one shot. Confidence: 0.9
+- Prefers a single self-contained database migration file (e.g. migration.sql) that can be pasted directly into a SQL editor, rather than multiple script files or CLI-run migrations. Confidence: 0.8
+- Prefers users to have self-service profile editing capabilities (name, photo) with inline editing UI and a backend PUT endpoint. Confidence: 0.8
+- Prefers a consistent site-wide footer on all page types (public, admin, candidate) with copyright, privacy/terms links, and brand attribution. Confidence: 0.8
+- Prefers embedding step-by-step setup documentation directly as comments inside configuration/migration files, so users don't need to consult separate docs. Confidence: 0.8

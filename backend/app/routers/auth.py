@@ -6,7 +6,7 @@ from app.services.supabase_service import get_supabase_service, ensure_candidate
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
-@router.post("/verify")
+@router.get("/verify")
 async def validate_session(user: dict = Depends(get_current_user)) -> SessionResponse:
     """Validate JWT and return user info with role. Auto-creates candidate profile on first login."""
     supabase = get_supabase_service()

@@ -55,27 +55,28 @@ export function UploadRecord() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F7F8FC] py-12 px-4">
+    <div className="min-h-screen py-12 px-4" style={{ backgroundColor: 'var(--color-bg)' }}>
       <div className="max-w-2xl mx-auto">
         <Link
           to={`/interview/${jobId}`}
-          className="inline-flex items-center gap-1.5 text-sm text-[#4B5563] hover:text-[#111827] mb-6 transition-colors"
+          className="inline-flex items-center gap-1.5 text-sm mb-6 transition-colors"
+          style={{ color: 'var(--color-body)' }}
         >
           <ArrowLeft size={16} />
           Back
         </Link>
 
         <Card>
-          <h1 className="text-2xl font-bold text-[#111827] mb-2">Upload or Record Your Interview</h1>
-          <p className="text-[#4B5563] text-sm mb-6">Choose how you'd like to submit your interview recording.</p>
+          <h1 className="text-2xl font-bold mb-2" style={{ color: 'var(--color-heading)' }}>Upload or Record Your Interview</h1>
+          <p className="text-sm mb-6" style={{ color: 'var(--color-body)' }}>Choose how you'd like to submit your interview recording.</p>
 
           {/* Tabs */}
-          <div className="flex gap-1 bg-gray-100 rounded-lg p-1 mb-6">
+          <div className="flex gap-1 bg-gray-100 dark:bg-gray-800 rounded-lg p-1 mb-6">
             <button
               className={`flex-1 py-2.5 text-sm font-medium rounded-md transition-colors ${
                 activeTab === 'upload'
-                  ? 'bg-white text-gray-900 shadow-sm'
-                  : 'text-gray-500 hover:text-gray-700'
+                  ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
+                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-white'
               }`}
               onClick={() => setActiveTab('upload')}
             >
@@ -85,8 +86,8 @@ export function UploadRecord() {
             <button
               className={`flex-1 py-2.5 text-sm font-medium rounded-md transition-colors ${
                 activeTab === 'record'
-                  ? 'bg-white text-gray-900 shadow-sm'
-                  : 'text-gray-500 hover:text-gray-700'
+                  ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
+                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-white'
               }`}
               onClick={() => setActiveTab('record')}
             >

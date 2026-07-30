@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { LoadingSpinner, Avatar, RecommendationPill, StatusPill } from '../../components/ui';
 import { api } from '../../lib/api';
-import { Search, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, ChevronLeft, ChevronRight, Users } from 'lucide-react';
 import type { CandidateListItem } from '../../types';
 
 function ScoreDisplay({ score }: { score?: number | null }) {
@@ -50,8 +50,8 @@ export function CandidateTable() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-[#111827]">Candidates</h1>
-          <p className="text-sm text-[#4B5563] mt-1">All interview evaluations</p>
+          <h1 className="text-2xl font-bold" style={{ color: 'var(--color-heading)' }}>Candidates</h1>
+          <p className="text-sm mt-1" style={{ color: 'var(--color-body)' }}>All interview evaluations</p>
         </div>
       </div>
 
@@ -64,13 +64,15 @@ export function CandidateTable() {
             placeholder="Search candidates..."
             value={search}
             onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-            className="w-full pl-10 pr-4 py-2.5 rounded-lg border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-[#4F6EF7]"
+            className="w-full pl-10 pr-4 py-2.5 rounded-lg border border-gray-200 dark:border-gray-600 text-sm focus:outline-none focus:ring-2 focus:ring-[#4F6EF7]"
+            style={{ color: 'var(--color-heading)', backgroundColor: 'var(--color-card)' }}
           />
         </div>
         <select
           value={jobFilter}
           onChange={(e) => { setJobFilter(e.target.value); setPage(1); }}
-          className="px-4 py-2.5 rounded-lg border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-[#4F6EF7]"
+          className="px-4 py-2.5 rounded-lg border border-gray-200 dark:border-gray-600 text-sm focus:outline-none focus:ring-2 focus:ring-[#4F6EF7]"
+          style={{ color: 'var(--color-heading)', backgroundColor: 'var(--color-card)' }}
         >
           <option value="">All Jobs</option>
           {jobs.map((j) => (
@@ -84,42 +86,47 @@ export function CandidateTable() {
       ) : (
         <>
           {/* Table */}
-          <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+          <div className="bg-white dark:bg-[#1E293B] rounded-xl shadow-md overflow-hidden">
             <table className="w-full">
               <thead>
-                <tr className="border-b border-gray-100">
-                  <th className="text-left px-6 py-4 text-xs font-medium text-gray-500 uppercase tracking-wider">Candidate</th>
-                  <th className="text-left px-6 py-4 text-xs font-medium text-gray-500 uppercase tracking-wider">Job Applied</th>
-                  <th className="text-left px-6 py-4 text-xs font-medium text-gray-500 uppercase tracking-wider">Overall Score</th>
-                  <th className="text-left px-6 py-4 text-xs font-medium text-gray-500 uppercase tracking-wider">Recommendation</th>
-                  <th className="text-left px-6 py-4 text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                  <th className="text-left px-6 py-4 text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                <tr className="border-b dark:border-gray-700" style={{ borderColor: 'var(--color-border)' }}>
+                  <th className="text-left px-6 py-4 text-xs font-medium uppercase tracking-wider" style={{ color: 'var(--color-muted)' }}>Candidate</th>
+                  <th className="text-left px-6 py-4 text-xs font-medium uppercase tracking-wider" style={{ color: 'var(--color-muted)' }}>Job Applied</th>
+                  <th className="text-left px-6 py-4 text-xs font-medium uppercase tracking-wider" style={{ color: 'var(--color-muted)' }}>Overall Score</th>
+                  <th className="text-left px-6 py-4 text-xs font-medium uppercase tracking-wider" style={{ color: 'var(--color-muted)' }}>Recommendation</th>
+                  <th className="text-left px-6 py-4 text-xs font-medium uppercase tracking-wider" style={{ color: 'var(--color-muted)' }}>Status</th>
+                  <th className="text-left px-6 py-4 text-xs font-medium uppercase tracking-wider" style={{ color: 'var(--color-muted)' }}>Date</th>
                 </tr>
               </thead>
               <tbody>
                 {candidates.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-6 py-12 text-center text-gray-500 text-sm">
-                      No candidates found
+                    <td colSpan={6} className="px-6 py-16 text-center">
+                      <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4" style={{ backgroundColor: 'var(--color-bg)' }}>
+                        <Users size={32} style={{ color: 'var(--color-muted)' }} />
+                      </div>
+                      <h3 className="text-base font-semibold mb-1" style={{ color: 'var(--color-heading)' }}>No candidates yet</h3>
+                      <p className="text-sm" style={{ color: 'var(--color-body)' }}>Candidates will appear here once they complete their interviews.</p>
                     </td>
                   </tr>
                 ) : (
                   candidates.map((c) => (
                     <tr
                       key={c.id}
-                      className="border-b border-gray-50 hover:bg-gray-50 cursor-pointer transition-colors"
+                      className="border-b cursor-pointer transition-all duration-150 hover:bg-gray-50 dark:hover:bg-slate-800/50 hover:border-l-2 hover:border-l-[#4F6EF7]"
+                      style={{ borderColor: 'var(--color-border)' }}
                       onClick={() => navigate(`/admin/candidates/${c.id}`)}
                     >
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
                           <Avatar src={c.photo_url} name={c.full_name} />
                           <div>
-                            <p className="text-sm font-medium text-gray-900">{c.full_name}</p>
-                            <p className="text-xs text-gray-500">{c.email}</p>
+                            <p className="text-sm font-medium" style={{ color: 'var(--color-heading)' }}>{c.full_name}</p>
+                            <p className="text-xs" style={{ color: 'var(--color-muted)' }}>{c.email}</p>
                           </div>
                         </div>
                       </td>
-                      <td className="px-6 py-4 text-sm text-gray-700">{c.job_title || '-'}</td>
+                      <td className="px-6 py-4 text-sm" style={{ color: 'var(--color-body)' }}>{c.job_title || '-'}</td>
                       <td className="px-6 py-4">
                         <ScoreDisplay score={c.overall_score} />
                       </td>
@@ -127,17 +134,17 @@ export function CandidateTable() {
                         {c.recommendation ? (
                           <RecommendationPill label={c.recommendation} />
                         ) : (
-                          <span className="text-sm text-gray-400">Pending</span>
+                          <span className="text-sm" style={{ color: 'var(--color-muted)' }}>Pending</span>
                         )}
                       </td>
                       <td className="px-6 py-4">
                         {c.status ? (
                           <StatusPill status={c.status} />
                         ) : (
-                          <span className="text-sm text-gray-400">-</span>
+                          <span className="text-sm" style={{ color: 'var(--color-muted)' }}>-</span>
                         )}
                       </td>
-                      <td className="px-6 py-4 text-sm text-gray-500">
+                      <td className="px-6 py-4 text-sm" style={{ color: 'var(--color-muted)' }}>
                         {c.interview_date ? new Date(c.interview_date).toLocaleDateString() : '-'}
                       </td>
                     </tr>
@@ -150,14 +157,15 @@ export function CandidateTable() {
           {/* Pagination */}
           {totalPages > 1 && (
             <div className="flex items-center justify-between mt-4">
-              <p className="text-sm text-gray-500">
+              <p className="text-sm" style={{ color: 'var(--color-muted)' }}>
                 Showing {(page - 1) * perPage + 1}-{Math.min(page * perPage, total)} of {total}
               </p>
               <div className="flex items-center gap-2">
                 <button
                   disabled={page <= 1}
                   onClick={() => setPage(page - 1)}
-                  className="p-2 rounded-lg border border-gray-300 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="p-2 rounded-lg border transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  style={{ borderColor: 'var(--color-border)', color: 'var(--color-body)' }}
                 >
                   <ChevronLeft size={18} />
                 </button>
@@ -166,8 +174,9 @@ export function CandidateTable() {
                     key={p}
                     onClick={() => setPage(p)}
                     className={`px-3 py-1.5 rounded-lg text-sm ${
-                      p === page ? 'bg-[#4F6EF7] text-white' : 'border border-gray-300 hover:bg-gray-50'
+                      p === page ? 'bg-[#4F6EF7] text-white' : 'border hover:bg-gray-50 dark:hover:bg-slate-800'
                     }`}
+                    style={p !== page ? { borderColor: 'var(--color-border)', color: 'var(--color-body)' } : {}}
                   >
                     {p}
                   </button>
@@ -175,7 +184,8 @@ export function CandidateTable() {
                 <button
                   disabled={page >= totalPages}
                   onClick={() => setPage(page + 1)}
-                  className="p-2 rounded-lg border border-gray-300 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="p-2 rounded-lg border transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  style={{ borderColor: 'var(--color-border)', color: 'var(--color-body)' }}
                 >
                   <ChevronRight size={18} />
                 </button>

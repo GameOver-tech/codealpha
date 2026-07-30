@@ -90,10 +90,10 @@ export function AdminLogin() {
       </div>
 
       {/* Right form area */}
-      <div className="flex-1 flex items-center justify-center p-8 bg-[#F7F8FC]">
+      <div className="flex-1 flex items-center justify-center p-8" style={{ backgroundColor: 'var(--color-bg)' }}>
         <Card className="max-w-sm w-full">
-          <h1 className="text-2xl font-bold text-[#111827] mb-1">Admin Login</h1>
-          <p className="text-[#4B5563] text-sm mb-8">Sign in to your admin account</p>
+          <h1 className="text-2xl font-bold mb-1" style={{ color: 'var(--color-heading)' }}>Admin Login</h1>
+          <p className="text-sm mb-8" style={{ color: 'var(--color-body)' }}>Sign in to your admin account</p>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <Input
@@ -123,7 +123,7 @@ export function AdminLogin() {
             </div>
 
             <div className="flex items-center justify-between text-sm">
-              <label className="flex items-center gap-2 text-[#4B5563]">
+              <label className="flex items-center gap-2" style={{ color: 'var(--color-body)' }}>
                 <input
                   type="checkbox"
                   checked={remember}
@@ -136,7 +136,7 @@ export function AdminLogin() {
             </div>
 
             {error && (
-              <p className="text-sm text-red-600 bg-red-50 rounded-lg p-3">{error}</p>
+              <p className="text-sm text-red-600 bg-red-50 dark:bg-red-900/20 rounded-lg p-3">{error}</p>
             )}
 
             <Button type="submit" fullWidth disabled={loading}>
