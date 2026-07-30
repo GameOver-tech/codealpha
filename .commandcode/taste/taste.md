@@ -1,0 +1,9 @@
+- Prefers secret management exclusively via environment variables — never hardcoded keys, with `.env.example` committed. Confidence: 1.0
+- Prefers service-layer isolation per external provider (each provider behind its own service module) so key swaps never require code changes. Confidence: 0.9
+- Mandates two-layer auth enforcement: frontend route protection AND backend JWT verification — never trust the client gate alone. Confidence: 1.0
+- Prefers cross-checking/reconciling outputs from multiple AI providers before persisting, to reduce hallucination. Confidence: 0.9
+- Prefers lightweight charting libraries (e.g. Recharts) over heavier alternatives. Confidence: 0.7
+- Prefers a clean SaaS aesthetic: white/light-gray cards, rounded-xl corners, soft shadows, blue primary accent. Confidence: 0.9
+- Prefers using FastAPI background tasks for async processing pipelines that return immediately while work continues. Confidence: 0.8
+- Prefers organizing backend code by domain (routers/, services/, models/, db/). Confidence: 0.8
+- Prefers providing extremely detailed, comprehensive specifications upfront covering all screens, endpoints, and constraints before code is written. Confidence: 0.9

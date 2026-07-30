@@ -1,0 +1,30 @@
+{
+  "permissions": {
+    "allow": [
+      "Shell(npm:*)",
+      "Shell(mkdir -p frontend\\src\\components\\ui frontend\\src\\components\\admin frontend\\src\\components\\candidate frontend\\src\\components\\layout frontend\\src\\pages\\admin frontend\\src\\contexts frontend\\src\\hooks frontend\\src\\lib frontend\\src\\types && del frontend\\src\\App.css frontend\\src\\index.css 2>nul)",
+      "Shell(ren:*)",
+      "Shell(dir:*)",
+      "Shell(del frontend\\src\\App.css frontend\\src\\App.tsx.backup 2>nul)",
+      "Shell(npx tsc --noEmit 2>&1)",
+      "Shell(npx --yes typescript@latest --version 2>&1)",
+      "Shell(npx -p typescript tsc --noEmit 2>&1)",
+      "Shell(npx vite build 2>&1)",
+      "Shell(node -e \"console.log(require.resolve('vite'))\" 2>&1)",
+      "Shell(rm:*)",
+      "Shell(rmdir /s /q node_modules 2>nul & del package-lock.json 2>nul & npm install 2>&1)",
+      "Shell(pip:*)",
+      "Shell(python --version 2>&1)",
+      "Shell(python -c \"from supabase import create_client; print('supabase OK')\" 2>&1)",
+      "Shell(python -c \" from supabase import create_client import inspect # Check key methods c = create_client('https://test.supabase.co', 'test') methods = dir(c.auth) key_methods = [m for m in methods if 'user' in m.lower() or 'session' in m.lower() or 'sign' in m.lower()] print('Auth methods:', key_methods) \" 2>&1)",
+      "Shell(python -c \" import supabase print(supabase.__version__ if hasattr(supabase, '__version__') else 'no version attr') \" 2>&1)",
+      "Shell(python -c \"from supabase import create_client; print('ok')\" 2>&1)",
+      "Shell(python -c \" from supabase import create_client import inspect # Check auth API c = create_client('https://test.supabase.co', 'test') # List all callable methods on auth auth_methods = [m for m in dir(c.auth) if not m.startswith('_') and callable(getattr(c.auth, m, None))] print('Auth methods:', sorted(auth_methods)) print() # Check table API table_methods = [m for m in dir(c.table('test')) if not m.startswith('_')] print('Table methods:', sorted(table_methods)) print() # Check storage API storage_methods = [m for m in dir(c.storage) if not m.startswith('_')] print('Storage methods:', sorted(storage_methods)) \" 2>&1)",
+      "Shell(python -c \"print('hello')\" 2>&1)",
+      "powershell",
+      "Shell(findstr:*)"
+    ],
+    "deny": [],
+    "defaultMode": "default"
+  }
+}
