@@ -171,7 +171,7 @@ export function DashboardOverview() {
                 </p>
 
                 <div className="mt-6 flex flex-wrap gap-3">
-                  <Button onClick={() => navigate('/dashboard/status')} disabled>
+                  <Button disabled>
                     <Loader2 className="animate-spin" />
                     Processing...
                   </Button>

@@ -175,10 +175,44 @@ def test_candidate_result_endpoint(client, monkeypatch):
     # transcript, strengths/weaknesses or the report.
     assert data["interview_id"] == ids["interview_id"]
     assert data["recommendation"] == "Recommended"
+    assert data["duration_seconds"] == 600
     assert "scores" not in data
     assert "transcript" not in data
     assert "strengths" not in data
     assert "report" not in data
+
+
+def test_candidate_result_duration_derived_from_transcript_end(client, monkeypatch):
+    """The result duration must come from the transcript's last segment end."""
+    from app.models.transcript import Transcript
+
+    ids = asyncio.run(_seed(database.AsyncSessionLocal))
+    # Give the interview a real transcript whose final segment ends at 1912.6s.
+    async def _update():
+        async with database.AsyncSessionLocal() as db:
+            import uuid as _uuid
+
+            from sqlalchemy import select
+
+            tx = (
+                await db.execute(
+                    select(Transcript).where(
+                        Transcript.interview_id == _uuid.UUID(ids["interview_id"])
+                    )
+                )
+            ).scalar_one()
+            tx.segments = [
+                {"start": 0.0, "end": 8.4, "text": "Hello.", "speaker": "A"},
+                {"start": 1845.2, "end": 1912.6, "text": "Closing.", "speaker": "B"},
+            ]
+            await db.commit()
+
+    asyncio.run(_update())
+    _authed_client(client, ids["user_id"])
+    r = client.get("/api/interview/result")
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["duration_seconds"] == 1913  # round(1912.6) — overrides stored 600
 
 
 def test_candidate_cannot_download_pdf(client, monkeypatch):

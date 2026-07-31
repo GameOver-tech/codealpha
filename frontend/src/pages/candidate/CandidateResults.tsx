@@ -8,26 +8,12 @@ import {
   Clock,
   FileText,
   Calendar,
-  Trophy,
-  Upload,
-  Brain,
-  LineChart,
 } from 'lucide-react'
-import { Button, Card, CardContent, Skeleton } from '@/components/ui'
+import { Button, Card, Skeleton } from '@/components/ui'
 import { EmptyState, PageHeader, StatusBadge, AdminStatusBadge, RecommendationBadge } from '@/components/shared'
 import { useInterviewResult, useInterviewStatus } from '@/hooks'
 import { formatDuration } from '@/lib/utils'
 import type { RecommendationVerdict } from '@/types'
-
-/** Pipeline steps shown once the interview has completed. */
-const COMPLETED_STEPS = [
-  { label: 'Uploaded', icon: Upload },
-  { label: 'Transcript Generated', icon: FileText },
-  { label: 'Speech Analysis', icon: Brain },
-  { label: 'AI Evaluation', icon: LineChart },
-  { label: 'PDF Generated', icon: FileText },
-  { label: 'Completed', icon: Trophy },
-]
 
 export function CandidateResults() {
   const navigate = useNavigate()
@@ -69,6 +55,10 @@ export function CandidateResults() {
         year: 'numeric',
       })
     : null
+
+  // Real interview duration — derived from the transcript's last segment end
+  // timestamp on the backend and returned by the result endpoint.
+  const durationSeconds = result.duration_seconds || status?.duration_seconds || 0
 
   return (
     <div className="space-y-6">
@@ -134,7 +124,7 @@ export function CandidateResults() {
               )}
               <span className="flex items-center gap-1.5">
                 <Clock className="h-4 w-4" />
-                {status?.duration_seconds ? formatDuration(status.duration_seconds) : 'Duration unknown'}
+                {formatDuration(durationSeconds)}
               </span>
             </div>
 
@@ -147,46 +137,6 @@ export function CandidateResults() {
           </div>
         </Card>
       </motion.div>
-
-      {/* Completed pipeline timeline */}
-      {result.status === 'completed' && (
-        <motion.div
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.35, delay: 0.1 }}
-        >
-          <Card>
-            <CardContent className="p-6 sm:p-8">
-              <h3 className="font-display text-base font-bold text-foreground">Evaluation timeline</h3>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Your interview was processed through the full AI pipeline.
-              </p>
-              <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {COMPLETED_STEPS.map((step, index) => (
-                  <motion.div
-                    key={step.label}
-                    initial={{ opacity: 0, y: 12 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.3, delay: 0.15 + index * 0.06 }}
-                    className="flex items-center gap-3 rounded-xl border border-border/60 bg-muted/40 p-3.5"
-                  >
-                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-success/15 text-success">
-                      <step.icon className="h-4 w-4" />
-                    </span>
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-foreground">{step.label}</p>
-                      <p className="flex items-center gap-1 text-xs text-success">
-                        <CheckCircle2 className="h-3 w-3" />
-                        Complete
-                      </p>
-                    </div>
-                  </motion.div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
-      )}
 
       {/* Note */}
       <p className="mx-auto max-w-md text-center text-xs text-muted-foreground">

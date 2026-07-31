@@ -9,7 +9,6 @@ import {
   Menu,
   X,
   ScanEye,
-  ClipboardList,
   ChevronRight,
 } from 'lucide-react'
 import { Avatar, AvatarFallback, AvatarImage, Button, Badge } from '@/components/ui'
@@ -22,7 +21,6 @@ import type { RecommendationVerdict } from '@/types'
 
 const NAV_ITEMS = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, end: true },
-  { to: '/dashboard/status', label: 'Interview Status', icon: ClipboardList },
   { to: '/dashboard/results', label: 'Results', icon: FileText },
   { to: '/dashboard/settings', label: 'Settings', icon: Settings },
 ]

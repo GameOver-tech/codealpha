@@ -39,6 +39,7 @@ from app.core.logging import get_logger
 from app.services.transcript_format import build_interview_summary
 from app.storage import copy_local_to_supabase, cleanup_local_file
 from app.utils.exceptions import BadRequestError
+from app.utils.helpers import duration_from_segments
 
 logger = get_logger(__name__)
 
@@ -146,25 +147,6 @@ def _format_duration(seconds: int) -> str:
     if h:
         return f"{h}h {m:02d}m {s:02d}s"
     return f"{m}m {s:02d}s"
-
-
-def _duration_from_segments(segments: list[Any] | None) -> int:
-    """Return the last transcript segment's end time (the interview duration).
-
-    The transcription timestamps are the authoritative source for how long
-    the interview actually ran. Returns 0 when there are no usable timestamps
-    so callers can fall back to media metadata.
-    """
-    for segment in reversed(segments or []):
-        if not isinstance(segment, dict):
-            continue
-        try:
-            end = float(segment.get("end") or 0)
-        except (TypeError, ValueError):
-            continue
-        if end > 0:
-            return int(round(end))
-    return 0
 
 
 def _duration_from_raw(raw_response: Any) -> int:
@@ -476,7 +458,7 @@ def _build_payload(interview, *, transcript_text: str = "") -> dict[str, Any]:
     # end time), then the media duration stored at upload, then Deepgram's
     # reported duration. Only when every source is missing do we show
     # "Unknown" — never a fabricated 0m 00s.
-    duration = _duration_from_segments(transcript.segments if transcript else None)
+    duration = duration_from_segments(transcript.segments if transcript else None)
     if not duration:
         duration = int(interview.duration_seconds or 0)
     if not duration:

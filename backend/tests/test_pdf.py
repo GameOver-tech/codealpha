@@ -5,10 +5,10 @@ from app.models.recommendation import RecommendationVerdict
 from app.services.pdf_service import (
     _build_pdf_bytes,
     _duration_from_raw,
-    _duration_from_segments,
     _format_duration,
     _safe,
 )
+from app.utils.helpers import duration_from_segments
 from app.utils.recommendation_messages import (
     RECOMMENDATION_MESSAGES,
     get_recommendation_message,
@@ -199,21 +199,21 @@ def test_duration_from_segments_uses_last_segment_end():
         {"start": 46.0, "end": 1845.2, "text": "Long answer.", "speaker": "B"},
         {"start": 1845.2, "end": 1912.6, "text": "Closing.", "speaker": "A"},
     ]
-    assert _duration_from_segments(segments) == 1913  # round(1912.6)
-    assert _format_duration(_duration_from_segments(segments)) == "31m 53s"
+    assert duration_from_segments(segments) == 1913  # round(1912.6)
+    assert _format_duration(duration_from_segments(segments)) == "31m 53s"
 
 
 def test_duration_from_segments_hour_scale():
     segments = [{"start": 0.0, "end": 4338.2, "text": "x", "speaker": "A"}]
-    assert _format_duration(_duration_from_segments(segments)) == "1h 12m 18s"
+    assert _format_duration(duration_from_segments(segments)) == "1h 12m 18s"
 
 
 def test_duration_from_segments_tolerates_bad_data():
-    assert _duration_from_segments([]) == 0
-    assert _duration_from_segments(None) == 0
-    assert _duration_from_segments([{"start": 0, "text": "no end"}]) == 0
-    assert _duration_from_segments(["not-a-dict"]) == 0
-    assert _duration_from_segments([{"start": 0, "end": "not-a-number", "text": "x"}]) == 0
+    assert duration_from_segments([]) == 0
+    assert duration_from_segments(None) == 0
+    assert duration_from_segments([{"start": 0, "text": "no end"}]) == 0
+    assert duration_from_segments(["not-a-dict"]) == 0
+    assert duration_from_segments([{"start": 0, "end": "not-a-number", "text": "x"}]) == 0
 
 
 def test_duration_from_raw_response():

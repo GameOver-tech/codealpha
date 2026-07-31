@@ -41,6 +41,7 @@ from app.repositories.interview import InterviewRepository
 from app.repositories.interview_file import ActivityLogRepository
 from app.repositories.user import UserRepository
 from app.utils.exceptions import BadRequestError, TranscriptionError
+from app.utils.helpers import duration_from_segments
 
 logger = get_logger(__name__)
 
@@ -73,16 +74,7 @@ def _duration_from_segments(segments: list[dict[str, Any]] | None) -> int:
     transcription timestamps. Returns 0 when segments are missing or carry
     no usable end timestamps so callers can fall back to media metadata.
     """
-    for segment in reversed(segments or []):
-        if not isinstance(segment, dict):
-            continue
-        try:
-            end = float(segment.get("end") or 0)
-        except (TypeError, ValueError):
-            continue
-        if end > 0:
-            return int(round(end))
-    return 0
+    return duration_from_segments(segments)
 
 
 class InterviewPipeline:
