@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { candidateApi, adminApi, jobsApi, profileApi } from '@/services/api'
-import type { CandidateSummary } from '@/types'
+import type { CandidateSummary, InterviewStatusValue } from '@/types'
 
 export const queryKeys = {
   me: ['auth', 'me'] as const,
@@ -37,6 +37,21 @@ export function useInterviewStatus() {
     queryKey: queryKeys.interviewStatus,
     queryFn: async () => (await candidateApi.interviewStatus()).data,
     retry: 1,
+    // Real-time sync: poll while the interview is still processing so the
+    // candidate dashboard / status / results pages flip to Completed
+    // automatically. Stops polling once processing has finished.
+    refetchInterval: (query) => {
+      const data = query.state.data
+      if (!data) return false
+      const active: InterviewStatusValue[] = [
+        'uploaded',
+        'processing',
+        'transcript_ready',
+        'ai_evaluation',
+        'pdf_generated',
+      ]
+      return active.includes(data.status) ? 5000 : false
+    },
   })
 }
 
