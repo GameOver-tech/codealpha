@@ -1,135 +1,435 @@
-from fastapi import APIRouter, Depends, HTTPException, status
-from uuid import UUID
+"""Admin endpoints — upload recordings, trigger processing, view analysis,
+regenerate results from a stored transcript, and delete interviews.
+"""
+from __future__ import annotations
 
-from app.core.supabase_client import get_supabase_service
+import uuid
+from datetime import datetime, timezone
+
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, UploadFile
+from fastapi.responses import Response
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.database import get_db
+from app.core.logging import get_logger
 from app.dependencies.auth import require_role
-from app.services.storage_service import get_signed_url
+from app.models.interview import Interview, InterviewStatus
+from app.models.user import User
+from app.repositories.analysis import (
+    InterviewReportRepository,
+    InterviewScoresRepository,
+    RecommendationRepository,
+    SentimentAnalysisRepository,
+    SpeechAnalysisRepository,
+    StrengthRepository,
+    TechnicalEvaluationRepository,
+    TranscriptRepository,
+    WeaknessRepository,
+)
+from app.repositories.interview import InterviewRepository
+from app.repositories.interview_file import ActivityLogRepository, InterviewFileRepository
+from app.repositories.user import UserRepository
+from app.schemas.interview import (
+    AnalysisBundle,
+    InterviewResult,
+    RegenerateRequest,
+    TranscriptOut,
+)
+from app.schemas.profile import RecommendationMessage
+from app.services.pipeline_service import enqueue_interview_processing, run_interview_pipeline
+from app.storage.service import LocalStorage
+from app.utils.exceptions import BadRequestError, NotFoundError
+from app.utils.file_validation import validate_upload
+
+logger = get_logger(__name__)
 
 router = APIRouter(prefix="/api/admin", tags=["Admin"])
 
+QUEUE_KEY = "hirelens:interview-queue"
 
-@router.get("/candidates")
-async def list_candidates(
-    current_user: dict = Depends(require_role("admin")),
+
+def _require_admin(current_user: User):
+    """Helper to mark an endpoint admin-only (used via Depends below)."""
+    return current_user
+
+
+async def _submit_pipeline(interview_id, background_tasks: BackgroundTasks) -> None:
+    """Dispatch pipeline work to Redis (when enabled) or BackgroundTasks."""
+    if await enqueue_interview_processing(interview_id):
+        return
+    background_tasks.add_task(_run_pipeline_task, str(interview_id))
+
+
+# --- Upload & Process -------------------------------------------------------
+
+
+@router.post("/upload", status_code=201)
+async def upload_interview(
+    file: UploadFile = File(...),
+    job_title: str = Form(default="Interview"),
+    job_description: str = Form(default=""),
+    background_tasks: BackgroundTasks = BackgroundTasks(),
+    current_user: User = Depends(require_role("admin")),
+    db: AsyncSession = Depends(get_db),
 ):
-    """Admin-only. List all candidates with latest interview status + evaluation summary."""
-    sb = get_supabase_service()
+    """Upload an interview recording (video/audio). Processing starts automatically.
 
-    # Fetch all candidates with their job info
-    candidates_resp = (
-        sb.table("candidates")
-        .select("*, jobs(title)")
-        .order("created_at", desc=True)
-        .execute()
+    Supported formats: MP4, MOV, AVI, MKV, MP3, WAV, M4A, FLAC, AAC (max 200MB).
+    """
+    validate_upload(file)
+
+    interviews = InterviewRepository(db)
+    interview = await interviews.create(
+        candidate_id=current_user.id,
+        job_title=job_title,
+        job_description=job_description,
+    )
+    await db.flush()
+
+    storage = LocalStorage()
+    rel_path, size_bytes = storage.save_upload(file, f"recordings/{interview.id}")
+    file_id = uuid.uuid4()
+
+    files = InterviewFileRepository(db)
+    await files.create(
+        interview_id=interview.id,
+        original_filename=file.filename or "recording",
+        storage_path=rel_path,
+        content_type=file.content_type or "",
+        file_size_bytes=size_bytes,
     )
 
-    candidates = candidates_resp.data if candidates_resp.data else []
-    result = []
+    await ActivityLogRepository(db).log(
+        current_user.id, "interview_uploaded", "interview", str(interview.id),
+        {"filename": file.filename, "size_bytes": size_bytes},
+    )
+    await db.commit()
 
-    for c in candidates:
-        # Get latest interview for this candidate
-        interview_resp = (
-            sb.table("interviews")
-            .select("status, evaluations(overall_score, recommendation)")
-            .eq("candidate_id", c["id"])
-            .order("created_at", desc=True)
-            .limit(1)
-            .maybe_single()
-            .execute()
+    # Kick off the pipeline in the background (Redis queue or BackgroundTasks).
+    interview.started_at = datetime.now(timezone.utc)
+    await db.commit()
+    await _submit_pipeline(interview.id, background_tasks)
+
+    return {
+        "interview_id": str(interview.id),
+        "file_id": str(file_id),
+        "status": "processing",
+        "message": "Upload successful. Processing will start automatically.",
+    }
+
+
+async def _run_pipeline_task(interview_id: str) -> None:
+    """Background entry point — opens its own DB session."""
+    from sqlalchemy.ext.asyncio import async_sessionmaker
+
+    from app.core.database import AsyncSessionLocal
+
+    session_factory: async_sessionmaker = AsyncSessionLocal
+    async with session_factory() as db:
+        try:
+            await run_interview_pipeline(db, interview_id)
+        except Exception as exc:  # noqa: BLE001
+            logger.error("Background pipeline failed for %s: %s", interview_id, exc)
+
+
+@router.post("/process", status_code=202)
+async def process_interview(
+    payload: RegenerateRequest,
+    background_tasks: BackgroundTasks = BackgroundTasks(),
+    current_user: User = Depends(require_role("admin")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Trigger processing for an interview (admin-only).
+
+    If a transcript already exists the evaluation is regenerated from it
+    without re-transcribing (see /regenerate for an explicit re-run).
+    """
+    interviews = InterviewRepository(db)
+    interview = await interviews.get(str(payload.interview_id))
+    if interview is None:
+        raise NotFoundError("Interview not found")
+
+    if interview.status not in (InterviewStatus.UPLOADED, InterviewStatus.FAILED):
+        raise BadRequestError(
+            f"Interview is already {interview.status.value}. "
+            "Only uploaded or failed interviews can be processed."
         )
 
-        latest_interview = interview_resp.data if interview_resp and interview_resp.data else None
-        evaluation = None
-        interview_status = None
+    await _submit_pipeline(interview.id, background_tasks)
+    return {
+        "interview_id": str(interview.id),
+        "status": "processing",
+        "message": "Processing started. Check the interview status to track progress.",
+    }
 
-        if latest_interview:
-            interview_status = latest_interview.get("status")
-            evals = latest_interview.get("evaluations")
-            if evals:
-                evaluation = evals[0] if isinstance(evals, list) else evals
 
+# --- View endpoints (admin) --------------------------------------------------
+
+
+async def _get_interview_full(db: AsyncSession, interview_id: str) -> Interview:
+    repo = InterviewRepository(db)
+    interview = await repo.get_full(interview_id)
+    if interview is None:
+        raise NotFoundError("Interview not found")
+    return interview
+
+
+@router.get("/transcript", response_model=TranscriptOut)
+async def get_transcript(
+    interview_id: str,
+    current_user: User = Depends(require_role("admin")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get the timestamped transcript for an interview."""
+    repo = TranscriptRepository(db)
+    transcript = await repo.get_by_interview(interview_id)
+    if transcript is None:
+        raise NotFoundError("No transcript yet — the interview may still be processing.")
+    return transcript
+
+
+@router.get("/analysis", response_model=AnalysisBundle)
+async def get_analysis(
+    interview_id: str,
+    current_user: User = Depends(require_role("admin")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get the full analysis bundle for an interview (all artifacts)."""
+    interview = await _get_interview_full(db, interview_id)
+
+    tech = interview.technical_evaluation
+    scores = interview.scores
+    report = interview.report
+
+    strengths = [s.text for s in interview.strengths]
+    weaknesses = [w.text for w in interview.weaknesses]
+
+    tech_dict = None
+    if tech is not None:
+        from sqlalchemy import inspect
+
+        tech_dict = {
+            c.key: getattr(tech, c.key)
+            for c in inspect(tech).mapper.column_attrs
+            if c.key not in ("id", "interview_id", "created_at", "updated_at")
+        }
+
+    return AnalysisBundle(
+        transcript=interview.transcript,
+        speech_analysis=interview.speech_analysis,
+        sentiment_analysis=interview.sentiment_analysis,
+        technical_evaluation=tech_dict,
+        scores=scores,
+        strengths=strengths,
+        weaknesses=weaknesses,
+        recommendation=interview.recommendation,
+        report=report,
+    )
+
+
+@router.get("/scores", response_model=dict)
+async def get_scores(
+    interview_id: str,
+    current_user: User = Depends(require_role("admin")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get the automated 0-100 scores for an interview."""
+    repo = InterviewScoresRepository(db)
+    scores = await repo.get_by_interview(interview_id)
+    if scores is None:
+        raise NotFoundError("Scores not available yet.")
+    return scores.score_map
+
+
+@router.get("/recommendation", response_model=RecommendationMessage)
+async def get_recommendation(
+    interview_id: str,
+    current_user: User = Depends(require_role("admin")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get the hiring recommendation + candidate-facing message."""
+    repo = RecommendationRepository(db)
+    rec = await repo.get_by_interview(interview_id)
+    if rec is None:
+        raise NotFoundError("Recommendation not available yet.")
+
+    from app.utils.recommendation_messages import get_recommendation_message
+
+    return RecommendationMessage(
+        verdict=rec.verdict.value,
+        message=get_recommendation_message(rec.verdict.value),
+    )
+
+
+@router.get("/report", response_model=dict)
+async def get_report(
+    interview_id: str,
+    current_user: User = Depends(require_role("admin")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get the full professional interview report."""
+    repo = InterviewReportRepository(db)
+    report = await repo.get_by_interview(interview_id)
+    if report is None:
+        raise NotFoundError("Report not available yet.")
+
+    from sqlalchemy import inspect
+
+    return {
+        c.key: getattr(report, c.key)
+        for c in inspect(report).mapper.column_attrs
+        if c.key not in ("id", "interview_id", "created_at", "updated_at")
+    }
+
+
+@router.get("/report/pdf")
+async def get_report_pdf(
+    interview_id: str,
+    current_user: User = Depends(require_role("admin")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Download the generated PDF report for an interview."""
+    from app.services.pdf_download import download_pdf_for_interview
+
+    interview = await _get_interview_full(db, interview_id)
+    pdf = interview.pdfs[-1] if interview.pdfs else None
+    if pdf is None:
+        raise NotFoundError("PDF report not generated yet.")
+
+    data, content_type = await download_pdf_for_interview(pdf.storage_path, pdf.filename)
+    return Response(
+        content=data,
+        media_type=content_type,
+        headers={"Content-Disposition": f'attachment; filename="{pdf.filename}"'},
+    )
+
+
+@router.get("/interviews", response_model=list[dict])
+async def list_interviews(
+    current_user: User = Depends(require_role("admin")),
+    db: AsyncSession = Depends(get_db),
+):
+    """List all interviews with candidate name/email and status."""
+    repo = InterviewRepository(db)
+    interviews = await repo.list_all_full()
+    result = []
+    for interview in interviews:
+        candidate = await UserRepository(db).get(interview.candidate_id)
+        rec = interview.recommendation
         result.append(
             {
-                "id": c["id"],
-                "full_name": c.get("full_name"),
-                "email": c.get("email"),
-                "avatar_url": c.get("avatar_url"),
-                "job_title": c.get("jobs", {}).get("title") if c.get("jobs") else None,
-                "interview_status": interview_status,
-                "overall_score": evaluation.get("overall_score") if evaluation else None,
-                "recommendation": evaluation.get("recommendation") if evaluation else None,
+                "id": str(interview.id),
+                "candidate_id": str(interview.candidate_id),
+                "candidate_name": candidate.full_name if candidate else "—",
+                "candidate_email": candidate.email if candidate else "—",
+                "job_title": interview.job_title,
+                "status": interview.status.value,
+                "duration_seconds": interview.duration_seconds,
+                "overall_score": interview.scores.overall_score if interview.scores else None,
+                "recommendation": rec.verdict.value if rec else None,
+                "created_at": interview.created_at.isoformat() if interview.created_at else None,
             }
         )
-
     return result
 
 
-@router.get("/candidates/{candidate_id}")
-async def get_candidate_detail(
-    candidate_id: UUID,
-    current_user: dict = Depends(require_role("admin")),
+# --- Regenerate / delete -----------------------------------------------------
+
+
+@router.post("/regenerate", status_code=202)
+async def regenerate_result(
+    payload: RegenerateRequest,
+    background_tasks: BackgroundTasks = BackgroundTasks(),
+    current_user: User = Depends(require_role("admin")),
+    db: AsyncSession = Depends(get_db),
 ):
-    """Admin-only. Full candidate detail with job, transcripts, evaluation, and signed recording URL."""
-    sb = get_supabase_service()
+    """Regenerate the evaluation result from the existing transcript.
 
-    # Get candidate with job info
-    candidate_resp = (
-        sb.table("candidates")
-        .select("*, jobs(*)")
-        .eq("id", str(candidate_id))
-        .maybe_single()
-        .execute()
-    )
-
-    if not candidate_resp or not candidate_resp.data:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Candidate not found",
+    Skips speech-to-text and re-runs analysis + LLM evaluation + PDF.
+    """
+    repo = TranscriptRepository(db)
+    transcript = await repo.get_by_interview(payload.interview_id)
+    if transcript is None:
+        raise NotFoundError(
+            "No transcript exists for this interview. Use POST /api/admin/process to transcribe first."
         )
 
-    candidate = candidate_resp.data
+    interviews = InterviewRepository(db)
+    interview = await interviews.get(payload.interview_id)
+    if interview is None:
+        raise NotFoundError("Interview not found")
 
-    # Get latest interview with transcript and evaluation
-    interview_resp = (
-        sb.table("interviews")
-        .select("*, transcripts(*), evaluations(*)")
-        .eq("candidate_id", str(candidate_id))
-        .order("created_at", desc=True)
-        .limit(1)
-        .maybe_single()
-        .execute()
+    await _submit_pipeline(interview.id, background_tasks)
+    return {
+        "interview_id": str(interview.id),
+        "status": "processing",
+        "message": "Regeneration started. Evaluation will be rebuilt from the existing transcript.",
+    }
+
+
+@router.post("/status/recommendation/not-recommendation")
+async def override_recommendation(
+    interview_id: str,
+    verdict: str,
+    reason: str = "",
+    current_user: User = Depends(require_role("admin")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Manually override the hiring recommendation (admin review override).
+
+    Valid verdicts: Recommended | Not Recommended | Need Further Review.
+    """
+    from app.models.recommendation import RecommendationVerdict
+
+    try:
+        normalized = RecommendationVerdict(verdict)
+    except ValueError:
+        raise BadRequestError(
+            "Invalid verdict. Use one of: Recommended, Not Recommended, Need Further Review."
+        )
+
+    repo = RecommendationRepository(db)
+    rec = await repo.upsert(interview_id, normalized.value, reason)
+    await db.commit()
+
+    await ActivityLogRepository(db).log(
+        current_user.id,
+        "recommendation_overridden",
+        "interview",
+        interview_id,
+        {"verdict": normalized.value},
+    )
+    await db.commit()
+
+    return RecommendationMessage(
+        verdict=rec.verdict.value,
+        message=reason or "Recommendation updated.",
     )
 
-    interview = interview_resp.data if interview_resp and interview_resp.data else None
-    transcript = None
-    evaluation = None
-    recording_url = None
 
-    if interview:
-        transcripts = interview.pop("transcripts", None)
-        if transcripts:
-            transcript = transcripts[0] if isinstance(transcripts, list) else transcripts
+@router.delete("/interview/{interview_id}", status_code=200)
+async def delete_interview(
+    interview_id: str,
+    current_user: User = Depends(require_role("admin")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Delete an interview and all of its artifacts (cascade)."""
+    repo = InterviewRepository(db)
+    interview = await repo.get_full(str(interview_id))
+    if interview is None:
+        raise NotFoundError("Interview not found")
 
-        evaluations = interview.pop("evaluations", None)
-        if evaluations:
-            evaluation = evaluations[0] if isinstance(evaluations, list) else evaluations
+    # Best-effort cleanup of stored files.
+    storage = LocalStorage()
+    for file in interview.files:
+        storage.delete(file.storage_path)
 
-        # Generate signed URL for the recording
-        storage_path = interview.get("recording_url")
-        if storage_path:
-            try:
-                recording_url = get_signed_url(storage_path)
-            except Exception:
-                recording_url = None
+    await repo.delete(str(interview_id))
+    await db.commit()
 
-    return {
-        "id": candidate["id"],
-        "full_name": candidate.get("full_name"),
-        "email": candidate.get("email"),
-        "avatar_url": candidate.get("avatar_url"),
-        "job": candidate.get("jobs"),
-        "interview": interview,
-        "transcript": transcript,
-        "evaluation": evaluation,
-        "recording_url": recording_url,
-    }
+    await ActivityLogRepository(db).log(
+        current_user.id, "interview_deleted", "interview", interview_id
+    )
+    await db.commit()
+
+    return {"message": f"Interview {interview_id} deleted successfully."}

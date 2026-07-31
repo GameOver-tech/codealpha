@@ -1,0 +1,43 @@
+services:
+  api:
+    build: .
+    container_name: hirelens-api
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    volumes:
+      - ./app:/app/app
+      - ./migrations:/app/migrations
+    depends_on:
+      redis:
+        condition: service_started
+    command: >
+      sh -c "alembic upgrade head &&
+             uvicorn app.main:app --host 0.0.0.0 --port 8000"
+
+  redis:
+    image: redis:7-alpine
+    container_name: hirelens-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # Background worker for interview processing.
+  # Only needed when USE_REDIS_QUEUE=true in .env — the API falls back to
+  # FastAPI BackgroundTasks when the queue is disabled.
+  worker:
+    build: .
+    container_name: hirelens-worker
+    env_file:
+      - .env
+    depends_on:
+      redis:
+        condition: service_healthy
+    command: sh -c "python -m app.worker"
+    profiles:
+      - queue

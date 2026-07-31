@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routers import health, auth, jobs, interviews, admin
+from app.routers import health, auth, jobs, interviews, profile, admin
 
 app = FastAPI(
     title="HireLens AI Backend",
@@ -21,4 +21,5 @@ app.include_router(health.router)
 app.include_router(auth.router)
 app.include_router(jobs.router)
 app.include_router(interviews.router)
+app.include_router(profile.router)
 app.include_router(admin.router)

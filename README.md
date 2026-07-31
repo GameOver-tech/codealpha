@@ -1,78 +1,121 @@
 # HireLens AI — Backend
 
-AI-powered talent evaluation platform backend. Analyzes interview recordings (audio/video) and generates detailed candidate evaluation reports.
+AI-powered talent evaluation platform backend. Analyzes interview recordings
+(audio/video) and automatically generates detailed candidate evaluation
+reports, scores, hiring recommendations, and professional PDF reports.
 
-**Tech stack:** FastAPI + Supabase (Auth/DB/Storage) + OpenAI Whisper API + Claude API (Anthropic)
+**Tech stack:** Python 3.13 · FastAPI · SQLAlchemy 2.0 (async) · Alembic ·
+Supabase (Auth/PostgreSQL/Storage) · Deepgram (speech-to-text) · OpenRouter /
+Gemini / Groq (LLM evaluation) · ReportLab (PDF) · Redis (optional queue)
+
+---
+
+## Roles
+
+The platform has exactly **two** roles:
+
+| Role | Permissions |
+|---|---|
+| **Candidate** | Register, login, logout, view/edit profile, upload profile picture, change password, **view only** interview status and generated result (scores, recommendation, summary, strengths/weaknesses, PDF). Candidates can never upload recordings or trigger processing. |
+| **Admin** | Everything. Upload interview recordings (MP4, MOV, AVI, MKV, MP3, WAV, M4A, FLAC, AAC), trigger processing, regenerate results from a stored transcript, view all analysis, override the recommendation, delete interviews. |
+
+---
+
+## How the processing pipeline works
+
+Uploading a recording (admin-only) automatically starts the pipeline in the
+background. Status flow:
+
+```
+Uploaded → Processing → Transcript Ready → AI Evaluation → PDF Generated → Completed
+```
+
+1. **Store file** — local disk, optionally synced to Supabase Storage.
+2. **Speech-to-text** — Deepgram (`nova-3`, utterances, diarization,
+   smart format). Produces a timestamped, speaker-annotated transcript.
+3. **Speech analysis** — WPM, pauses, speaking rate, confidence, tone,
+   emotion, clarity, fluency, energy (computed from segment timing).
+4. **Sentiment analysis** — positive/neutral/negative, emotion, confidence,
+   professionalism (lexicon-based, deterministic).
+5. **LLM evaluation** — OpenRouter, Gemini, or Groq (configure via
+   `LLM_PROVIDER`). Covers 16 evaluation dimensions.
+6. **Automated scoring** — 10 dimensions + overall, each 0-100.
+7. **Strengths** — 3-5 grounded bullets.
+8. **Weaknesses** — 3-5 grounded bullets.
+9. **Hiring recommendation** — exactly one of `Recommended`,
+   `Not Recommended`, `Need Further Review`.
+10. **Professional summary** — executive summary, per-dimension assessments,
+    improvement suggestions.
+11. **PDF generation** — branded, ATS-readable corporate report with the
+    final score table and a color-coded recommendation badge.
+
+The pipeline is **resumable**: if a transcript already exists, re-processing
+regenerates the evaluation from the transcript without re-transcribing.
+
+### Background processing
+
+- Default: FastAPI `BackgroundTasks` (in-process, `USE_REDIS_QUEUE=false`).
+- Optional: Redis queue + dedicated worker for multi-process deployments.
+  Set `USE_REDIS_QUEUE=true` and run the worker service:
+  `docker compose --profile queue up worker`.
 
 ---
 
 ## Prerequisites
 
-- Python 3.11+
+- Python 3.13+
 - A [Supabase](https://supabase.com) project (free tier works)
-- OpenAI API key (for Whisper transcription)
-- Anthropic API key (for Claude evaluation)
+- Deepgram API key (transcription)
+- OpenRouter, Gemini, or Groq API key (evaluation)
 - `pip` (Python package manager)
-
----
-
-## Supabase Project Setup
-
-1. Go to [supabase.com](https://supabase.com) and create a new project.
-
-2. Once created, go to **Project Settings → API** and copy:
-   - **Project URL** → `SUPABASE_URL`
-   - **anon public key** → `SUPABASE_ANON_KEY`
-   - **service_role key** → `SUPABASE_SERVICE_ROLE_KEY`
-
-3. Go to **Project Settings → API** → scroll to **JWT Settings** and copy:
-   - **JWT Secret** → `SUPABASE_JWT_SECRET`
-
-4. Create a storage bucket:
-   - Go to **Storage** → **New Bucket**
-   - Name: `interview-recordings`
-   - Type: **Private**
-
----
-
-## Running the SQL Schema
-
-1. Go to **SQL Editor** in your Supabase dashboard.
-2. Open `supabase/schema.sql` from this repo.
-3. Paste the entire contents and click **Run**.
-4. Verify all 6 tables (`profiles`, `jobs`, `candidates`, `interviews`, `transcripts`, `evaluations`) appear under **Table Editor**.
 
 ---
 
 ## Environment Variables
 
-Copy `.env.example` to `.env` in the `backend/` directory and fill in your values:
+Copy `.env.example` to `.env` in the `backend/` directory and fill in values:
 
 ```bash
 cp backend/.env.example backend/.env
 ```
 
-Required variables:
-
 | Variable | Description |
 |---|---|
-| `SUPABASE_URL` | Your Supabase project URL |
-| `SUPABASE_ANON_KEY` | Supabase anon/public key |
-| `SUPABASE_SERVICE_ROLE_KEY` | Supabase service_role key (admin access, never expose to frontend) |
+| `SUPABASE_URL` | Supabase project URL |
+| `SUPABASE_ANON_KEY` | Supabase anon/publishable key |
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase service_role key (server-side admin access) |
 | `SUPABASE_JWT_SECRET` | JWT secret from Supabase project settings |
+| `DATABASE_URL` | Supabase PostgreSQL connection string (`postgresql+asyncpg://…`) |
+| `DEEPGRAM_API_KEY` | Deepgram API key for speech-to-text |
+| `LLM_PROVIDER` | `openrouter` \| `gemini` \| `groq` |
+| `OPENROUTER_API_KEY` / `GEMINI_API_KEY` / `GROQ_API_KEY` | Key for the configured provider |
+| `STORAGE_BUCKET` | Supabase Storage bucket (default `interview-recordings`) |
+| `USE_MOCK_AI` | `true` to use deterministic mock transcripts/evaluations (no API keys) |
+| `USE_REDIS_QUEUE` | `true` to dispatch processing through the Redis worker |
+| `SCORE_THRESHOLD_RECOMMENDED` | Score ≥ this → `Recommended` (default 75) |
+| `SCORE_THRESHOLD_NEEDS_REVIEW` | Score ≥ this → `Need Further Review` (default 50) |
 
-Optional/with defaults:
+**Mock mode:** `USE_MOCK_AI=true` (or missing API keys) makes the pipeline
+return realistic transcripts and evaluations — perfect for demos and local
+testing. No external API is called.
 
-| Variable | Default | Description |
-|---|---|---|
-| `STORAGE_BUCKET` | `interview-recordings` | Supabase Storage bucket name |
-| `WHISPER_API_KEY` | (empty) | OpenAI API key for Whisper |
-| `CLAUDE_API_KEY` | (empty) | Anthropic API key for Claude |
-| `USE_MOCK_AI` | `false` | Set to `true` to skip real APIs |
-| `SCORE_THRESHOLD_RECOMMENDED` | `75` | Score ≥ this → "Recommended" |
-| `SCORE_THRESHOLD_NEEDS_REVIEW` | `50` | Score ≥ this → "Needs Further Review" |
+---
 
-**Mock mode:** If `USE_MOCK_AI=true` or either `WHISPER_API_KEY`/`CLAUDE_API_KEY` is missing, the services return realistic hardcoded responses — perfect for demos.
+## Database migrations
+
+The schema (14 tables) is managed with Alembic. Apply migrations against
+your Supabase PostgreSQL:
+
+```bash
+cd backend
+alembic upgrade head
+```
+
+The initial migration creates all tables: `users`, `candidate_profiles`,
+`interviews`, `interview_files`, `transcripts`, `speech_analysis`,
+`sentiment_analysis`, `technical_evaluation`, `interview_scores`, `strengths`,
+`weaknesses`, `recommendations`, `interview_reports`, `generated_pdfs`,
+`activity_logs`.
 
 ---
 
@@ -86,11 +129,9 @@ pip install -r requirements.txt
 python ../seed_admin.py
 ```
 
-This creates:
-- A user in `auth.users` with email `admin@gmail.com` / password `12345678`
-- A row in `profiles` with `role = 'admin'`
-
-The script is **idempotent** — run it multiple times safely.
+This creates a user in `auth.users` with email `admin@gmail.com` /
+password `12345678` and a legacy `profiles` row with `role = 'admin'`.
+The script is idempotent.
 
 ---
 
@@ -98,185 +139,87 @@ The script is **idempotent** — run it multiple times safely.
 
 ```bash
 cd backend
+pip install -r requirements.txt
+alembic upgrade head
 uvicorn app.main:app --reload
 ```
 
-The API is now available at `http://localhost:8000`.
-Interactive docs: `http://localhost:8000/docs`
-ReDoc: `http://localhost:8000/redoc`
+The API is available at `http://localhost:8000`.
+Interactive docs: `http://localhost:8000/docs` · ReDoc: `http://localhost:8000/redoc`.
+
+### Docker Compose
+
+```bash
+cd backend
+docker compose up --build            # API + Redis (background-tasks mode)
+docker compose --profile queue up    # + Redis queue worker
+```
 
 ---
 
 ## API Endpoints
 
-### 1. Health Check
+### Auth (public)
 
-```bash
-curl http://localhost:8000/api/health
-```
+| Method | Path | Description |
+|---|---|---|
+| POST | `/api/auth/register` | Register a candidate (first/last name, email, password, phone, gender) |
+| POST | `/api/auth/login` | Login, returns bearer token |
+| POST | `/api/auth/logout` | Logout (auth) |
+| GET | `/api/auth/me` | Current user |
+| PUT | `/api/auth/me/password` | Change password |
 
-Response: `{"status": "ok", "service": "HireLens AI Backend"}`
+### Candidate (own data only)
 
----
+| Method | Path | Description |
+|---|---|---|
+| GET | `/api/profile` | View profile |
+| PUT | `/api/profile` | Edit profile (experience, skills, education, current company, expected salary) |
+| POST | `/api/profile/picture` | Upload profile picture (JPEG/PNG/WebP ≤ 5MB) |
+| GET | `/api/interview/status` | Interview status + recommendation |
+| GET | `/api/interview/result` | Full generated result (scores, summary, strengths/weaknesses, PDF meta) |
+| GET | `/api/interview/result/pdf` | Download the final PDF report |
 
-### 2. List Active Jobs (Public)
+### Admin (upload/process/view)
 
-```bash
-curl http://localhost:8000/api/jobs
-```
+| Method | Path | Description |
+|---|---|---|
+| POST | `/api/admin/upload` | Upload recording (video/audio), starts pipeline automatically |
+| POST | `/api/admin/process` | Process an uploaded/failed interview |
+| GET | `/api/admin/transcript?interview_id=` | Timestamped transcript |
+| GET | `/api/admin/analysis?interview_id=` | Full analysis bundle |
+| GET | `/api/admin/scores?interview_id=` | 0-100 scores per dimension |
+| GET | `/api/admin/recommendation?interview_id=` | Recommendation + candidate message |
+| GET | `/api/admin/report?interview_id=` | Full professional report |
+| GET | `/api/admin/report/pdf?interview_id=` | Download the PDF |
+| GET | `/api/admin/interviews` | List all interviews |
+| POST | `/api/admin/regenerate` | Regenerate result from stored transcript |
+| POST | `/api/admin/status/recommendation/not-recommendation` | Override recommendation (admin review) |
+| DELETE | `/api/admin/interview/{id}` | Delete interview + artifacts |
 
----
+### Jobs (public list, admin create)
 
-### 3. Create Job (Admin Only)
-
-```bash
-curl -X POST http://localhost:8000/api/jobs \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <ADMIN_JWT>" \
-  -d '{"title": "Senior Python Developer", "description": "Build backend services using Python and FastAPI..."}'
-```
-
----
-
-### 4. Upload Interview Recording (Candidate Only)
-
-```bash
-curl -X POST http://localhost:8000/api/interviews/upload \
-  -H "Authorization: Bearer <CANDIDATE_JWT>" \
-  -F "file=@/path/to/interview.mp4" \
-  -F "job_id=<JOB_UUID>"
-```
-
-Returns: `{"interview_id": "...", "status": "uploaded"}`
-
-Supported file types: `mp3`, `wav`, `mp4`, `webm`, `m4a`. Max size: 200MB.
-
----
-
-### 5. Process Interview (Candidate Only — must own the interview)
-
-```bash
-curl -X POST http://localhost:8000/api/interviews/<INTERVIEW_ID>/process \
-  -H "Authorization: Bearer <CANDIDATE_JWT>"
-```
-
-Returns immediately with 202 Accepted. The transcription + evaluation pipeline runs in the background.
-Poll the GET endpoint to check completion status.
+| Method | Path | Description |
+|---|---|---|
+| GET | `/api/jobs` | List active jobs (public) |
+| POST | `/api/jobs` | Create job (admin) |
 
 ---
 
-### 6. Get Interview Details
+## Security
 
-**Candidate** (own interviews only):
-```bash
-curl http://localhost:8000/api/interviews/<INTERVIEW_ID> \
-  -H "Authorization: Bearer <CANDIDATE_JWT>"
-```
-
-**Admin** (any interview):
-```bash
-curl http://localhost:8000/api/interviews/<INTERVIEW_ID> \
-  -H "Authorization: Bearer <ADMIN_JWT>"
-```
-
----
-
-### 7. List All Candidates (Admin Only)
-
-```bash
-curl http://localhost:8000/api/admin/candidates \
-  -H "Authorization: Bearer <ADMIN_JWT>"
-```
-
-Returns a summary list with latest interview status and evaluation scores.
-
----
-
-### 8. Get Candidate Detail (Admin Only)
-
-```bash
-curl http://localhost:8000/api/admin/candidates/<CANDIDATE_ID> \
-  -H "Authorization: Bearer <ADMIN_JWT>"
-```
-
-Returns full detail: job info, transcript, full evaluation breakdown, and a signed recording URL (expires in 1 hour).
-
----
-
-## Testing with JWTs
-
-Since Supabase handles auth, you need real JWTs for protected endpoints.
-
-### Getting a Candidate JWT
-
-Use Supabase's `signInWithOAuth` in your frontend (Google sign-in), or for testing you can use the Supabase `anon` key via the REST API:
-
-```bash
-# Sign in with email/password (if candidate is pre-created)
-curl -X POST https://<your-project>.supabase.co/auth/v1/token?grant_type=password \
-  -H "Content-Type: application/json" \
-  -H "apikey: <SUPABASE_ANON_KEY>" \
-  -d '{"email": "candidate@example.com", "password": "candidate-password"}'
-```
-
-The response includes an `access_token` — use that as the Bearer token.
-
-### Getting an Admin JWT
-
-```bash
-curl -X POST https://<your-project>.supabase.co/auth/v1/token?grant_type=password \
-  -H "Content-Type: application/json" \
-  -H "apikey: <SUPABASE_ANON_KEY>" \
-  -d '{"email": "admin@gmail.com", "password": "12345678"}'
-```
-
-Use the `access_token` from the response.
-
----
-
-## Testing with Mock Mode
-
-Set `USE_MOCK_AI=true` in `.env` — no API keys needed:
-
-1. Start the server
-2. Upload a dummy audio/video file (any supported format)
-3. Hit the process endpoint
-4. Poll `GET /api/interviews/<ID>` — after a few seconds, status will be `completed` with the mock evaluation
-
-The mock responses include a realistic interview transcript and a full evaluation with scores, strengths, weaknesses, and summary.
-
----
-
-## Project Structure
-
-```
-backend/
-  app/
-    main.py                  # FastAPI app entry point
-    core/
-      config.py              # Settings from .env
-      supabase_client.py     # Supabase clients (anon + service_role)
-      security.py            # JWT verification
-    dependencies/
-      auth.py                # get_current_user(), require_role()
-    routers/
-      health.py              # GET /api/health
-      jobs.py                # GET/POST /api/jobs
-      interviews.py          # POST upload/process, GET interview
-      admin.py               # GET admin/candidates, admin/candidates/{id}
-    services/
-      transcription_service.py   # Whisper API + mock
-      evaluation_service.py      # Claude API + mock
-      storage_service.py         # Supabase Storage ops
-    models/
-      schemas.py             # Pydantic request/response models
-  requirements.txt
-  seed_admin.py              # Idempotent admin seed script
-supabase/
-  schema.sql                 # Full DDL + RLS policies
-.env.example                 # Environment variable template
-README.md
-```
+- **JWT verification** against Supabase Auth (JWKS ES256 for new projects,
+  HS256 fallback with `SUPABASE_JWT_SECRET`).
+- **Role-based access** — `require_role("admin")` guards all admin endpoints;
+  candidates only access their own interviews.
+- **Secure uploads** — extension + MIME whitelist, size cap (200MB),
+  path-traversal-safe storage.
+- **Rate limiting** — sliding window per IP (in-process or Redis-backed).
+- **Input validation** — Pydantic v2 schemas on every boundary.
+- **No secrets in code** — all config via environment variables.
+- **CORS** — configurable allowed origins.
+- **SQL injection protection** — SQLAlchemy ORM + parameterized queries only.
+- **Logging** — structured console logging; sensitive data is never logged.
 
 ---
 
@@ -285,14 +228,44 @@ README.md
 All errors follow the same shape:
 
 ```json
-{
-  "detail": "Human-readable error message"
-}
+{ "detail": "Human-readable error message" }
 ```
 
-HTTP status codes used:
-- `401` — No token or invalid/expired token
-- `403` — Wrong role (candidate accessing admin endpoint, etc.)
-- `404` — Resource not found
-- `422` — Validation error (bad file type, missing fields)
-- `500` — Internal server error
+HTTP status codes used: `400` validation/business error · `401` missing/
+invalid token · `403` wrong role · `404` not found · `409` conflict ·
+`422` malformed input · `429` rate limited · `502` upstream API failure.
+
+---
+
+## Project Structure
+
+```
+backend/
+  app/
+    main.py                  # FastAPI entry point
+    worker.py                # Optional Redis queue worker (python -m app.worker)
+    core/                    # config, database, security, logging, supabase client
+    dependencies/auth.py     # JWT verification + role-based access
+    middleware/rate_limit.py # sliding-window rate limiter
+    models/                  # SQLAlchemy models (14 tables)
+    schemas/                 # Pydantic request/response schemas
+    repositories/            # data-access layer (repository pattern)
+    services/
+      pipeline_service.py    # 11-stage evaluation orchestration
+      pdf_service.py         # professional PDF generation
+      pdf_download.py        # PDF retrieval for clients
+    ai/
+      deepgram.py            # speech-to-text
+      speech_analysis.py     # prosody metrics
+      sentiment_analysis.py  # sentiment classification
+      evaluation.py          # LLM evaluation prompt + parsing
+      providers.py           # OpenRouter / Gemini / Groq / Mock
+    storage/                 # local + Supabase Storage abstraction
+    routers/                 # auth, profile, interviews, admin, jobs, health
+    utils/                   # exceptions, file validation, parsing, messages
+  migrations/                # Alembic migrations
+  tests/
+  Dockerfile
+  docker-compose.yml
+  requirements.txt
+```

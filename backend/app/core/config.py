@@ -1,20 +1,25 @@
-from pydantic_settings import BaseSettings, SettingsConfigDict
+"""Application settings loaded from environment / .env file.
+
+All secrets live in environment variables only — never hardcode them.
+"""
+from functools import lru_cache
 from pathlib import Path
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 def _find_env_file() -> str:
-    """Look for .env in project root first, then in backend/."""
+    """Look for .env in the project root first, then in backend/."""
     this_file = Path(__file__).resolve()
-    # Project root = 4 levels up from backend/app/core/config.py
-    project_root = this_file.parents[3]
+    project_root = this_file.parents[3]  # backend/app/core/config.py -> project root
     candidates = [
-        project_root / ".env",                        # HireLens-AI-Backend/.env
-        project_root / "backend" / ".env",            # HireLens-AI-Backend/backend/.env
+        project_root / ".env",
+        project_root / "backend" / ".env",
     ]
     for path in candidates:
         if path.exists():
             return str(path)
-    return str(candidates[0])  # fallback to project root
+    return str(candidates[0])
 
 
 class Settings(BaseSettings):
@@ -22,31 +27,84 @@ class Settings(BaseSettings):
         env_file=_find_env_file(),
         env_file_encoding="utf-8",
         extra="ignore",
+        case_sensitive=True,
     )
 
-    # Supabase
-    SUPABASE_URL: str
-    SUPABASE_ANON_KEY: str
-    SUPABASE_SERVICE_ROLE_KEY: str
+    # --- Supabase ---
+    SUPABASE_URL: str = ""
+    SUPABASE_ANON_KEY: str = ""
+    SUPABASE_SERVICE_ROLE_KEY: str = ""
     SUPABASE_JWT_SECRET: str = ""
 
-    # Storage
+    # --- Database ---
+    DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@127.0.0.1:5432/postgres"
+
+    # --- App ---
+    APP_ENV: str = "development"
+    DEBUG: bool = True
+    API_V1_PREFIX: str = "/api/v1"
+    SECRET_KEY: str = "dev-secret-key-change-me"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
+    CORS_ORIGINS: str = "http://localhost:3000,http://localhost:5173"
+    ENABLE_RATE_LIMITING: bool = True
+    RATE_LIMIT_REQUESTS: int = 60
+    RATE_LIMIT_PERIOD_SECONDS: int = 60
+
+    # --- Storage ---
     STORAGE_BUCKET: str = "interview-recordings"
+    STORAGE_MAX_FILE_MB: int = 200
 
-    # AI Services
-    WHISPER_API_KEY: str = ""
-    CLAUDE_API_KEY: str = ""
+    # --- Deepgram ---
+    DEEPGRAM_API_KEY: str = ""
+    DEEPGRAM_MODEL: str = "nova-3"
+    DEEPGRAM_TIER: str = "enhanced"
 
-    # Mock mode
+    # --- LLM Provider ---
+    LLM_PROVIDER: str = "openrouter"  # openrouter | gemini | groq
+    OPENROUTER_API_KEY: str = ""
+    OPENROUTER_MODEL: str = "openai/gpt-4o-mini"
+    GEMINI_API_KEY: str = ""
+    GEMINI_MODEL: str = "gemini-2.0-flash"
+    GROQ_API_KEY: str = ""
+    GROQ_MODEL: str = "llama-3.1-8b-instant"
+    LLM_MAX_TOKENS: int = 8192
+    LLM_TEMPERATURE: float = 0.3
+
+    # --- Redis ---
+    REDIS_URL: str = "redis://localhost:6379/0"
+    USE_REDIS_QUEUE: bool = False
+
+    # --- Mock mode ---
     USE_MOCK_AI: bool = False
 
-    # Scoring thresholds
+    # --- Scoring thresholds ---
     SCORE_THRESHOLD_RECOMMENDED: int = 75
     SCORE_THRESHOLD_NEEDS_REVIEW: int = 50
 
+    # --- Uploads ---
+    UPLOAD_DIR: str = str(Path(__file__).resolve().parents[3] / "uploads")
+    GENERATED_DIR: str = str(Path(__file__).resolve().parents[3] / "generated")
+
+    @property
+    def cors_origin_list(self) -> list[str]:
+        return [o.strip() for o in self.CORS_ORIGINS.split(",") if o.strip()]
+
     @property
     def mock_mode(self) -> bool:
-        return self.USE_MOCK_AI or not self.WHISPER_API_KEY or not self.CLAUDE_API_KEY
+        return self.USE_MOCK_AI or not self.DEEPGRAM_API_KEY or not self._llm_key()
+
+    def _llm_key(self) -> str:
+        provider = self.LLM_PROVIDER.lower()
+        if provider == "gemini":
+            return self.GEMINI_API_KEY
+        if provider == "groq":
+            return self.GROQ_API_KEY
+        return self.OPENROUTER_API_KEY
 
 
-settings = Settings()
+@lru_cache
+def get_settings() -> Settings:
+    return Settings()
+
+
+settings = get_settings()

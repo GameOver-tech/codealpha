@@ -14,6 +14,7 @@ venv/
 env/
 dist/
 build/
+.pytest_cache/
 
 # IDE / OS
 .idea/
@@ -24,3 +25,10 @@ Thumbs.db
 
 # Logs / temp
 *.log
+*.tmp
+
+# Generated PDFs / uploads
+backend/uploads/
+backend/generated/
+uploads/
+generated/
