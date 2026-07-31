@@ -42,6 +42,17 @@ def _serialize_interview(interview) -> dict:
     rec = interview.recommendation
     candidate = interview.candidate
     profile = candidate.profile if candidate else None
+    tech = interview.technical_evaluation
+    scores = interview.scores
+    tech_dict = None
+    if tech is not None:
+        from sqlalchemy import inspect
+
+        tech_dict = {
+            c.key: getattr(tech, c.key)
+            for c in inspect(tech).mapper.column_attrs
+            if c.key not in ("id", "interview_id", "created_at", "updated_at")
+        }
     return {
         "id": str(interview.id),
         "candidate_id": str(interview.candidate_id) if interview.candidate_id else None,
@@ -51,8 +62,13 @@ def _serialize_interview(interview) -> dict:
         "job_title": interview.job_title,
         "status": interview.status.value,
         "admin_status": interview.admin_status,
-        "overall_score": interview.scores.overall_score if interview.scores else None,
+        "overall_score": scores.overall_score if scores else None,
+        "scores": scores.score_map if scores else None,
         "recommendation": rec.verdict.value if rec else None,
+        "recommendation_reason": rec.reason if rec else None,
+        "technical_evaluation": tech_dict,
+        "strengths": [s.text for s in interview.strengths],
+        "weaknesses": [w.text for w in interview.weaknesses],
         "duration_seconds": interview.duration_seconds,
         "created_at": interview.created_at.isoformat() if interview.created_at else None,
         "completed_at": interview.completed_at.isoformat() if interview.completed_at else None,
@@ -281,6 +297,92 @@ async def list_interviews(db: AsyncSession, actor: User, **args) -> dict:
     return {"total": len(interviews), "items": [_serialize_interview(i) for i in interviews]}
 
 
+async def get_candidate_results(db: AsyncSession, actor: User, **args) -> dict:
+    """Interview results for a candidate (by email) — tabular, admin-only."""
+    _require_admin(actor)
+    email = (args.get("email") or "").strip().lower()
+    if not email:
+        raise BadRequestError("email is required")
+
+    repo = UserRepository(db)
+    candidate = await repo.get_by_email(email)
+    if candidate is None or candidate.role != UserRole.CANDIDATE:
+        raise NotFoundError(f"No candidate found with email '{email}'")
+
+    interviews = InterviewRepository(db)
+    items = [_serialize_interview(i) for i in await interviews.list_all_full() if i.candidate_id == candidate.id]
+    return {
+        "candidate_email": candidate.email,
+        "candidate_name": candidate.full_name,
+        "total_results": len(items),
+        "items": items,
+    }
+
+
+async def get_interview_details(db: AsyncSession, actor: User, **args) -> dict:
+    """Full analysis for one interview: transcript, technical evaluation,
+    sentiment, speech, scores, strengths/weaknesses, recommendation, report."""
+    _require_admin(actor)
+    interview_id = str(args.get("interview_id") or "").strip()
+    if not interview_id:
+        raise BadRequestError("interview_id is required")
+
+    interviews = InterviewRepository(db)
+    interview = await interviews.get_full(interview_id)
+    if interview is None:
+        raise NotFoundError("Interview not found")
+
+    tech_dict = None
+    if interview.technical_evaluation is not None:
+        from sqlalchemy import inspect
+
+        tech_dict = {
+            c.key: getattr(interview.technical_evaluation, c.key)
+            for c in inspect(interview.technical_evaluation).mapper.column_attrs
+            if c.key not in ("id", "interview_id", "created_at", "updated_at")
+        }
+
+    report_dict = None
+    if interview.report is not None:
+        from sqlalchemy import inspect
+
+        report_dict = {
+            c.key: getattr(interview.report, c.key)
+            for c in inspect(interview.report).mapper.column_attrs
+            if c.key not in ("id", "interview_id", "created_at", "updated_at")
+        }
+
+    rec = interview.recommendation
+    return {
+        "interview": _serialize_interview(interview),
+        "transcript": interview.transcript.full_text if interview.transcript else None,
+        "technical_evaluation": tech_dict,
+        "sentiment_analysis": {
+            "sentiment": interview.sentiment_analysis.sentiment,
+            "emotion": interview.sentiment_analysis.emotion,
+            "professionalism": interview.sentiment_analysis.professionalism,
+            "summary": interview.sentiment_analysis.summary,
+        }
+        if interview.sentiment_analysis
+        else None,
+        "speech_analysis": {
+            "speech_speed_wpm": interview.speech_analysis.speech_speed_wpm,
+            "clarity": interview.speech_analysis.clarity,
+            "fluency": interview.speech_analysis.fluency,
+            "energy": interview.speech_analysis.energy,
+        }
+        if interview.speech_analysis
+        else None,
+        "recommendation": {
+            "verdict": rec.verdict.value,
+            "reason": rec.reason,
+        }
+        if rec
+        else None,
+        "report": report_dict,
+    }
+
+
 async def update_interview_status(db: AsyncSession, actor: User, **args) -> dict:
     _require_admin(actor)
     interview_id = str(args.get("interview_id") or "").strip()
@@ -431,6 +533,36 @@ async def get_system_logs(db: AsyncSession, actor: User, **args) -> dict:
             .order_by(ActivityLog.created_at.desc())
             .limit(limit)
         )
+    result = await db.execute(stmt)
+    logs = list(result.scalars().all())
+    return {
+        "total": len(logs),
+        "items": [
+            {
+                "action": log.action,
+                "entity_type": log.entity_type,
+                "entity_id": log.entity_id,
+                "details": log.details or {},
+                "created_at": log.created_at.isoformat() if log.created_at else None,
+            }
+            for log in logs
+        ],
+    }
+
+
+async def get_recent_activity(db: AsyncSession, actor: User, **args) -> dict:
+    """Recent platform activity (new interviews, status changes, support
+    requests, candidate actions) — the audit trail, newest first."""
+    _require_admin(actor)
+    limit = min(int(args.get("limit") or 20), 100)
+
+    from app.models.activity_log import ActivityLog
+
+    stmt = (
+        select(ActivityLog)
+        .order_by(ActivityLog.created_at.desc())
+        .limit(limit)
+    )
     result = await db.execute(stmt)
     logs = list(result.scalars().all())
     return {

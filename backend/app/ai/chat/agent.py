@@ -26,6 +26,39 @@ from app.models.user import User
 logger = get_logger(__name__)
 
 
+def _parse_args(raw: str | None) -> dict:
+    """Parse tool-call arguments; Groq sometimes streams 'null' or empty.
+
+    Must always return a dict — handlers are called with **args.
+    """
+    if not raw or not raw.strip():
+        return {}
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def _friendly_error(exc: Exception) -> str:
+    """Map an exception to a short, user-safe message.
+
+    Never leaks Python internals (tracebacks, reprs, SQL, class paths) into
+    the chat — those stay in the server logs.
+    """
+    from app.utils.exceptions import BadRequestError, ForbiddenError, NotFoundError
+
+    if isinstance(exc, NotFoundError):
+        detail = exc.detail
+        return detail if isinstance(detail, str) else "The requested item was not found."
+    if isinstance(exc, ForbiddenError):
+        return "You don't have permission to do that."
+    if isinstance(exc, BadRequestError):
+        detail = exc.detail
+        return detail if isinstance(detail, str) else "The request was invalid."
+    return "Something went wrong. Please try again or contact support."
+
+
 class ChatAgent:
     def __init__(self, db: AsyncSession, actor: User):
         self.db = db
@@ -99,17 +132,14 @@ class ChatAgent:
 
             # Execute independent tool calls concurrently.
             async def _run_tool(tc: dict) -> tuple[dict, dict | None, str | None]:
-                try:
-                    args = json.loads(tc["args"] or "{}")
-                except json.JSONDecodeError:
-                    args = {}
+                args = _parse_args(tc.get("args"))
                 try:
                     result = await execute_tool(
                         self.db, self.actor, self.actor.role.value, tc["name"], args
                     )
                 except Exception as exc:  # noqa: BLE001
                     logger.warning("Tool %s failed: %s", tc["name"], exc)
-                    return tc, None, str(exc)
+                    return tc, None, _friendly_error(exc)
                 return tc, result, None
 
             # Independent handlers share the session but touch their own rows.

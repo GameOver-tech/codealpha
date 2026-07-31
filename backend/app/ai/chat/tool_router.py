@@ -26,7 +26,10 @@ def _params(**properties) -> dict:
 
 
 def _str(description: str, required: bool = False) -> dict:
-    return {"type": "string", "description": description, **({"required": True} if required else {})}
+    # NOTE: `required` is NOT valid inside a property schema — Groq rejects it
+    # with "expected array, but got boolean". Required-ness is enforced by the
+    # top-level `required` array + `additionalProperties: false` (strict mode).
+    return {"type": "string", "description": description}
 
 
 # Name -> (description, parameters_schema, handler)
@@ -109,6 +112,26 @@ ADMIN_TOOLS: dict = {
         ),
         admin_tools.update_interview_status,
     ),
+    "get_candidate_results": (
+        "Get the interview results for a specific candidate by email: job title, status, "
+        "admin status, overall score, all dimension scores, technical evaluation, "
+        "strengths, weaknesses, and recommendation verdict. Returns a tabular list.",
+        _params(email=_str("The candidate's email address", required=True)),
+        admin_tools.get_candidate_results,
+    ),
+    "get_interview_details": (
+        "Get the full analysis for a single interview by id: transcript, technical "
+        "evaluation, sentiment and speech analysis, scores, strengths and weaknesses, "
+        "recommendation with reason, and the full professional report.",
+        _params(interview_id=_str("The interview UUID", required=True)),
+        admin_tools.get_interview_details,
+    ),
+    "get_recent_activity": (
+        "Get the most recent platform activity (new interviews, status changes, support "
+        "requests, candidate actions) from the audit trail, newest first.",
+        _params(limit=_str("Maximum number of entries (1-100, default 20)")),
+        admin_tools.get_recent_activity,
+    ),
     "get_analytics": (
         "Get hiring analytics: funnel (registered/interviewed/recommended/selected), "
         "success rate, average interview duration, and monthly interview trends.",
@@ -152,33 +175,19 @@ ADMIN_TOOLS: dict = {
 }
 
 CANDIDATE_TOOLS: dict = {
-    "get_my_profile": (
-        "Get the signed-in candidate's own profile (skills, education, experience, company).",
+    "get_my_interview_status": (
+        "Get the signed-in candidate's awaiting interview status and time: whether the "
+        "interview is still being processed, how long it has been, and a friendly status "
+        "message. Never reveals interview questions or content.",
         _params(),
-        candidate_tools.get_my_profile,
-    ),
-    "get_my_interviews": (
-        "Get the signed-in candidate's own interview history: status, admin status, "
-        "recommendation verdict, and dates.",
-        _params(),
-        candidate_tools.get_my_interviews,
+        candidate_tools.get_my_interview_status,
     ),
     "get_my_result": (
-        "Get the signed-in candidate's latest interview result: status and hiring "
-        "recommendation verdict with a friendly message.",
+        "Get the signed-in candidate's final interview result: status and hiring "
+        "recommendation verdict with a friendly message. Detailed scores and reports "
+        "are shared by the recruiter, not shown here.",
         _params(),
         candidate_tools.get_my_result,
-    ),
-    "get_my_learning_plan": (
-        "Get a personalized learning plan built from the candidate's own skills and "
-        "interview strengths/weaknesses.",
-        _params(),
-        candidate_tools.get_my_learning_plan,
-    ),
-    "get_my_notifications": (
-        "Get the signed-in candidate's recent notifications.",
-        _params(),
-        candidate_tools.get_my_notifications,
     ),
     "faq_search": (
         "Search the platform FAQ for an answer (interviews, results, rescheduling, "
@@ -187,14 +196,15 @@ CANDIDATE_TOOLS: dict = {
         candidate_tools.faq_search,
     ),
     "contact_support": (
-        "Submit a support request on behalf of the signed-in candidate.",
+        "Submit a support request on behalf of the signed-in candidate to resolve "
+        "any issue (interview problems, rescheduling, account help).",
         _params(message=_str("The support message", required=True)),
         candidate_tools.contact_support,
     ),
-    "get_my_resume": (
-        "Get the signed-in candidate's uploaded resume URL, if one exists.",
+    "get_my_notifications": (
+        "Get the signed-in candidate's recent notifications (status updates, support replies).",
         _params(),
-        candidate_tools.get_my_resume,
+        candidate_tools.get_my_notifications,
     ),
 }
 

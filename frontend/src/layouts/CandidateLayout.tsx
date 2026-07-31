@@ -14,7 +14,7 @@ import {
 } from 'lucide-react'
 import { Avatar, AvatarFallback, AvatarImage, Button } from '@/components/ui'
 import { ThemeToggle } from '@/components/shared'
-import { ChatWidget } from '@/components/chat'
+import { ChatSidebar } from '@/components/chat'
 import { useAuth } from '@/context'
 import { useProfile } from '@/hooks'
 import { mediaUrl } from '@/services/api'
@@ -145,7 +145,7 @@ export function CandidateLayout() {
         </main>
       </div>
 
-      <ChatWidget role="candidate" />
+      <ChatSidebar role="candidate" />
     </div>
   )
 }

@@ -1,8 +1,14 @@
 """Candidate tool handlers for the AI assistant.
 
-Candidates only ever access their own data — never admin data, scores,
-feedback, transcripts, or reports (those are admin-only by platform policy).
-All handlers verify the signed-in user's ownership directly.
+Candidates only ever access their own data, and only these four things:
+1. Their awaiting interview status and time (never interview questions/content).
+2. Their final result (verdict + friendly message only — scores, feedback,
+   transcripts and reports are admin-only by platform policy).
+3. FAQ answers.
+4. Contacting support to resolve issues.
+
+There is deliberately NO tool for profile, skills, interview content, or any
+admin-authority data — those live outside the candidate scope.
 """
 from __future__ import annotations
 
@@ -10,128 +16,87 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.activity_log import ActivityLog
+from app.models.interview import InterviewStatus
 from app.models.user import User
 from app.repositories.activity_log import ActivityLogRepository
-from app.repositories.candidate_profile import CandidateProfileRepository
 from app.repositories.interview import InterviewRepository
-from app.utils.exceptions import NotFoundError
 from app.utils.recommendation_messages import get_recommendation_message
 
 
-async def get_my_profile(db: AsyncSession, actor: User, **args) -> dict:
-    repo = CandidateProfileRepository(db)
-    profile = await repo.get_by_user(actor.id)
-    if profile is None:
-        return {
-            "name": actor.full_name,
-            "email": actor.email,
-            "message": "No profile details yet. Add experience, skills and education from your profile page.",
-        }
-    return {
-        "name": actor.full_name,
-        "email": actor.email,
-        "experience": profile.experience,
-        "skills": profile.skills,
-        "education": profile.education,
-        "current_company": profile.current_company,
-        "expected_salary": profile.expected_salary,
-    }
+async def get_my_interview_status(db: AsyncSession, actor: User, **args) -> dict:
+    """Awaiting interview status + time, and whether it is still pending.
 
-
-async def get_my_interviews(db: AsyncSession, actor: User, **args) -> dict:
-    repo = InterviewRepository(db)
-    interviews = await repo.list_by_candidate(actor.id)
-    items = []
-    for interview in interviews:
-        rec = interview.recommendation
-        items.append(
-            {
-                "id": str(interview.id),
-                "title": interview.title,
-                "job_title": interview.job_title,
-                "status": interview.status.value,
-                "admin_status": interview.admin_status,
-                "recommendation": rec.verdict.value if rec else None,
-                "created_at": interview.created_at.isoformat() if interview.created_at else None,
-                "completed_at": (
-                    interview.completed_at.isoformat() if interview.completed_at else None
-                ),
-                "failure_reason": interview.failure_reason or None,
-            }
-        )
-    return {"total": len(items), "items": items}
-
-
-async def get_my_result(db: AsyncSession, actor: User, **args) -> dict:
-    """Candidate's latest interview result — verdict + friendly message only."""
+    Never exposes interview questions, content, or internal details — just
+    what the candidate is waiting on.
+    """
     repo = InterviewRepository(db)
     interviews = await repo.list_by_candidate(actor.id)
     if not interviews:
-        return {"message": "You don't have any interviews yet."}
+        return {
+            "has_interview": False,
+            "message": "You don't have an interview scheduled yet. "
+            "When your interview is uploaded, you'll see its status here.",
+        }
+
+    interview = interviews[0]  # most recent
+    status = interview.status.value
+    is_pending = status in (InterviewStatus.UPLOADED.value, InterviewStatus.PROCESSING.value)
+
+    started = interview.started_at.isoformat() if interview.started_at else None
+    created = interview.created_at.isoformat() if interview.created_at else None
+
+    if is_pending:
+        message = (
+            "Your interview is being processed. Please wait — your result will "
+            "appear here as soon as the review is complete."
+        )
+    elif status == InterviewStatus.FAILED.value:
+        message = (
+            "There was an issue processing your interview. Please contact "
+            "support and we'll resolve it for you."
+        )
+    elif interview.recommendation:
+        message = "Your interview is complete — you can view your result."
+    else:
+        message = "Your interview is complete — your result is being finalized."
+
+    return {
+        "has_interview": True,
+        "interview_id": str(interview.id),
+        "status": status,
+        "awaiting": is_pending,
+        "awaiting_time_seconds": interview.duration_seconds,
+        "created_at": created,
+        "started_at": started,
+        "completed_at": interview.completed_at.isoformat() if interview.completed_at else None,
+        "message": message,
+    }
+
+
+async def get_my_result(db: AsyncSession, actor: User, **args) -> dict:
+    """Candidate's final result — verdict + friendly message only."""
+    repo = InterviewRepository(db)
+    interviews = await repo.list_by_candidate(actor.id)
+    if not interviews:
+        return {"has_result": False, "message": "You don't have any interview results yet."}
 
     interview = await repo.get_full(interviews[0].id)
     rec = interview.recommendation
+    if interview.status.value != InterviewStatus.COMPLETED.value and not rec:
+        return {
+            "has_result": False,
+            "status": interview.status.value,
+            "message": "Your interview is still being processed. Please check back later.",
+        }
     verdict = rec.verdict.value if rec else None
     return {
+        "has_result": True,
         "interview_id": str(interview.id),
         "job_title": interview.job_title,
         "status": interview.status.value,
         "admin_status": interview.admin_status,
         "recommendation": verdict,
         "message": get_recommendation_message(verdict) if rec else "",
-    }
-
-
-async def get_my_learning_plan(db: AsyncSession, actor: User, **args) -> dict:
-    """Deterministic learning plan from the candidate's own profile + interviews."""
-    profile_repo = CandidateProfileRepository(db)
-    profile = await profile_repo.get_by_user(actor.id)
-    skills = [s.strip() for s in (profile.skills if profile else "").split(",") if s.strip()]
-
-    repo = InterviewRepository(db)
-    interviews = await repo.list_by_candidate(actor.id)
-
-    strengths: list[str] = []
-    weaknesses: list[str] = []
-    for interview in interviews:
-        full = await repo.get_full(interview.id)
-        if full:
-            strengths.extend(s.text for s in full.strengths)
-            weaknesses.extend(w.text for w in full.weaknesses)
-
-    plan = {
-        "skills": skills,
-        "strengths": strengths[:10],
-        "areas_to_improve": weaknesses[:10],
-        "recommendation": "Focus on the areas above; practice with mock interviews "
-        "and revisit foundational concepts in your weakest skills.",
-    }
-    if not strengths and not weaknesses:
-        plan["recommendation"] = (
-            "Complete an interview to get a personalized learning plan."
-        )
-    return plan
-
-
-async def get_my_notifications(db: AsyncSession, actor: User, **args) -> dict:
-    stmt = (
-        select(ActivityLog)
-        .where(ActivityLog.entity_id == str(actor.id))
-        .order_by(ActivityLog.created_at.desc())
-        .limit(20)
-    )
-    result = await db.execute(stmt)
-    logs = list(result.scalars().all())
-    return {
-        "total": len(logs),
-        "items": [
-            {
-                "action": log.action,
-                "details": log.details or {},
-                "created_at": log.created_at.isoformat() if log.created_at else None,
-            }
-            for log in logs
-        ],
     }
 
 
@@ -142,8 +107,7 @@ _FAQ = {
     "reports are shared by your recruiter.",
     "reschedule": "To reschedule an interview, please contact your recruiter or "
     "support — interviews are scheduled by the hiring team.",
-    "account": "You can update your profile and change your password from the "
-    "Settings page.",
+    "account": "You can update your account details from the Settings page.",
     "password": "Go to Settings → Change password, or use 'Forgot password' on the "
     "login page.",
     "resume": "Upload your resume from the profile page; it helps recruiters "
@@ -160,7 +124,15 @@ async def faq_search(db: AsyncSession, actor: User, **args) -> dict:
         for key, value in _FAQ.items()
         if query in key or query in value.lower()
     ]
-    return {"items": matches or [{"topic": query, "answer": "No FAQ match found. Try asking about interviews, results, rescheduling, account, password, or resume."}]}
+    return {
+        "items": matches
+        or [
+            {
+                "topic": query,
+                "answer": "No FAQ match found. Try asking about interviews, results, rescheduling, account, password, or resume.",
+            }
+        ]
+    }
 
 
 async def contact_support(db: AsyncSession, actor: User, **args) -> dict:
@@ -181,9 +153,24 @@ async def contact_support(db: AsyncSession, actor: User, **args) -> dict:
     return {"status": "submitted", "message": "Your support request has been submitted."}
 
 
-async def get_my_resume(db: AsyncSession, actor: User, **args) -> dict:
-    repo = CandidateProfileRepository(db)
-    profile = await repo.get_by_user(actor.id)
-    if profile is None or not profile.resume_url:
-        raise NotFoundError("No resume on file yet.")
-    return {"resume_url": profile.resume_url, "filename": profile.resume_url.split("/")[-1]}
+async def get_my_notifications(db: AsyncSession, actor: User, **args) -> dict:
+    """Candidate's own notifications (status updates, support replies)."""
+    stmt = (
+        select(ActivityLog)
+        .where(ActivityLog.entity_id == str(actor.id))
+        .order_by(ActivityLog.created_at.desc())
+        .limit(20)
+    )
+    result = await db.execute(stmt)
+    logs = list(result.scalars().all())
+    return {
+        "total": len(logs),
+        "items": [
+            {
+                "action": log.action,
+                "details": log.details or {},
+                "created_at": log.created_at.isoformat() if log.created_at else None,
+            }
+            for log in logs
+        ],
+    }
