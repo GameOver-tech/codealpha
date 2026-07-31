@@ -12,6 +12,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPExcepti
 from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.ai.deepgram import probe_media_duration
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.logging import get_logger
@@ -116,6 +117,16 @@ async def upload_interview(
     rel_path, size_bytes = await asyncio.to_thread(
         storage.save_upload, file, f"recordings/{interview.id}"
     )
+
+    # Extract the real media duration at upload time so every view (PDF,
+    # admin details, candidate dashboard, reports) shows the actual length
+    # instead of 0m 00s. Falls back to 0 only if the probe itself fails —
+    # the pipeline later overwrites it from Deepgram metadata when available.
+    duration = round(
+        await asyncio.to_thread(probe_media_duration, storage.abs_path(rel_path))
+    )
+    interview.duration_seconds = duration
+
     file_id = uuid.uuid4()
 
     files = InterviewFileRepository(db)
@@ -125,11 +136,17 @@ async def upload_interview(
         storage_path=rel_path,
         content_type=file.content_type or "",
         file_size_bytes=size_bytes,
+        duration_seconds=duration,
     )
 
     await ActivityLogRepository(db).log(
         current_user.id, "interview_uploaded", "interview", str(interview.id),
-        {"filename": file.filename, "size_bytes": size_bytes, "candidate_id": str(candidate.id)},
+        {
+            "filename": file.filename,
+            "size_bytes": size_bytes,
+            "candidate_id": str(candidate.id),
+            "duration_seconds": duration,
+        },
     )
     await db.commit()
 
@@ -589,6 +606,29 @@ async def override_recommendation(
         verdict=rec.verdict.value,
         message=reason or "Recommendation updated.",
     )
+
+
+@router.get("/candidates/registered")
+async def list_registered_candidates(
+    current_user: User = Depends(require_role("admin")),
+    db: AsyncSession = Depends(get_db),
+):
+    """List active candidate accounts for the upload dropdown.
+
+    Returns only active candidate-role users (never admins, never disabled
+    accounts) so the admin can pick the interview subject without typing
+    the email by hand.
+    """
+    users = UserRepository(db)
+    candidates = await users.list_active_candidates()
+    return [
+        {
+            "id": str(c.id),
+            "full_name": c.full_name,
+            "email": c.email,
+        }
+        for c in candidates
+    ]
 
 
 @router.delete("/interview/{interview_id}", status_code=200)

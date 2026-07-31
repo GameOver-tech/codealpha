@@ -1,7 +1,8 @@
 """Tests for recommendation UI messages and the PDF builder."""
 from pathlib import Path
 
-from app.services.pdf_service import _build_pdf_bytes
+from app.models.recommendation import RecommendationVerdict
+from app.services.pdf_service import _build_pdf_bytes, _format_duration, _safe
 from app.utils.recommendation_messages import (
     RECOMMENDATION_MESSAGES,
     get_recommendation_message,
@@ -119,3 +120,63 @@ def test_pdf_builds_with_empty_data():
     }
     pdf = _build_pdf_bytes(payload)
     assert pdf[:4] == b"%PDF"
+
+
+# --- Verdict normalization (Issue: enum names must never reach users) -------
+
+
+def test_safe_normalizes_verdict_enum_to_human_label():
+    assert _safe(RecommendationVerdict.RECOMMENDED) == "Recommended"
+    assert _safe(RecommendationVerdict.NOT_RECOMMENDED) == "Not Recommended"
+    assert _safe(RecommendationVerdict.NEED_FURTHER_REVIEW) == "Need Further Review"
+
+
+def test_pdf_never_contains_enum_class_name():
+    """The PDF bytes must not contain RecommendationVerdict.* anywhere."""
+    payload = {
+        "candidate_name": "Alice Johnson",
+        "candidate_email": "alice@example.com",
+        "interview_date": "2026-07-30T10:00:00",
+        "duration_seconds": 134,
+        "overall_score": 81,
+        "recommendation": RecommendationVerdict.RECOMMENDED,
+        "recommendation_reason": "Strong performance.",
+        "transcript": "",
+        "scores": EVALUATION_PAYLOAD["scores"],
+        "report": EVALUATION_PAYLOAD["report"],
+        "strengths": EVALUATION_PAYLOAD["strengths"],
+        "weaknesses": EVALUATION_PAYLOAD["weaknesses"],
+    }
+    pdf = _build_pdf_bytes(payload)
+    assert b"RecommendationVerdict" not in pdf
+
+
+def test_pdf_builds_with_recommendation_enum_verdict():
+    """Passing the raw enum (as the DB relationship yields) must not crash."""
+    payload = {
+        "candidate_name": "Alice Johnson",
+        "candidate_email": "alice@example.com",
+        "interview_date": "2026-07-30T10:00:00",
+        "duration_seconds": 134,
+        "overall_score": 81,
+        "recommendation": RecommendationVerdict.NOT_RECOMMENDED,
+        "recommendation_reason": "Below threshold.",
+        "transcript": "",
+        "scores": EVALUATION_PAYLOAD["scores"],
+        "report": EVALUATION_PAYLOAD["report"],
+        "strengths": EVALUATION_PAYLOAD["strengths"],
+        "weaknesses": EVALUATION_PAYLOAD["weaknesses"],
+    }
+    pdf = _build_pdf_bytes(payload)
+    assert pdf[:4] == b"%PDF"
+
+
+# --- Duration formatting ----------------------------------------------------
+
+
+def test_format_duration_covers_required_shapes():
+    assert _format_duration(0) == "0m 00s"
+    assert _format_duration(134) == "2m 14s"
+    assert _format_duration(932) == "15m 32s"
+    assert _format_duration(1908) == "31m 48s"
+    assert _format_duration(3912) == "1h 05m 12s"

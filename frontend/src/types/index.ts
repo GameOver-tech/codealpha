@@ -290,6 +290,12 @@ export interface RecommendationMessage {
   message: string
 }
 
+export interface RegisteredCandidate {
+  id: string
+  full_name: string
+  email: string
+}
+
 export type ScoreMap = Partial<Record<keyof Scores, number>>
 
 export interface ApiError {

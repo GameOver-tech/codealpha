@@ -6,6 +6,7 @@ color-coded hiring recommendation badge.
 """
 from __future__ import annotations
 
+import enum
 import io
 import os
 import re
@@ -35,7 +36,7 @@ from reportlab.platypus import (
 
 from app.core.config import settings
 from app.core.logging import get_logger
-from app.services.transcript_format import build_interview_summary, format_qa_transcript
+from app.services.transcript_format import build_interview_summary
 from app.storage import copy_local_to_supabase, cleanup_local_file
 from app.utils.exceptions import BadRequestError
 
@@ -123,8 +124,17 @@ class _Styles:
 
 
 def _safe(text: Any) -> str:
-    """Coerce arbitrary values to clean text for the PDF."""
-    value = "" if text is None else str(text)
+    """Coerce arbitrary values to clean text for the PDF.
+
+    Enum objects are normalized to their human-readable ``.value`` (never
+    their Python class name, e.g. ``RecommendationVerdict.RECOMMENDED``).
+    """
+    if text is None:
+        value = ""
+    elif isinstance(text, enum.Enum):
+        value = text.value if text.value is not None else ""
+    else:
+        value = str(text)
     value = value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
     return value.strip()
 
@@ -134,7 +144,7 @@ def _format_duration(seconds: int) -> str:
     m, s = divmod(seconds, 60)
     h, m = divmod(m, 60)
     if h:
-        return f"{h}h {m:02d}m"
+        return f"{h}h {m:02d}m {s:02d}s"
     return f"{m}m {s:02d}s"
 
 
@@ -220,9 +230,6 @@ def _build_story(payload: dict[str, Any]) -> list[Any]:
     verdict = _safe(payload.get("recommendation")) or "—"
     overall = scores.get("overall_score", 0)
     report = payload.get("report") or {}
-    transcript = payload.get("transcript") or {}
-    if isinstance(transcript, str):
-        transcript = {"full_text": transcript, "segments": []}
     strengths = payload.get("strengths") or []
     weaknesses = payload.get("weaknesses") or []
 
@@ -281,65 +288,34 @@ def _build_story(payload: dict[str, Any]) -> list[Any]:
     story.append(Paragraph("2. Candidate Overview", styles.h1))
     story.append(Paragraph(_safe(report.get("candidate_overview")) or "No candidate overview available.", styles.body))
 
-    # ---- Section 3: Interview Summary ----
+    # ---- Section 3: Interview Summary (premium executive summary) ----
     story.append(Paragraph("3. Interview Summary", styles.h1))
-    story.append(Paragraph(_safe(build_interview_summary(report)), styles.body))
+    summary_style = ParagraphStyle(
+        "SummaryBody", parent=styles.body, spaceAfter=5,
+    )
+    for label, text in build_interview_summary(report):
+        story.append(
+            Paragraph(f"<b>{_safe(label)}:</b>&nbsp;{_safe(text)}", summary_style)
+        )
 
-    # ---- Section 4: Question & Answer Transcript ----
-    story.append(Paragraph("4. Question & Answer Transcript", styles.h1))
-    if transcript:
-        # Prefer the structured Q&A layout built from speaker segments; fall
-        # back to the raw text only when no speaker structure exists.
-        if transcript.get("segments"):
-            qa_text = format_qa_transcript(transcript["segments"])
-            if qa_text:
-                for block in qa_text.split("\n\n"):
-                    lines = block.split("\n")
-                    qa_label = ParagraphStyle(
-                        "QALabel", parent=styles.body, fontName=BOLD_FONT,
-                        textColor=BRAND_COLOR, spaceBefore=6, spaceAfter=2,
-                    )
-                    qa_body = ParagraphStyle(
-                        "QABody", parent=styles.body, leftIndent=10,
-                    )
-                    for line in lines:
-                        if line.startswith("Question "):
-                            story.append(Paragraph(_safe(line), qa_label))
-                        elif line.startswith("Interviewer:") or line.startswith("Candidate:"):
-                            label, _, text = line.partition(":")
-                            story.append(
-                                Paragraph(
-                                    f"<b>{_safe(label)}:</b>&nbsp;{_safe(text)}",
-                                    qa_body,
-                                )
-                            )
-                        elif line.strip():
-                            story.append(Paragraph(_safe(line), qa_body))
-            else:
-                story.append(Paragraph(_safe(transcript.get("full_text") or ""), styles.body))
-        else:
-            story.append(Paragraph(_safe(transcript.get("full_text") or ""), styles.body))
-    else:
-        story.append(Paragraph("No transcript available.", styles.body))
-
-    # ---- Sections 5-9: Evaluations ----
+    # ---- Sections 4-8: Evaluations ----
     section_map = [
-        ("5. Technical Evaluation", "technical_assessment"),
-        ("6. Communication Evaluation", "communication_assessment"),
-        ("7. Confidence Analysis", "confidence_assessment"),
-        ("8. Problem Solving Evaluation", "problem_solving_assessment"),
-        ("9. Relevant Experience", "experience_assessment"),
+        ("4. Technical Evaluation", "technical_assessment"),
+        ("5. Communication Evaluation", "communication_assessment"),
+        ("6. Confidence Analysis", "confidence_assessment"),
+        ("7. Problem Solving Evaluation", "problem_solving_assessment"),
+        ("8. Relevant Experience", "experience_assessment"),
     ]
     for title, key in section_map:
         story.append(Paragraph(title, styles.h1))
         story.append(Paragraph(_safe(report.get(key)) or "Not assessed.", styles.body))
 
-    # ---- Sections 10-11: Strengths / Weaknesses ----
-    story.extend(_build_strengths_weaknesses_section(strengths, "10. Strengths"))
-    story.extend(_build_strengths_weaknesses_section(weaknesses, "11. Weaknesses"))
+    # ---- Sections 9-10: Strengths / Weaknesses ----
+    story.extend(_build_strengths_weaknesses_section(strengths, "9. Strengths"))
+    story.extend(_build_strengths_weaknesses_section(weaknesses, "10. Weaknesses"))
 
-    # ---- Section 12: Improvement Suggestions ----
-    story.append(Paragraph("12. Improvement Suggestions", styles.h1))
+    # ---- Section 11: Improvement Suggestions ----
+    story.append(Paragraph("11. Improvement Suggestions", styles.h1))
     suggestions = _parse_lines(report.get("improvement_suggestions"))
     if suggestions:
         for line in suggestions:
@@ -347,9 +323,9 @@ def _build_story(payload: dict[str, Any]) -> list[Any]:
     else:
         story.append(Paragraph("No suggestions recorded.", styles.body))
 
-    # ---- Section 13: Final Score Table ----
+    # ---- Section 12: Final Score Table ----
     story.append(PageBreak())
-    story.append(Paragraph("13. Final Score Table", styles.h1))
+    story.append(Paragraph("12. Final Score Table", styles.h1))
 
     score_labels = [
         ("Technical", "technical_skills"),
@@ -394,9 +370,9 @@ def _build_story(payload: dict[str, Any]) -> list[Any]:
     ]))
     story.append(overall_row)
 
-    # ---- Section 14: Hiring Recommendation ----
+    # ---- Section 13: Hiring Recommendation ----
     story.append(Spacer(1, 0.2 * inch))
-    story.append(Paragraph("14. Hiring Recommendation", styles.h1))
+    story.append(Paragraph("13. Hiring Recommendation", styles.h1))
     rec_color = VERDICT_COLORS.get(verdict, MUTED_COLOR)
     rec_text = f"<b>{_safe(verdict)}</b>"
     rec_table = Table([[Paragraph(rec_text, ParagraphStyle(
@@ -445,7 +421,13 @@ def _build_payload(interview, *, transcript_text: str = "") -> dict[str, Any]:
     report = interview.report
     strengths = [s.text for s in interview.strengths]
     weaknesses = [w.text for w in interview.weaknesses]
-    verdict = interview.recommendation.verdict if interview.recommendation else "—"
+    # Normalize the verdict to its human-readable string value. The DB column
+    # yields a RecommendationVerdict enum, and str() of a str-based enum
+    # produces "RecommendationVerdict.RECOMMENDED" — never expose that to users.
+    verdict = "—"
+    if interview.recommendation:
+        raw = interview.recommendation.verdict
+        verdict = raw.value if hasattr(raw, "value") else str(raw)
     reason = interview.recommendation.reason if interview.recommendation else ""
 
     # Structured transcript — segments drive the Q&A layout, full_text is
