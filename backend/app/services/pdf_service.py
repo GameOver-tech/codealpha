@@ -148,6 +148,37 @@ def _format_duration(seconds: int) -> str:
     return f"{m}m {s:02d}s"
 
 
+def _duration_from_segments(segments: list[Any] | None) -> int:
+    """Return the last transcript segment's end time (the interview duration).
+
+    The transcription timestamps are the authoritative source for how long
+    the interview actually ran. Returns 0 when there are no usable timestamps
+    so callers can fall back to media metadata.
+    """
+    for segment in reversed(segments or []):
+        if not isinstance(segment, dict):
+            continue
+        try:
+            end = float(segment.get("end") or 0)
+        except (TypeError, ValueError):
+            continue
+        if end > 0:
+            return int(round(end))
+    return 0
+
+
+def _duration_from_raw(raw_response: Any) -> int:
+    """Extract the media duration from Deepgram's stored raw response."""
+    try:
+        if not isinstance(raw_response, dict):
+            return 0
+        metadata = raw_response.get("metadata") or {}
+        duration = float(metadata.get("duration") or 0)
+        return int(round(duration)) if duration > 0 else 0
+    except (TypeError, ValueError, AttributeError):
+        return 0
+
+
 def _format_date(dt) -> str:
     if not dt:
         return "—"
@@ -225,7 +256,10 @@ def _build_story(payload: dict[str, Any]) -> list[Any]:
     cand_name = _safe(payload.get("candidate_name")) or "Candidate"
     cand_email = _safe(payload.get("candidate_email")) or "—"
     interview_date = payload.get("interview_date")
-    duration = payload.get("duration_seconds", 0)
+    # Show "Unknown" only when every duration source is unavailable — never a
+    # fabricated 0m 00s (a real interview is never literally zero seconds).
+    duration_raw = int(payload.get("duration_seconds") or 0)
+    duration_label = _format_duration(duration_raw) if duration_raw > 0 else "Unknown"
     scores = payload.get("scores") or {}
     verdict = _safe(payload.get("recommendation")) or "—"
     overall = scores.get("overall_score", 0)
@@ -249,7 +283,7 @@ def _build_story(payload: dict[str, Any]) -> list[Any]:
         ["Candidate Email", cand_email],
         ["Job Position", _safe(payload.get("job_title")) or "—"],
         ["Interview Date", _format_date(interview_date)],
-        ["Interview Duration", _format_duration(duration)],
+        ["Interview Duration", duration_label],
     ]
     meta_table = Table(meta, colWidths=[1.7 * inch, 4.6 * inch])
     meta_table.setStyle(TableStyle([
@@ -438,6 +472,16 @@ def _build_payload(interview, *, transcript_text: str = "") -> dict[str, Any]:
         "segments": transcript.segments if transcript else [],
     }
 
+    # Interview duration: prefer the transcription timestamps (last segment's
+    # end time), then the media duration stored at upload, then Deepgram's
+    # reported duration. Only when every source is missing do we show
+    # "Unknown" — never a fabricated 0m 00s.
+    duration = _duration_from_segments(transcript.segments if transcript else None)
+    if not duration:
+        duration = int(interview.duration_seconds or 0)
+    if not duration:
+        duration = int(getattr(transcript, "raw_response", None) and _duration_from_raw(transcript.raw_response) or 0)
+
     report_payload = {
         "executive_summary": report.executive_summary if report else "",
         "interview_overview": report.interview_overview if report else "",
@@ -456,7 +500,7 @@ def _build_payload(interview, *, transcript_text: str = "") -> dict[str, Any]:
         "candidate_email": user.email if user else "—",
         "job_title": interview.job_title,
         "interview_date": interview.created_at,
-        "duration_seconds": interview.duration_seconds,
+        "duration_seconds": duration,
         "overall_score": scores.overall_score if scores else 0,
         "recommendation": verdict,
         "recommendation_reason": reason,

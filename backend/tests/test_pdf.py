@@ -2,7 +2,13 @@
 from pathlib import Path
 
 from app.models.recommendation import RecommendationVerdict
-from app.services.pdf_service import _build_pdf_bytes, _format_duration, _safe
+from app.services.pdf_service import (
+    _build_pdf_bytes,
+    _duration_from_raw,
+    _duration_from_segments,
+    _format_duration,
+    _safe,
+)
 from app.utils.recommendation_messages import (
     RECOMMENDATION_MESSAGES,
     get_recommendation_message,
@@ -180,3 +186,38 @@ def test_format_duration_covers_required_shapes():
     assert _format_duration(932) == "15m 32s"
     assert _format_duration(1908) == "31m 48s"
     assert _format_duration(3912) == "1h 05m 12s"
+
+
+# --- Duration derived from transcript timestamps -----------------------------
+
+
+def test_duration_from_segments_uses_last_segment_end():
+    """The interview duration is the last segment's end time."""
+    segments = [
+        {"start": 0.0, "end": 8.4, "text": "Hello.", "speaker": "A"},
+        {"start": 8.9, "end": 45.2, "text": "Intro.", "speaker": "B"},
+        {"start": 46.0, "end": 1845.2, "text": "Long answer.", "speaker": "B"},
+        {"start": 1845.2, "end": 1912.6, "text": "Closing.", "speaker": "A"},
+    ]
+    assert _duration_from_segments(segments) == 1913  # round(1912.6)
+    assert _format_duration(_duration_from_segments(segments)) == "31m 53s"
+
+
+def test_duration_from_segments_hour_scale():
+    segments = [{"start": 0.0, "end": 4338.2, "text": "x", "speaker": "A"}]
+    assert _format_duration(_duration_from_segments(segments)) == "1h 12m 18s"
+
+
+def test_duration_from_segments_tolerates_bad_data():
+    assert _duration_from_segments([]) == 0
+    assert _duration_from_segments(None) == 0
+    assert _duration_from_segments([{"start": 0, "text": "no end"}]) == 0
+    assert _duration_from_segments(["not-a-dict"]) == 0
+    assert _duration_from_segments([{"start": 0, "end": "not-a-number", "text": "x"}]) == 0
+
+
+def test_duration_from_raw_response():
+    raw = {"metadata": {"duration": 1912.6}}
+    assert _duration_from_raw(raw) == 1913
+    assert _duration_from_raw({}) == 0
+    assert _duration_from_raw(None) == 0

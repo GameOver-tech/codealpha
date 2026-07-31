@@ -64,10 +64,18 @@ export function DashboardOverview() {
       <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
         {isLoading && !status ? (
           <Card>
-            <CardContent className="p-6">
+            <CardContent className="space-y-4 p-6">
+              <div className="flex items-center gap-2">
+                <Skeleton className="h-6 w-24 rounded-full" />
+                <Skeleton className="h-6 w-28 rounded-full" />
+              </div>
               <Skeleton className="h-8 w-48" />
-              <Skeleton className="mt-4 h-4 w-72" />
-              <Skeleton className="mt-3 h-4 w-56" />
+              <Skeleton className="h-4 w-72" />
+              <Skeleton className="h-4 w-56" />
+              <div className="flex gap-3 pt-2">
+                <Skeleton className="h-10 w-32 rounded-xl" />
+                <Skeleton className="h-10 w-32 rounded-xl" />
+              </div>
             </CardContent>
           </Card>
         ) : status ? (
@@ -165,19 +173,26 @@ export function DashboardOverview() {
             value: status ? formatDuration(status.duration_seconds) : '—',
             sub: status?.created_at ? `Uploaded ${new Date(status.created_at).toLocaleDateString()}` : '—',
           },
-        ].map((stat) => (
-          <Card key={stat.label} className="card-hover">
-            <CardContent className="flex items-start gap-4 p-5">
-              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                <stat.icon className="h-5 w-5" />
-              </span>
-              <div className="min-w-0">
-                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{stat.label}</p>
-                <p className="mt-0.5 truncate font-display text-lg font-bold capitalize text-foreground">{stat.value}</p>
-                <p className="truncate text-xs text-muted-foreground">{stat.sub}</p>
-              </div>
-            </CardContent>
-          </Card>
+        ].map((stat, index) => (
+          <motion.div
+            key={stat.label}
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.35, delay: 0.1 + index * 0.08 }}
+          >
+            <Card className="card-hover group h-full transition-all duration-300 hover:-translate-y-0.5">
+              <CardContent className="flex h-full items-start gap-4 p-5">
+                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary transition-all duration-300 group-hover:scale-110 group-hover:bg-primary group-hover:text-white">
+                  <stat.icon className="h-5 w-5" />
+                </span>
+                <div className="min-w-0">
+                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{stat.label}</p>
+                  <p className="mt-0.5 truncate font-display text-lg font-bold capitalize text-foreground">{stat.value}</p>
+                  <p className="truncate text-xs text-muted-foreground">{stat.sub}</p>
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
         ))}
       </div>
     </div>

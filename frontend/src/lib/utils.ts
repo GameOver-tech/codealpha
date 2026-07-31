@@ -13,7 +13,7 @@ export function formatBytes(bytes: number): string {
 }
 
 export function formatDuration(seconds: number): string {
-  if (!seconds || seconds <= 0) return '—'
+  if (!seconds || seconds <= 0) return 'Unknown'
   const total = Math.round(seconds)
   const h = Math.floor(total / 3600)
   const m = Math.floor((total % 3600) / 60)
