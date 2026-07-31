@@ -2,7 +2,7 @@
 import uuid
 from typing import Any, Generic, TypeVar
 
-from sqlalchemy import select, update, delete
+from sqlalchemy import func, select, update, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.base import Base
@@ -75,6 +75,6 @@ class BaseRepository(Generic[ModelT]):
 
     async def count(self, **kwargs: Any) -> int:
         kwargs = {key: _coerce_uuid(value) for key, value in kwargs.items()}
-        stmt = select(self.model.id).filter_by(**kwargs)
+        stmt = select(func.count()).select_from(self.model).filter_by(**kwargs)
         result = await self.db.execute(stmt)
-        return len(result.all())
+        return int(result.scalar_one() or 0)

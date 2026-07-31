@@ -112,7 +112,10 @@ async def upload_interview(
     await db.flush()
 
     storage = LocalStorage()
-    rel_path, size_bytes = storage.save_upload(file, f"recordings/{interview.id}")
+    # File I/O offloaded to a worker thread so the event loop stays free.
+    rel_path, size_bytes = await asyncio.to_thread(
+        storage.save_upload, file, f"recordings/{interview.id}"
+    )
     file_id = uuid.uuid4()
 
     files = InterviewFileRepository(db)
@@ -426,7 +429,7 @@ async def list_interviews(
     Candidate details come from the eager-loaded relationship — no N+1.
     """
     repo = InterviewRepository(db)
-    interviews = await repo.list_all_full()
+    interviews = await repo.list_all_summary()
     result = []
     for interview in interviews:
         candidate = interview.candidate

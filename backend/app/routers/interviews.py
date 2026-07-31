@@ -65,10 +65,9 @@ async def get_interview_status(
 ):
     """Get the status of the candidate's most recent interview."""
     repo = InterviewRepository(db)
-    interviews = await repo.list_by_candidate(current_user.id)
-    if not interviews:
+    interview = await repo.latest_for_candidate(current_user.id)
+    if interview is None:
         raise NotFoundError("No interview found for this candidate")
-    interview = await repo.get_full(interviews[0].id)
     return _status_out(interview)
 
 
@@ -83,11 +82,9 @@ async def get_interview_result(
     are admin-only. They see the recommendation verdict and a friendly message.
     """
     repo = InterviewRepository(db)
-    interviews = await repo.list_by_candidate(current_user.id)
-    if not interviews:
+    interview = await repo.latest_for_candidate(current_user.id)
+    if interview is None:
         raise NotFoundError("No interview found for this candidate")
-
-    interview = await repo.get_full(interviews[0].id)
 
     rec = interview.recommendation
     verdict = rec.verdict.value if rec else None

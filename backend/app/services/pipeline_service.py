@@ -266,11 +266,7 @@ class InterviewPipeline:
             if interview.duration_seconds == 0 and result.get("duration"):
                 interview.duration_seconds = int(result["duration"])
             await self.db.commit()
-
-            # Verify the transcript actually persisted.
-            saved = await self.transcripts.get_by_interview(interview_id)
-            self._verify_row(saved, "transcript (re-query)", interview_id)
-            logger.info("[Stage 4] Transcript saved: length=%s", len(saved.full_text))
+            logger.info("[Stage 4] Transcript saved: length=%s", len(transcript.full_text))
 
         # Validate before ANY downstream step.
         self._validate_transcript_source(transcript)
@@ -283,24 +279,23 @@ class InterviewPipeline:
 
         await self._set_status(interview_id, InterviewStatus.TRANSCRIPT_READY)
 
-        # ---- Stage 5: Speech + sentiment analysis ----
+        # ---- Stage 5: Speech + sentiment analysis (parallel LLM calls) ----
         logger.info("[Stage 5] Speech analysis started")
         await self._set_progress(interview_id, 50, "speech_analysis")
-        speech = await analyze_speech(
-            {"segments": transcript.segments, "duration": interview.duration_seconds},
+        speech_result, sentiment_result = await asyncio.gather(
+            analyze_speech(
+                {"segments": transcript.segments, "duration": interview.duration_seconds},
+            ),
+            analyze_sentiment(
+                {"full_text": transcript.full_text, "segments": transcript.segments},
+            ),
         )
-        sentiment = await analyze_sentiment(
-            {"full_text": transcript.full_text, "segments": transcript.segments},
-        )
-        await self.speech.upsert(interview_id, speech)
-        await self.sentiment.upsert(interview_id, sentiment)
+        await self.speech.upsert(interview_id, speech_result)
+        await self.sentiment.upsert(interview_id, sentiment_result)
         await self.db.commit()
 
-        # Verify both rows actually persisted.
-        saved_speech = await self.speech.get_by_interview(interview_id)
-        self._verify_row(saved_speech, "speech analysis", interview_id)
-        saved_sentiment = await self.sentiment.get_by_interview(interview_id)
-        self._verify_row(saved_sentiment, "sentiment analysis", interview_id)
+        self._verify_row(speech_result, "speech analysis", interview_id)
+        self._verify_row(sentiment_result, "sentiment analysis", interview_id)
         await self._set_progress(interview_id, 65, "sentiment_analysis")
         logger.info("[Stage 5] Speech analysis completed in %.1fs", _elapsed())
 
@@ -325,37 +320,22 @@ class InterviewPipeline:
         logger.info("[Stage 6] LLM evaluation completed")
 
         # ---- Stage 7: Persist evaluation artifacts ----
-        await self.technical.upsert(interview_id, evaluation["technical_evaluation"])
-        await self.scores.upsert(interview_id, evaluation["scores"])
+        technical_row = await self.technical.upsert(interview_id, evaluation["technical_evaluation"])
+        scores_row = await self.scores.upsert(interview_id, evaluation["scores"])
         await self.strengths.replace_for_interview(interview_id, evaluation["strengths"])
         await self.weaknesses.replace_for_interview(interview_id, evaluation["weaknesses"])
         await self.db.commit()
 
-        # Verify every artifact actually persisted.
-        self._verify_row(
-            await self.technical.get_by_interview(interview_id),
-            "technical evaluation",
-            interview_id,
-        )
-        saved_scores = await self.scores.get_by_interview(interview_id)
-        self._verify_row(saved_scores, "scores", interview_id)
-        saved_strengths = await self.strengths.list_by_interview(interview_id)
-        saved_weaknesses = await self.weaknesses.list_by_interview(interview_id)
-        if not saved_strengths:
-            logger.warning("[Stage 7] No strengths persisted for interview %s", interview_id)
-        if not saved_weaknesses:
-            logger.warning("[Stage 7] No weaknesses persisted for interview %s", interview_id)
+        self._verify_row(technical_row, "technical evaluation", interview_id)
+        self._verify_row(scores_row, "scores", interview_id)
         logger.info(
-            "[Stage 7] Scores saved (overall=%s, strengths=%s, weaknesses=%s)",
-            saved_scores.overall_score,
-            len(saved_strengths),
-            len(saved_weaknesses),
+            "[Stage 7] Scores saved (overall=%s)",
+            scores_row.overall_score,
         )
 
         # ---- Stage 8: Recommendation + report ----
         rec = evaluation["recommendation"]
-        await self.recommendations.upsert(interview_id, rec["verdict"], rec["reason"])
-        saved_rec = await self.recommendations.get_by_interview(interview_id)
+        saved_rec = await self.recommendations.upsert(interview_id, rec["verdict"], rec["reason"])
         self._verify_row(saved_rec, "recommendation", interview_id)
         logger.info("[Stage 8] Recommendation saved: %s", saved_rec.verdict.value)
 
@@ -367,11 +347,9 @@ class InterviewPipeline:
         report_data["performance_analysis"] = report_data.get(
             "performance_analysis"
         ) or _summarize_transcript(transcript.full_text)
-        await self.reports.upsert(interview_id, report_data)
+        saved_report = await self.reports.upsert(interview_id, report_data)
         await self.db.commit()
 
-        # Verify the report persisted.
-        saved_report = await self.reports.get_by_interview(interview_id)
         self._verify_row(saved_report, "report", interview_id)
         logger.info("[Stage 8] Report saved")
 

@@ -39,9 +39,41 @@ class InterviewRepository(BaseRepository[Interview]):
             select(Interview)
             .where(Interview.candidate_id == _coerce_uuid(candidate_id))
             .order_by(Interview.created_at.desc())
+            .options(
+                selectinload(Interview.candidate).selectinload(User.profile),
+                selectinload(Interview.files),
+                selectinload(Interview.transcript),
+                selectinload(Interview.speech_analysis),
+                selectinload(Interview.sentiment_analysis),
+                selectinload(Interview.technical_evaluation),
+                selectinload(Interview.scores),
+                selectinload(Interview.strengths),
+                selectinload(Interview.weaknesses),
+                selectinload(Interview.recommendation),
+                selectinload(Interview.report),
+                selectinload(Interview.pdfs),
+            )
         )
         result = await self.db.execute(stmt)
         return list(result.scalars().all())
+
+    async def latest_for_candidate(self, candidate_id: uuid.UUID | str) -> Interview | None:
+        """Fetch the candidate's most recent interview with relations loaded.
+
+        Avoids the list-then-refetch pattern (two queries, one of which
+        loads every historical interview). Returns None when the candidate
+        has no interviews.
+        """
+        stmt = (
+            self._with_relations(
+                select(Interview)
+                .where(Interview.candidate_id == _coerce_uuid(candidate_id))
+                .order_by(Interview.created_at.desc())
+            )
+            .limit(1)
+        )
+        result = await self.db.execute(stmt)
+        return result.scalars().first()
 
     async def list_all_full(self) -> list[Interview]:
         """List all interviews with relations eagerly loaded.
@@ -54,6 +86,49 @@ class InterviewRepository(BaseRepository[Interview]):
         )
         result = await self.db.execute(stmt)
         return list(result.scalars().all())
+
+    async def list_all_summary(self) -> list[Interview]:
+        """List all interviews with only the relations the admin list needs.
+
+        Lighter than ``list_all_full`` — skips the heavy transcript /
+        technical evaluation / report payloads that the list view never
+        renders, avoiding the large SELECTs those columns produce.
+        """
+        stmt = (
+            select(Interview)
+            .order_by(Interview.created_at.desc())
+            .options(
+                selectinload(Interview.candidate).selectinload(User.profile),
+                selectinload(Interview.scores),
+                selectinload(Interview.recommendation),
+            )
+        )
+        result = await self.db.execute(stmt)
+        return list(result.scalars().all())
+
+    async def get_for_pdf(self, id: uuid.UUID | str) -> Interview | None:
+        """Load ONLY the relations the PDF renderer needs.
+
+        Skips the transcript's raw Deepgram response, speech/sentiment
+        analysis, technical evaluation and file rows — none are used by the
+        PDF. This keeps on-demand PDF generation (Issue 8) fast even for
+        large recordings.
+        """
+        stmt = (
+            select(Interview)
+            .where(Interview.id == _coerce_uuid(id))
+            .options(
+                selectinload(Interview.candidate),
+                selectinload(Interview.scores),
+                selectinload(Interview.strengths),
+                selectinload(Interview.weaknesses),
+                selectinload(Interview.recommendation),
+                selectinload(Interview.report),
+                selectinload(Interview.transcript),
+            )
+        )
+        result = await self.db.execute(stmt)
+        return result.scalar_one_or_none()
 
     async def set_status(self, id: uuid.UUID | str, status: InterviewStatus, error: str = "") -> None:
         values = {"status": status}

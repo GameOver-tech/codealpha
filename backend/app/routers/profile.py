@@ -94,20 +94,25 @@ async def upload_profile_picture(
         )
 
     storage = LocalStorage()
-    rel_path, size = storage.save_upload(file, f"avatars/{current_user.id}")
+    # File I/O runs in a worker thread so the event loop stays free.
+    import asyncio
+
+    rel_path, size = await asyncio.to_thread(storage.save_upload, file, f"avatars/{current_user.id}")
 
     if size > MAX_PICTURE_BYTES:
-        storage.delete(rel_path)
+        await asyncio.to_thread(storage.delete, rel_path)
         raise BadRequestError("Profile picture must be 5MB or smaller")
 
     # Best-effort sync to Supabase Storage; the local copy is kept so the
     # picture is always servable via /api/profile/picture regardless of
-    # storage connectivity.
+    # storage connectivity. The network call is offloaded to a thread.
     if settings.SUPABASE_URL:
         try:
             from app.storage import copy_local_to_supabase
 
-            copy_local_to_supabase(storage.abs_path(rel_path), rel_path)
+            await asyncio.to_thread(
+                copy_local_to_supabase, storage.abs_path(rel_path), rel_path
+            )
         except Exception as exc:  # noqa: BLE001
             logger.warning("Avatar sync to Supabase failed: %s", exc)
 
