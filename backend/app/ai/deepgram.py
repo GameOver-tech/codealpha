@@ -1,21 +1,98 @@
 """Deepgram speech-to-text service.
 
-Produces a timestamped, speaker-annotated transcript from an audio/video file.
-Falls back to a realistic mock transcript when no API key is configured
-(USE_MOCK_AI=true or missing DEEPGRAM_API_KEY).
+Produces a timestamped, speaker-annotated transcript from an uploaded
+audio/video file. Video files are converted to audio first (ffmpeg), then
+sent to the Deepgram API. The complete raw Deepgram response is returned
+and stored so nothing is lost.
+
+There is NO mock or fallback transcript in this module — if transcription
+fails, an error is raised and processing stops.
 """
 from __future__ import annotations
 
 import asyncio
+import subprocess
 import time
 from pathlib import Path
 from typing import Any
 
 from app.core.config import settings
 from app.core.logging import get_logger
-from app.utils.exceptions import BadRequestError
+from app.utils.exceptions import BadRequestError, TranscriptionError
 
 logger = get_logger(__name__)
+
+VIDEO_EXTENSIONS = {".mp4", ".mov", ".avi", ".mkv", ".webm"}
+AUDIO_EXTENSIONS = {".mp3", ".wav", ".m4a", ".flac", ".aac"}
+
+# ---------------------------------------------------------------------------
+# Audio extraction (video -> audio)
+# ---------------------------------------------------------------------------
+
+
+def _is_video(path: Path) -> bool:
+    return path.suffix.lower() in VIDEO_EXTENSIONS
+
+
+def extract_audio(source_path: str, work_dir: str | None = None) -> str:
+    """Extract a WAV stream from a video file using ffmpeg.
+
+    Returns the path to the extracted audio file. The original file is
+    never modified. Raises TranscriptionError if ffmpeg is unavailable or
+    extraction fails.
+    """
+    source = Path(source_path)
+    if not _is_video(source):
+        return source_path
+
+    import tempfile
+
+    target_dir = Path(work_dir) if work_dir else Path(tempfile.gettempdir())
+    target_dir.mkdir(parents=True, exist_ok=True)
+    target = target_dir / f"{source.stem}_extracted.wav"
+
+    try:
+        result = subprocess.run(
+            [
+                "ffmpeg",
+                "-y",
+                "-i",
+                str(source),
+                "-vn",
+                "-acodec",
+                "pcm_s16le",
+                "-ar",
+                "16000",
+                "-ac",
+                "1",
+                str(target),
+            ],
+            capture_output=True,
+            timeout=600,
+        )
+    except FileNotFoundError as exc:
+        raise TranscriptionError(
+            "ffmpeg is not installed. Install ffmpeg to transcribe video files."
+        ) from exc
+    except subprocess.TimeoutExpired as exc:
+        raise TranscriptionError("Audio extraction timed out.") from exc
+
+    if result.returncode != 0 or not target.is_file():
+        stderr = (result.stderr or b"").decode("utf-8", errors="replace")[-500:]
+        raise TranscriptionError(f"Audio extraction failed: {stderr}")
+
+    logger.info(
+        "Audio extracted from %s -> %s (%s bytes)",
+        source.name,
+        target,
+        target.stat().st_size,
+    )
+    return str(target)
+
+
+# ---------------------------------------------------------------------------
+# Deepgram API
+# ---------------------------------------------------------------------------
 
 
 def _segment_text(words: list[dict[str, Any]]) -> str:
@@ -47,6 +124,7 @@ def _map_segments(
                 "end": round(end, 2),
                 "text": text,
                 "speaker": str(speaker) if speaker is not None else None,
+                "confidence": round(float(utt.get("confidence") or 0.0), 4),
             }
         )
     return segments
@@ -66,14 +144,17 @@ def _call_deepgram(file_path: str) -> dict[str, Any]:
     """Run Deepgram transcription (blocking call wrapped for async use).
 
     Retries transient failures (network timeouts, 5xx) with exponential
-    backoff before giving up.
+    backoff before giving up. Returns the complete raw ``results`` object.
     """
     try:
         from deepgram import DeepgramClient, PrerecordedOptions
     except ImportError as exc:  # pragma: no cover
-        raise BadRequestError(
-            "deepgram-sdk is not installed. Install requirements or enable mock mode."
+        raise TranscriptionError(
+            "deepgram-sdk is not installed. Install requirements."
         ) from exc
+
+    if not settings.DEEPGRAM_API_KEY:
+        raise TranscriptionError("DEEPGRAM_API_KEY is not configured.")
 
     client = DeepgramClient(settings.DEEPGRAM_API_KEY)
 
@@ -91,15 +172,27 @@ def _call_deepgram(file_path: str) -> dict[str, Any]:
     with open(file_path, "rb") as audio:
         source = {"buffer": audio.read(), "mimetype": mimetype}
 
+    logger.info(
+        "Deepgram request: file=%s bytes=%s model=%s tier=%s",
+        Path(file_path).name,
+        len(source["buffer"]),
+        settings.DEEPGRAM_MODEL,
+        settings.DEEPGRAM_TIER,
+    )
+
     last_exc: Exception | None = None
     for attempt in range(3):
         try:
             response = client.listen.prerecorded.v("1").transcribe_file(source, options)
             results = response.get("results", {})
             if not results:
-                raise BadRequestError("Deepgram returned an empty response")
+                raise TranscriptionError("Deepgram returned an empty response")
+            logger.info(
+                "Deepgram response OK: status=%s",
+                response.get("metadata", {}).get("request_id", "unknown"),
+            )
             return results
-        except BadRequestError:
+        except TranscriptionError:
             raise
         except Exception as exc:  # noqa: BLE001
             last_exc = exc
@@ -113,7 +206,7 @@ def _call_deepgram(file_path: str) -> dict[str, Any]:
             if attempt < 2:
                 time.sleep(delay)
 
-    raise BadRequestError(f"Deepgram transcription failed after 3 attempts: {last_exc}")
+    raise TranscriptionError(f"Deepgram transcription failed after 3 attempts: {last_exc}")
 
 
 def _guess_mimetype(file_path: str) -> str:
@@ -129,35 +222,27 @@ def _guess_mimetype(file_path: str) -> str:
         ".mov": "video/quicktime",
         ".avi": "video/x-msvideo",
         ".mkv": "video/x-matroska",
-    }.get(ext, "audio/mp4")
+        ".webm": "video/webm",
+    }.get(ext, "audio/mpeg")
 
 
-def _mock_transcript() -> dict[str, Any]:
-    """Return a deterministic mock transcript for local development."""
-    mock_texts = [
-        ("Interviewer", 0.0, 12.5, "Thank you for joining us today. Let's start with your background. Can you tell us about your experience with Python and backend development?"),
-        ("Candidate", 12.6, 45.2, "Sure. I've been working with Python for about five years now. My last role was at a fintech startup where I built REST APIs using FastAPI and Django. I worked on a payment processing system handling about fifty thousand transactions per day, and I was responsible for the entire backend architecture, including database design, async task queues, and CI/CD pipelines."),
-        ("Interviewer", 45.3, 60.1, "That sounds relevant. How did you handle data consistency during a recent microservices migration?"),
-        ("Candidate", 60.2, 95.8, "We used the Saga pattern with a choreography approach. Each service published events when its local transaction completed, and downstream services consumed those events. For rollbacks we implemented compensating transactions, and we added idempotency keys to all critical endpoints so replaying a message would not double process a transaction."),
-        ("Interviewer", 95.9, 108.4, "Let's talk about a technical problem you solved recently. Walk me through your approach."),
-        ("Candidate", 108.5, 148.0, "We had a performance issue where a reporting query took over thirty seconds to run. I profiled it with EXPLAIN ANALYZE and found a sequential scan on a table with two million rows. I added a composite index and the query dropped to two hundred milliseconds. I also introduced query caching with Redis, which reduced the average report load time by ninety five percent."),
-        ("Interviewer", 148.1, 155.0, "How do you stay up to date with new technologies?"),
-        ("Candidate", 155.1, 188.0, "I follow engineering blogs, contribute to open source, and attend PyCon and local meetups. I believe in learning by building, so I have a side project experimenting with WebSockets and real time data streaming."),
-        ("Interviewer", 188.1, 196.0, "Why do you want to work here?"),
-        ("Candidate", 196.1, 231.5, "I have been following your company's work in the AI space for a while. The problems you are solving with natural language processing are genuinely interesting to me. I think my experience building scalable backend systems would let me contribute from day one."),
-    ]
+# ---------------------------------------------------------------------------
+# Public entry point
+# ---------------------------------------------------------------------------
 
-    segments = [
-        {"start": start, "end": end, "text": text, "speaker": speaker}
-        for speaker, start, end, text in mock_texts
-    ]
-    return {
-        "segments": segments,
-        "speakers": _detected_speakers(segments),
-        "full_text": _build_full_text(segments),
-        "duration": round(segments[-1]["end"], 2),
-        "mock": True,
-    }
+
+def _validate_transcript(full_text: str) -> None:
+    """Validate the transcript before it can be used downstream.
+
+    Raises TranscriptionError when the transcript is empty or trivially
+    short — processing must never continue with unusable content.
+    """
+    if not full_text or not full_text.strip():
+        raise TranscriptionError("Deepgram returned an empty transcript.")
+    if len(full_text.strip()) <= 20:
+        raise TranscriptionError(
+            "Transcript is too short to evaluate (must exceed 20 characters)."
+        )
 
 
 async def transcribe_audio(file_path: str) -> dict[str, Any]:
@@ -165,12 +250,16 @@ async def transcribe_audio(file_path: str) -> dict[str, Any]:
 
     Returns a dict with:
       - full_text: the complete readable transcript
-      - segments: [{start, end, text, speaker}]
+      - segments: [{start, end, text, speaker, confidence}]
       - speakers: ordered list of detected speakers
       - duration: audio length in seconds
+      - language: detected language code
+      - confidence: overall transcript confidence
+      - source: "deepgram"
+      - raw_response: the complete Deepgram results payload
 
-    ``file_path`` may be relative to the uploads directory (as stored in the
-    DB) or an absolute path.
+    Raises TranscriptionError when transcription fails or the transcript
+    fails validation. ``file_path`` may be relative to the uploads dir.
     """
     path = Path(file_path)
     if not path.is_absolute():
@@ -178,20 +267,28 @@ async def transcribe_audio(file_path: str) -> dict[str, Any]:
         if candidate.is_file():
             path = candidate
     if not path.is_file():
-        raise BadRequestError(f"Recording file not found: {file_path}")
+        raise TranscriptionError(f"Recording file not found: {file_path}")
 
-    if not settings.DEEPGRAM_API_KEY or settings.USE_MOCK_AI:
-        logger.info("Mock mode enabled — returning mock transcript")
-        return _mock_transcript()
+    logger.info(
+        "Transcribing upload: filename=%s absolute_path=%s",
+        path.name,
+        path.resolve(),
+    )
+
+    # Extract audio for video files (original file untouched).
+    audio_path = await asyncio.to_thread(extract_audio, str(path))
+    extracted = audio_path != str(path)
+    logger.info("Audio extraction status: %s", "extracted" if extracted else "not needed")
 
     try:
-        results = await asyncio.to_thread(_call_deepgram, str(path))
+        results = await asyncio.to_thread(_call_deepgram, audio_path)
+    except TranscriptionError:
+        raise
     except Exception as exc:  # noqa: BLE001
         logger.exception("Deepgram transcription failed")
-        raise BadRequestError(f"Speech-to-text failed: {exc}") from exc
+        raise TranscriptionError(f"Deepgram transcription failed: {exc}") from exc
 
-    # Prefer utterances (multi-speaker aware); fall back to a single
-    # segment built from the first alternative's words.
+    # Map utterances to segments; fall back to the first alternative's words.
     segments = _map_segments(results.get("utterances") or [])
     if not segments:
         channels = results.get("channels") or []
@@ -204,16 +301,41 @@ async def transcribe_audio(file_path: str) -> dict[str, Any]:
                     "end": round(float(words[-1]["end"]), 2),
                     "text": _segment_text(words),
                     "speaker": None,
+                    "confidence": round(float(alt.get("confidence") or 0.0), 4),
                 }
             ]
 
     full_text = _build_full_text(segments)
-    if not full_text:
-        raise BadRequestError("Deepgram returned an empty transcript")
+    _validate_transcript(full_text)
+
+    metadata = results.get("metadata", {}) or {}
+    duration = round(float(metadata.get("duration", 0) or 0), 2)
+    language = metadata.get("detected_language") or metadata.get("language") or "en"
+
+    # Overall confidence: average of word-level confidence when available.
+    confidences = [
+        float(w.get("confidence", 0) or 0)
+        for utt in (results.get("utterances") or [])
+        for w in (utt.get("words") or [])
+        if w.get("confidence") is not None
+    ]
+    overall_confidence = round(sum(confidences) / len(confidences), 4) if confidences else 0.0
+
+    logger.info(
+        "Transcript ready: length=%s preview=%r language=%s duration=%ss",
+        len(full_text),
+        full_text[:300],
+        language,
+        duration,
+    )
 
     return {
         "full_text": full_text,
         "segments": segments,
         "speakers": _detected_speakers(segments),
-        "duration": round(float(results.get("metadata", {}).get("duration", 0) or 0), 2),
+        "duration": duration,
+        "language": language,
+        "confidence": overall_confidence,
+        "source": "deepgram",
+        "raw_response": results,
     }

@@ -74,9 +74,6 @@ class Settings(BaseSettings):
     REDIS_URL: str = "redis://localhost:6379/0"
     USE_REDIS_QUEUE: bool = False
 
-    # --- Mock mode ---
-    USE_MOCK_AI: bool = False
-
     # --- Scoring thresholds ---
     SCORE_THRESHOLD_RECOMMENDED: int = 75
     SCORE_THRESHOLD_NEEDS_REVIEW: int = 50
@@ -88,18 +85,6 @@ class Settings(BaseSettings):
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.CORS_ORIGINS.split(",") if o.strip()]
-
-    @property
-    def mock_mode(self) -> bool:
-        return self.USE_MOCK_AI or not self.DEEPGRAM_API_KEY or not self._llm_key()
-
-    def _llm_key(self) -> str:
-        provider = self.LLM_PROVIDER.lower()
-        if provider == "gemini":
-            return self.GEMINI_API_KEY
-        if provider == "groq":
-            return self.GROQ_API_KEY
-        return self.OPENROUTER_API_KEY
 
 
 @lru_cache

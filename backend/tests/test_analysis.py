@@ -1,10 +1,22 @@
-"""Tests for transcript handling and the speech/sentiment analyzers."""
+"""Tests for transcript handling and the speech/sentiment analyzers.
+
+These exercise the REAL analysis paths only — there is no mock data in
+the application, so none is used here.
+"""
 import asyncio
+from pathlib import Path
 
 import pytest
 
 from app.ai import analyze_sentiment, analyze_speech
-from app.ai.deepgram import _build_full_text, _map_segments, _mock_transcript
+from app.ai.deepgram import (
+    _build_full_text,
+    _map_segments,
+    _validate_transcript,
+    extract_audio,
+    _is_video,
+)
+from app.utils.exceptions import TranscriptionError
 
 SEGMENTS = [
     {"start": 0.0, "end": 3.0, "text": "Good morning, thank you for the opportunity.",
@@ -33,6 +45,7 @@ def test_map_segments_drops_empty_utterances():
     assert len(segments) == 1
     assert segments[0]["text"] == "hello there"
     assert segments[0]["speaker"] == "0"
+    assert "confidence" in segments[0]
 
 
 def test_build_full_text_joins_segments():
@@ -40,12 +53,39 @@ def test_build_full_text_joins_segments():
     assert text == "First.\n\nSecond."
 
 
-def test_mock_transcript_shape():
-    result = _mock_transcript()
-    assert result["full_text"]
-    assert result["segments"]
-    assert len(result["speakers"]) >= 2
-    assert result["mock"] is True
+def test_validate_transcript_rejects_empty():
+    with pytest.raises(TranscriptionError):
+        _validate_transcript("")
+    with pytest.raises(TranscriptionError):
+        _validate_transcript("   ")
+
+
+def test_validate_transcript_rejects_too_short():
+    with pytest.raises(TranscriptionError):
+        _validate_transcript("Hello.")
+
+
+def test_validate_transcript_accepts_real_content():
+    # No exception should be raised.
+    _validate_transcript("Thank you for joining. I have five years of experience building APIs.")
+
+
+def test_is_video():
+    assert _is_video(__import__("pathlib").Path("clip.mp4")) is True
+    assert _is_video(__import__("pathlib").Path("clip.mov")) is True
+    assert _is_video(__import__("pathlib").Path("clip.mp3")) is False
+    assert _is_video(__import__("pathlib").Path("clip.wav")) is False
+
+
+def test_extract_audio_passthrough_for_audio_files(tmp_path_factory=None):
+    """Audio files are returned unchanged — no ffmpeg call."""
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmp:
+        audio = Path(tmp) / "interview.mp3"
+        audio.write_bytes(b"not real audio but extension is what matters")
+        result = extract_audio(str(audio))
+        assert result == str(audio)
 
 
 # --- Speech analysis --------------------------------------------------------
@@ -55,7 +95,6 @@ def test_speech_metrics_derived_from_segments():
     speech = run(
         analyze_speech(
             {"segments": SEGMENTS, "duration": 12.0},
-            mock=False,
         )
     )
     assert speech["speech_speed_wpm"] > 0
@@ -67,15 +106,11 @@ def test_speech_metrics_derived_from_segments():
     assert isinstance(speech["total_pauses"], int)
 
 
-def test_speech_analysis_mock_mode():
-    speech = run(analyze_speech(mock=True))
-    assert speech["speech_speed_wpm"] == 148.0
-    assert speech["tone"] == "Professional"
-
-
-def test_speech_analysis_no_segments_falls_back_to_mock():
-    speech = run(analyze_speech({"segments": []}, mock=False))
-    assert speech["speech_speed_wpm"] == 148.0
+def test_speech_analysis_no_segments_returns_zeros():
+    speech = run(analyze_speech({"segments": []}))
+    assert speech["speech_speed_wpm"] == 0.0
+    assert speech["confidence"] == 0.0
+    assert speech["tone"] == ""
 
 
 # --- Sentiment analysis -----------------------------------------------------
@@ -86,7 +121,7 @@ def test_sentiment_positive_text():
         "I successfully delivered a scalable system and I am proud of the "
         "teamwork and the positive results we achieved."
     )
-    result = run(analyze_sentiment({"full_text": text}, mock=False))
+    result = run(analyze_sentiment({"full_text": text}))
     assert result["sentiment"] in ("Positive", "Neutral")
     assert 0 <= result["confidence"] <= 100
     assert 0 <= result["professionalism"] <= 100
@@ -94,11 +129,6 @@ def test_sentiment_positive_text():
 
 
 def test_sentiment_empty_text_returns_neutral():
-    result = run(analyze_sentiment({"full_text": ""}, mock=False))
+    result = run(analyze_sentiment({"full_text": ""}))
     assert result["sentiment"] == "Neutral"
     assert result["emotion"] == "Neutral"
-
-
-def test_sentiment_mock_mode():
-    result = run(analyze_sentiment(mock=True))
-    assert result["sentiment"] == "Positive"

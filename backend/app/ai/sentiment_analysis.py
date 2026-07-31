@@ -1,8 +1,7 @@
 """Sentiment analysis — tone/emotion/professionalism of the interview.
 
-Uses a lexicon-based classifier over the transcript text (fast, free, and
-deterministic) so no external API is required. In mock mode it returns a
-fixed realistic response.
+Uses a lexicon-based classifier over the Deepgram transcript text (fast,
+free, and deterministic) so no external API is required. No mock data.
 """
 from __future__ import annotations
 
@@ -75,23 +74,14 @@ def _analyze_lexicon(text: str) -> dict[str, Any]:
 
 
 async def analyze_sentiment(
-    transcript: dict[str, Any] | None = None, *, mock: bool = False
+    transcript: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Analyze the sentiment of an interview transcript.
 
     Args:
-        transcript: dict with "full_text" (or "segments").
-        mock: force the deterministic mock response (mock mode).
+        transcript: dict with "full_text" (or "segments"). Must come from
+            Deepgram transcription — no mock data.
     """
-    if mock:
-        return {
-            "sentiment": "Positive",
-            "emotion": "Confident",
-            "confidence": 84.0,
-            "professionalism": 88.0,
-            "summary": "The candidate demonstrated a positive and confident tone with professional communication throughout the interview.",
-        }
-
     text = transcript.get("full_text") if transcript else ""
     if not text and transcript and transcript.get("segments"):
         text = " ".join(seg.get("text", "") for seg in transcript["segments"])

@@ -1,7 +1,8 @@
-"""LLM provider implementations: OpenRouter, Gemini, Groq + MockProvider.
+"""LLM provider implementations: OpenRouter, Gemini, Groq.
 
 All providers implement the same ``complete()`` interface so the evaluation
-pipeline is provider-agnostic.
+pipeline is provider-agnostic. There is no mock provider — an LLM API key
+is required.
 """
 from __future__ import annotations
 
@@ -125,18 +126,3 @@ class GroqProvider(LLMProvider):
                 return data["choices"][0]["message"]["content"]
 
         return await with_retries(_call)
-
-
-class MockProvider(LLMProvider):
-    """Deterministic mock for local development without API keys."""
-
-    name = "mock"
-
-    @classmethod
-    def has_credentials(cls) -> bool:
-        return True
-
-    async def complete(self, prompt: str, *, max_tokens: int, temperature: float) -> str:
-        from app.ai.mock_responses import MOCK_EVALUATION_JSON
-
-        return MOCK_EVALUATION_JSON

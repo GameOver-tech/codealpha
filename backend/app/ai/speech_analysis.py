@@ -1,13 +1,11 @@
-"""Speech analysis — prosody metrics derived from the transcript + audio metadata.
+"""Speech analysis — prosody metrics derived from the transcript segments.
 
 Analyzes speech speed (WPM), pauses, speaking rate, and produces
-confidence/tone/emotion/clarity/fluency/energy scores. When a real
-transcription exists, metrics are computed from segment timing; otherwise
-a deterministic mock is returned (mock mode).
+confidence/tone/emotion/clarity/fluency/energy scores computed purely from
+the timestamped segments returned by Deepgram. No mock data.
 """
 from __future__ import annotations
 
-import math
 import re
 from typing import Any
 
@@ -87,37 +85,34 @@ def _score_qualities(metrics: dict[str, float]) -> dict[str, Any]:
     }
 
 
-def _mock_speech_analysis() -> dict[str, Any]:
-    """Deterministic mock analysis for development without audio access."""
-    return {
-        "speech_speed_wpm": 148.0,
-        "avg_pause_seconds": 0.6,
-        "total_pauses": 9,
-        "speaking_rate": 2.4,
-        "confidence": 82.0,
-        "tone": "Professional",
-        "emotion": "Engaged",
-        "clarity": 85.0,
-        "fluency": 80.0,
-        "energy": 74.0,
-        "notes": "Good conversational pace (148 WPM) with natural pauses. Delivery is clear, fluent, and professional.",
-    }
-
-
 async def analyze_speech(
-    transcript: dict[str, Any] | None = None, *, mock: bool = False
+    transcript: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Analyze speech characteristics from a transcript.
 
     Args:
         transcript: dict with "segments" (list of {start, end, text}) and
-            optional "duration".
-        mock: force mock output (used in mock mode / when no transcript exists).
-    """
-    if mock or not transcript or not transcript.get("segments"):
-        return _mock_speech_analysis()
+            optional "duration". Must come from Deepgram transcription.
 
-    segments = transcript["segments"]
+    Returns zeroed metrics when no segments are available — never invents
+    speech characteristics.
+    """
+    segments = transcript.get("segments") if transcript else None
+    if not segments:
+        return {
+            "speech_speed_wpm": 0.0,
+            "avg_pause_seconds": 0.0,
+            "total_pauses": 0,
+            "speaking_rate": 0.0,
+            "confidence": 0.0,
+            "tone": "",
+            "emotion": "",
+            "clarity": 0.0,
+            "fluency": 0.0,
+            "energy": 0.0,
+            "notes": "No timestamped speech segments available.",
+        }
+
     duration = float(transcript.get("duration") or 0.0)
     metrics = _derive_metrics(segments, duration)
     qualities = _score_qualities(metrics)

@@ -3,8 +3,12 @@
 Orchestrates the full evaluation flow:
   Uploaded -> Processing -> Transcript Ready -> AI Evaluation -> PDF Generated -> Completed
 
+The transcript is ALWAYS produced by Deepgram from the uploaded recording.
+There is no mock, demo, or fallback transcript anywhere in this pipeline.
+If transcription fails, processing stops and the interview is marked failed.
+
 The pipeline is resumable: if a transcript already exists (admin "regenerate"
-flow), it skips speech-to-text and re-runs evaluation from the transcript.
+flow), it skips speech-to-text and re-runs evaluation from that transcript.
 """
 from __future__ import annotations
 
@@ -18,7 +22,6 @@ from app.ai.evaluation import evaluate_transcript
 from app.core.config import settings
 from app.core.logging import get_logger
 from app.models.interview import Interview, InterviewStatus
-from app.models.user import User
 from app.repositories.analysis import (
     InterviewReportRepository,
     InterviewScoresRepository,
@@ -33,7 +36,7 @@ from app.repositories.analysis import (
 from app.repositories.interview import InterviewRepository
 from app.repositories.interview_file import ActivityLogRepository
 from app.repositories.user import UserRepository
-from app.utils.exceptions import BadRequestError
+from app.utils.exceptions import BadRequestError, TranscriptionError
 
 logger = get_logger(__name__)
 
@@ -89,6 +92,20 @@ class InterviewPipeline:
             raise BadRequestError(f"Interview {interview_id} not found")
         return interview
 
+    def _validate_transcript_source(self, transcript) -> None:
+        """Ensure the transcript came from Deepgram, not demo data."""
+        if not transcript or not transcript.full_text:
+            raise TranscriptionError("No transcript available for evaluation.")
+        source = (transcript.source or "").lower()
+        if source and source != "deepgram":
+            raise TranscriptionError(
+                f"Transcript source is '{source}' — expected 'deepgram'. Processing stopped."
+            )
+        if len(transcript.full_text.strip()) <= 20:
+            raise TranscriptionError(
+                "Transcript is too short to evaluate (must exceed 20 characters)."
+            )
+
     async def run(self, interview_id, *, force_transcribe: bool = False) -> Interview:
         """Execute the pipeline. Idempotent-ish: safe to re-run for regeneration."""
         interview = await self._load(interview_id)
@@ -97,48 +114,74 @@ class InterviewPipeline:
         await self._set_status(interview_id, InterviewStatus.PROCESSING)
 
         try:
-            # ---- Stage 1: Speech-to-text (skip if transcript already exists) ----
+            # ---- Stage 1: Speech-to-text from the uploaded recording ----
             transcript = await self.transcripts.get_by_interview(interview_id)
             if transcript is None or force_transcribe:
                 await self._set_status(interview_id, InterviewStatus.PROCESSING)
                 file = interview.files[0] if interview.files else None
                 if file is None:
-                    raise BadRequestError("No interview file uploaded")
+                    raise TranscriptionError("No interview file uploaded.")
+                logger.info(
+                    "Processing upload: filename=%s storage_path=%s",
+                    file.original_filename,
+                    file.storage_path,
+                )
                 result = await transcribe_audio(file.storage_path)
                 transcript = await self.transcripts.upsert(
                     interview_id,
-                    full_text=result["full_text"],
-                    segments=result["segments"],
-                    speakers=result["speakers"],
+                    {
+                        "full_text": result["full_text"],
+                        "segments": result["segments"],
+                        "speakers": result["speakers"],
+                        "language": result.get("language", "en"),
+                        "confidence": result.get("confidence", 0.0),
+                        "source": result.get("source", "deepgram"),
+                        "raw_response": result.get("raw_response"),
+                    },
                 )
                 if interview.duration_seconds == 0 and result.get("duration"):
                     interview.duration_seconds = int(result["duration"])
                 await self.db.commit()
 
+            # Validate before ANY downstream step.
+            self._validate_transcript_source(transcript)
+            logger.info(
+                "Transcript source=%s length=%s preview=%r",
+                transcript.source,
+                len(transcript.full_text),
+                transcript.full_text[:300],
+            )
+
             await self._set_status(interview_id, InterviewStatus.TRANSCRIPT_READY)
 
-            # ---- Stage 2: Speech + sentiment analysis ----
+            # ---- Stage 2: Speech + sentiment analysis (derived from segments) ----
             speech = await analyze_speech(
                 {"segments": transcript.segments, "duration": interview.duration_seconds},
-                mock=settings.USE_MOCK_AI and not transcript.segments,
             )
             sentiment = await analyze_sentiment(
                 {"full_text": transcript.full_text, "segments": transcript.segments},
-                mock=settings.USE_MOCK_AI,
             )
             await self.speech.upsert(interview_id, speech)
             await self.sentiment.upsert(interview_id, sentiment)
             await self.db.commit()
 
-            # ---- Stage 3: LLM evaluation ----
+            # ---- Stage 3: LLM evaluation (restricted input, transcript-only) ----
             await self._set_status(interview_id, InterviewStatus.AI_EVALUATION)
-            evaluation = await evaluate_transcript(
-                interview.job_title,
-                interview.job_description,
-                transcript.full_text,
-                speech_metrics=speech,
-                sentiment=sentiment,
-            )
+
+            candidate_name = ""
+            if interview.candidate:
+                candidate_name = interview.candidate.full_name or interview.candidate.email
+
+            llm_input = {
+                "candidate_name": candidate_name,
+                "transcript": transcript.full_text,
+                "segments": transcript.segments,
+                "duration": f"{interview.duration_seconds}s",
+                "language": transcript.language or "unknown",
+                "speakers": transcript.speakers or [],
+            }
+            logger.info("LLM input preview: %s", str(llm_input)[:300])
+            evaluation = await evaluate_transcript(llm_input)
 
             # ---- Stage 4: Persist evaluation artifacts ----
             await self.technical.upsert(interview_id, evaluation["technical_evaluation"])
@@ -154,8 +197,6 @@ class InterviewPipeline:
                 report_data.get("interview_overview")
                 or f"Interview conducted on the role of {interview.job_title}."
             )
-            # Ensure the report has a transcript summary section even if the
-            # LLM didn't return one.
             report_data["performance_analysis"] = report_data.get(
                 "performance_analysis"
             ) or _summarize_transcript(transcript.full_text)

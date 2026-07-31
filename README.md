@@ -86,18 +86,19 @@ cp backend/.env.example backend/.env
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase service_role key (server-side admin access) |
 | `SUPABASE_JWT_SECRET` | JWT secret from Supabase project settings |
 | `DATABASE_URL` | Supabase PostgreSQL connection string (`postgresql+asyncpg://…`) |
-| `DEEPGRAM_API_KEY` | Deepgram API key for speech-to-text |
+| `DEEPGRAM_API_KEY` | Deepgram API key for speech-to-text (required) |
 | `LLM_PROVIDER` | `openrouter` \| `gemini` \| `groq` |
-| `OPENROUTER_API_KEY` / `GEMINI_API_KEY` / `GROQ_API_KEY` | Key for the configured provider |
+| `OPENROUTER_API_KEY` / `GEMINI_API_KEY` / `GROQ_API_KEY` | Key for the configured provider (required) |
 | `STORAGE_BUCKET` | Supabase Storage bucket (default `interview-recordings`) |
-| `USE_MOCK_AI` | `true` to use deterministic mock transcripts/evaluations (no API keys) |
 | `USE_REDIS_QUEUE` | `true` to dispatch processing through the Redis worker |
 | `SCORE_THRESHOLD_RECOMMENDED` | Score ≥ this → `Recommended` (default 75) |
 | `SCORE_THRESHOLD_NEEDS_REVIEW` | Score ≥ this → `Need Further Review` (default 50) |
 
-**Mock mode:** `USE_MOCK_AI=true` (or missing API keys) makes the pipeline
-return realistic transcripts and evaluations — perfect for demos and local
-testing. No external API is called.
+**There is no mock mode.** Every transcript is produced by Deepgram from the
+uploaded recording, and every evaluation is produced by the configured LLM
+from that transcript. If Deepgram is unavailable or returns an unusable
+transcript, processing stops with `HTTP 500` and the interview is marked
+failed — the pipeline never falls back to sample or demo content.
 
 ---
 

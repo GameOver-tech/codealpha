@@ -7,7 +7,7 @@
 - Prefers never hardcoding secrets; all secrets in environment variables with a `.env.example` file. Confidence: 0.9
 - Prefers using service-role keys only server-side, never exposed to frontend. Confidence: 0.8
 - Prefers robust error handling wrapping every external API call in try/except, never leaving processes stuck in intermediate states on failure. Confidence: 0.8
-- Prefers mock/demo modes for services depending on external APIs, so the full pipeline works end-to-end even without live API keys. Confidence: 0.8
+- Prefers mock/demo modes for services depending on external APIs so the full pipeline works end-to-end even without live API keys — but explicitly forbids mock/demo/fallback/hardcoded content from ever being returned as real output (a mock transcript surfacing as the real transcript is "completely unacceptable"; such content must be searched for and removed entirely). Confidence: 0.4
 - Prefers incremental development with checkpoint check-ins at each stage before proceeding to the next. Confidence: 0.9
 - Prefers comprehensive documentation including setup instructions, environment variable guidance, and example curl requests for all endpoints. Confidence: 0.8
 - Prefers testing authenticated endpoints through the interactive Swagger UI (`/docs`) using an HTTP bearer token from a seeded admin account, rather than only curl. Confidence: 0.7
@@ -24,3 +24,7 @@
 - Writes detailed master specs (exact endpoint paths, DB table names, status enums, and exact UI copy) and expects exact adherence to those details without deviation or simplification. Confidence: 0.7
 - When the app is configured against a database, considers fixing the actual DB connection (real credentials, running the migration) part of resolving API failures — a misconfigured/unmigrated database is a root cause to fix, not a limitation to report. Confidence: 0.7
 - Values catching subtle framework pitfalls that only surface at runtime (e.g., Pydantic v2 not coercing UUID→str in response models, SQLAlchemy async lazy-loading causing MissingGreenlet) and expects them to be fixed at the root rather than worked around in tests. Confidence: 0.7
+- Demands strict data provenance and anti-fabrication guarantees in AI pipelines: transcripts, scores, reports, and PDFs must be generated ONLY from the real uploaded input, and the LLM must only analyze (never invent, rewrite, expand, or replace) source content — gated by validations (non-empty, minimum length, source check) before any downstream step. Confidence: 0.9
+- Prefers fail-fast pipeline behavior on upstream failures (e.g., speech-to-text): stop processing, never continue to downstream AI evaluation, mark the job failed, and return a structured HTTP 500 with the exact error contract rather than degrading gracefully with fabricated data. Confidence: 0.9
+- Expects detailed per-stage pipeline logging: uploaded filename, absolute file path, audio-extraction status, external API request/response status, output length, and input/output previews (first ~300 characters). Confidence: 0.8
+- Wants original user uploads preserved as-is (never replaced or mutated) and the complete raw external API response stored, so every derived artifact is verifiable against the source data. Confidence: 0.7

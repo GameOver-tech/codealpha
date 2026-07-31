@@ -25,3 +25,12 @@ class ConflictError(HTTPException):
 class BadRequestError(HTTPException):
     def __init__(self, detail: str = "Bad request"):
         super().__init__(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
+
+
+class TranscriptionError(Exception):
+    """Raised when speech-to-text fails or the transcript is unusable.
+
+    Deliberately NOT an HTTPException subclass — the pipeline maps this to
+    the exact 500 response ``{"success": false, "message": "Transcription failed.",
+    "reason": "..."}`` and stops before any AI evaluation runs.
+    """

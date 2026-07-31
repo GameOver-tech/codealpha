@@ -21,16 +21,16 @@ class TranscriptRepository(BaseRepository[Transcript]):
     async def get_by_interview(self, interview_id) -> Transcript | None:
         return await self.get_by(interview_id=_coerce_uuid(interview_id))
 
-    async def upsert(self, interview_id: uuid.UUID, full_text: str, segments: list, speakers: list) -> Transcript:
+    async def upsert(self, interview_id: uuid.UUID, data: dict) -> Transcript:
+        """Upsert a transcript from the transcription result dict."""
         interview_id = _coerce_uuid(interview_id)
         row = await self.get_by_interview(interview_id)
         if row:
-            row.full_text = full_text
-            row.segments = segments
-            row.speakers = speakers
+            for key, value in data.items():
+                setattr(row, key, value)
             await self.db.flush()
             return row
-        return await self.add(Transcript(interview_id=interview_id, full_text=full_text, segments=segments, speakers=speakers))
+        return await self.add(Transcript(interview_id=interview_id, **data))
 
 
 class SpeechAnalysisRepository(BaseRepository[SpeechAnalysis]):

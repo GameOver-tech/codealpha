@@ -3,7 +3,12 @@ import asyncio
 
 import pytest
 
-from app.ai.evaluation import _validate_evaluation
+from app.ai.evaluation import (
+    _validate_evaluation,
+    _build_prompt,
+    insufficient_content_evaluation,
+    INSUFFICIENT_CONTENT_MSG,
+)
 from app.utils.parsing import clamp_score, extract_json, split_bullets
 from app.utils.file_validation import get_file_extension
 
@@ -94,3 +99,77 @@ def test_file_extension():
     assert get_file_extension("interview.MP4") == ".mp4"
     assert get_file_extension("clip.mp3") == ".mp3"
     assert get_file_extension("") == ""
+
+
+# --- Restricted LLM input ---------------------------------------------------
+
+
+def test_build_prompt_embeds_transcript_verbatim():
+    llm_input = {
+        "candidate_name": "Alice",
+        "transcript": "Interviewer: Tell me about yourself.\nCandidate: I build APIs.",
+        "segments": [],
+        "duration": "120s",
+        "language": "en",
+        "speakers": ["0", "1"],
+    }
+    prompt = _build_prompt(llm_input)
+    assert "Interviewer: Tell me about yourself.\nCandidate: I build APIs." in prompt
+    assert "Alice" in prompt
+    assert "120s" in prompt
+    assert "en" in prompt
+    assert "Never invent, rewrite, expand, or replace it" in prompt
+
+
+def test_build_prompt_contains_only_expected_inputs():
+    """The prompt must not contain job context or speech/sentiment sections."""
+    llm_input = {
+        "candidate_name": "Alice",
+        "transcript": "Some real transcript content here for the interview.",
+        "segments": [],
+        "duration": "120s",
+        "language": "en",
+        "speakers": ["0"],
+    }
+    prompt = _build_prompt(llm_input)
+    assert "Job Context" not in prompt
+    assert "Speech Signals" not in prompt
+    assert "Sentiment Signals" not in prompt
+
+
+def test_insufficient_content_evaluation():
+    result = insufficient_content_evaluation()
+    assert result["recommendation"]["verdict"] == "Need Further Review"
+    assert result["recommendation"]["reason"] == INSUFFICIENT_CONTENT_MSG
+    assert result["report"]["executive_summary"] == INSUFFICIENT_CONTENT_MSG
+    assert result["scores"]["overall_score"] == 0.0
+
+
+# --- Transcription failure contract -----------------------------------------
+
+
+def test_transcription_error_500_contract():
+    """TranscriptionError must map to the exact 500 JSON payload."""
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+    from app.utils.exceptions import TranscriptionError
+
+    from fastapi import APIRouter
+
+    probe = APIRouter()
+
+    @probe.get("/probe/transcription-fail")
+    async def fail():
+        raise TranscriptionError("Deepgram returned an empty response.")
+
+    app.include_router(probe)
+
+    client = TestClient(app)
+    resp = client.get("/probe/transcription-fail")
+    assert resp.status_code == 500
+    assert resp.json() == {
+        "success": False,
+        "message": "Transcription failed.",
+        "reason": "Deepgram returned an empty response.",
+    }

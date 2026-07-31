@@ -6,11 +6,12 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# System deps for crypto + fonts (reportlab)
+# System deps for crypto + fonts (reportlab) + ffmpeg (video audio extraction)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     libffi-dev \
     fonts-dejavu \
+    ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .

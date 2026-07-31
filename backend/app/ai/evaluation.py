@@ -1,16 +1,18 @@
-"""LLM evaluation — prompts the configured provider to evaluate an interview.
+"""LLM evaluation — evaluates ONLY the Deepgram transcript.
 
-Builds a strict-JSON prompt covering all 10 score dimensions, 16 technical
-evaluation areas, strengths, weaknesses, a full report, and the hiring
-recommendation. Parses and validates the provider's response.
+The LLM receives a strictly limited payload: candidate name, the Deepgram
+transcript, segments, duration, language, and speakers. It is explicitly
+forbidden from inventing, rewriting, or expanding the transcript — it may
+only analyze what actually exists.
+
+If the transcript is too short to evaluate meaningfully, a deterministic
+"insufficient content" evaluation is produced instead of calling the LLM.
 """
 from __future__ import annotations
 
-import json
 from typing import Any
 
 from app.ai.base import with_retries
-from app.ai.providers import MockProvider
 from app.core.config import settings
 from app.core.logging import get_logger
 from app.utils.exceptions import BadRequestError
@@ -41,57 +43,43 @@ REPORT_KEYS = [
 
 VALID_VERDICTS = {"Recommended", "Not Recommended", "Need Further Review"}
 
+MIN_EVALUABLE_CHARS = 80  # below this the transcript is treated as greetings/insufficient
 
-def _build_prompt(
-    job_title: str,
-    job_description: str,
-    transcript: str,
-    speech_metrics: dict[str, Any] | None = None,
-    sentiment: dict[str, Any] | None = None,
-) -> str:
-    """Assemble the evaluation prompt for the LLM provider."""
-    speech_block = ""
-    if speech_metrics:
-        speech_block = f"""
-## Speech Signals (from prosodic analysis)
-- Speech speed: {speech_metrics.get('speech_speed_wpm', 'N/A')} WPM
-- Speaking rate: {speech_metrics.get('speaking_rate', 'N/A')} words/sec
-- Pauses: {speech_metrics.get('total_pauses', 'N/A')} (avg {speech_metrics.get('avg_pause_seconds', 'N/A')}s)
-- Confidence signal: {speech_metrics.get('confidence', 'N/A')}/100
-- Clarity: {speech_metrics.get('clarity', 'N/A')}/100
-- Fluency: {speech_metrics.get('fluency', 'N/A')}/100
-- Energy: {speech_metrics.get('energy', 'N/A')}/100
-- Tone: {speech_metrics.get('tone', 'N/A')}
-- Emotion: {speech_metrics.get('emotion', 'N/A')}
-"""
+INSUFFICIENT_CONTENT_MSG = "Insufficient interview content for evaluation."
 
-    sentiment_block = ""
-    if sentiment:
-        sentiment_block = f"""
-## Sentiment Signals
-- Overall sentiment: {sentiment.get('sentiment', 'N/A')}
-- Emotion: {sentiment.get('emotion', 'N/A')}
-- Professionalism: {sentiment.get('professionalism', 'N/A')}/100
-"""
 
-    recommended_threshold = settings.SCORE_THRESHOLD_RECOMMENDED
-    needs_review_threshold = settings.SCORE_THRESHOLD_NEEDS_REVIEW
+def _build_prompt(llm_input: dict[str, Any]) -> str:
+    """Assemble the evaluation prompt from the restricted LLM input.
 
-    return f"""You are an expert technical interviewer and talent evaluator at a technology company. Analyze the interview transcript below and produce a detailed, objective candidate evaluation.
+    The transcript is embedded exactly as received from Deepgram. The prompt
+    forbids inventing questions, answers, or content of any kind.
+    """
+    transcript = llm_input["transcript"]
+    return f"""You are an expert technical interviewer and talent evaluator. You will analyze a REAL interview transcript produced by an automatic speech recognition system (Deepgram).
 
-## Job Context
-Title: {job_title}
-Description: {job_description}
-{speech_block}
-{sentiment_block}
-## Transcript
+## STRICT RULES — READ CAREFULLY
+1. Analyze ONLY the transcript below. Never invent, rewrite, expand, or replace it.
+2. Never fabricate questions, answers, or details the candidate did not say.
+3. Never add information that is not present. If the transcript contains only greetings or is too short to evaluate, say so explicitly.
+4. Base every score, strength, weakness, and recommendation strictly on what the candidate actually said.
+5. If the transcript has no substantive interview content, every field must reflect that — use the phrase "{INSUFFICIENT_CONTENT_MSG}" where appropriate and score conservatively.
+
+## Candidate
+- Name: {llm_input.get("candidate_name") or "Candidate"}
+
+## Transcript (verbatim from Deepgram — do not alter)
 {transcript}
 
+## Metadata
+- Duration: {llm_input.get("duration") or "unknown"}
+- Language: {llm_input.get("language") or "unknown"}
+- Detected speakers: {", ".join(llm_input.get("speakers") or []) or "unknown"}
+
 ## Scoring Rubric
-Score each of these 10 dimensions from 0 to 100:
+Score each of these 10 dimensions from 0 to 100, based ONLY on the transcript:
 1. technical_skills — accuracy, depth, and relevance of technical responses.
 2. communication — clarity, structure, articulation.
-3. confidence — inferred from speech patterns and language (hedging, filler words, directness).
+3. confidence — inferred from language patterns (hedging, filler words, directness).
 4. problem_solving — reasoning process, structured approach, edge-case awareness.
 5. relevant_experience — match between the candidate's background and the job.
 6. leadership — examples of ownership, direction, and influence.
@@ -104,9 +92,9 @@ The overall_score is the weighted average of all 10 dimensions (out of 100).
 
 ## Hiring Recommendation
 Pick exactly one of these three verdicts:
-- "Recommended" — overall_score >= {recommended_threshold}
-- "Need Further Review" — overall_score >= {needs_review_threshold} and < {recommended_threshold}
-- "Not Recommended" — overall_score < {needs_review_threshold}
+- "Recommended" — overall_score >= {settings.SCORE_THRESHOLD_RECOMMENDED}
+- "Need Further Review" — overall_score >= {settings.SCORE_THRESHOLD_NEEDS_REVIEW} and < {settings.SCORE_THRESHOLD_RECOMMENDED}
+- "Not Recommended" — overall_score < {settings.SCORE_THRESHOLD_NEEDS_REVIEW}
 
 ## Output Format
 Return ONLY valid JSON — no preamble, no markdown fences. Use this exact schema:
@@ -197,24 +185,61 @@ def _validate_evaluation(data: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-async def evaluate_transcript(
-    job_title: str,
-    job_description: str,
-    transcript_text: str,
-    *,
-    speech_metrics: dict[str, Any] | None = None,
-    sentiment: dict[str, Any] | None = None,
-) -> dict[str, Any]:
-    """Run the full LLM evaluation for a transcript. Returns the validated payload."""
-    prompt = _build_prompt(
-        job_title, job_description, transcript_text, speech_metrics, sentiment
-    )
+def insufficient_content_evaluation() -> dict[str, Any]:
+    """Deterministic evaluation for transcripts with no substantive content.
 
-    provider = MockProvider() if settings.USE_MOCK_AI else None
-    if provider is None:
-        from app.ai import get_llm_provider
+    Used when the Deepgram transcript is too short to evaluate (e.g. only
+    greetings). The LLM is never asked to invent content.
+    """
+    empty_tech = {key: "" for key in TECHNICAL_EVAL_KEYS}
+    empty_tech["overall_performance"] = INSUFFICIENT_CONTENT_MSG
+    empty_report = {key: "" for key in REPORT_KEYS}
+    empty_report["executive_summary"] = INSUFFICIENT_CONTENT_MSG
+    empty_report["interview_overview"] = INSUFFICIENT_CONTENT_MSG
+    empty_report["candidate_overview"] = INSUFFICIENT_CONTENT_MSG
+    empty_report["performance_analysis"] = INSUFFICIENT_CONTENT_MSG
 
-        provider = get_llm_provider()
+    return {
+        "scores": {key: 0.0 for key in SCORE_KEYS},
+        "technical_evaluation": empty_tech,
+        "strengths": [],
+        "weaknesses": [],
+        "report": empty_report,
+        "recommendation": {
+            "verdict": "Need Further Review",
+            "reason": INSUFFICIENT_CONTENT_MSG,
+        },
+    }
+
+
+async def evaluate_transcript(llm_input: dict[str, Any]) -> dict[str, Any]:
+    """Evaluate the Deepgram transcript with the configured LLM provider.
+
+    Args:
+        llm_input: restricted payload containing ONLY:
+            candidate_name, transcript, segments, duration, language, speakers.
+
+    Returns the validated evaluation payload. Raises BadRequestError when
+    the LLM call fails.
+    """
+    transcript_text = (llm_input.get("transcript") or "").strip()
+    if not transcript_text:
+        raise BadRequestError("Cannot evaluate an empty transcript.")
+
+    # Insufficient content — skip the LLM entirely, never fabricate.
+    if len(transcript_text) < MIN_EVALUABLE_CHARS:
+        logger.info(
+            "Transcript too short (%s chars) — insufficient content evaluation",
+            len(transcript_text),
+        )
+        return insufficient_content_evaluation()
+
+    prompt = _build_prompt(llm_input)
+    logger.info("LLM input preview: %s", prompt[:300])
+
+    from app.ai import get_llm_provider
+
+    provider = get_llm_provider()
 
     async def _call() -> str:
         return await provider.complete(
@@ -225,6 +250,7 @@ async def evaluate_transcript(
 
     try:
         raw = await with_retries(_call)
+        logger.info("LLM output preview: %s", raw[:300])
         parsed = extract_json(raw)
         return _validate_evaluation(parsed)
     except BadRequestError:

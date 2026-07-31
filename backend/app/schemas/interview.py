@@ -42,6 +42,7 @@ class TranscriptSegment(BaseModel):
     end: float
     text: str
     speaker: str | None = None
+    confidence: float = 0.0
 
 
 class TranscriptOut(ORMModel):
@@ -50,6 +51,9 @@ class TranscriptOut(ORMModel):
     full_text: str
     segments: list[TranscriptSegment] = []
     speakers: list[str] = []
+    language: str = "en"
+    confidence: float = 0.0
+    source: str = "deepgram"
 
 
 # --- Speech Analysis ---

@@ -2,11 +2,15 @@
 
 Re-exports the speech-to-text, speech analysis, sentiment analysis, and
 evaluation entry points so callers can do ``from app.ai import ...``.
+
+There is no mock mode: transcription always comes from Deepgram and the
+evaluation always comes from a configured LLM provider.
 """
 from __future__ import annotations
 
 from app.core.config import settings
 from app.core.logging import get_logger
+from app.utils.exceptions import BadRequestError
 
 logger = get_logger(__name__)
 
@@ -14,20 +18,16 @@ logger = get_logger(__name__)
 def get_llm_provider():
     """Return a provider instance for the configured LLM_PROVIDER.
 
-    Falls back to OpenRouter when the requested provider is missing a key
-    and another provider is configured, so the pipeline keeps working.
+    Raises when the configured provider has no API key — evaluation must
+    never run against fabricated content.
     """
     from app.ai.providers import (
         GeminiProvider,
         GroqProvider,
         OpenRouterProvider,
-        MockProvider,
     )
 
     provider = settings.LLM_PROVIDER.lower()
-    if settings.USE_MOCK_AI:
-        logger.info("Mock mode enabled — using MockProvider")
-        return MockProvider()
 
     providers = {
         "openrouter": OpenRouterProvider,
@@ -38,19 +38,14 @@ def get_llm_provider():
     if provider in providers:
         if providers[provider].has_credentials():
             return providers[provider]()
+        raise BadRequestError(
+            f"LLM_PROVIDER={provider} is configured but its API key is missing."
+        )
 
-    # Fall back to the first provider with credentials.
-    for name, cls in providers.items():
-        if name != provider and cls.has_credentials():
-            logger.warning(
-                "LLM_PROVIDER=%s has no key configured — falling back to %s",
-                provider,
-                name,
-            )
-            return cls()
-
-    logger.warning("No LLM API key configured — using MockProvider")
-    return MockProvider()
+    raise BadRequestError(
+        f"Unknown LLM_PROVIDER={settings.LLM_PROVIDER!r}. "
+        "Use one of: openrouter, gemini, groq."
+    )
 
 
 # Re-export analysis entry points (lazy imports keep import-time light).
@@ -60,13 +55,13 @@ def transcribe_audio(file_path: str):
     return _impl(file_path)
 
 
-def analyze_speech(transcript: dict | None = None, *, mock: bool = False):
+def analyze_speech(transcript: dict | None = None):
     from app.ai.speech_analysis import analyze_speech as _impl
 
-    return _impl(transcript, mock=mock)
+    return _impl(transcript)
 
 
-def analyze_sentiment(transcript: dict | None = None, *, mock: bool = False):
+def analyze_sentiment(transcript: dict | None = None):
     from app.ai.sentiment_analysis import analyze_sentiment as _impl
 
-    return _impl(transcript, mock=mock)
+    return _impl(transcript)

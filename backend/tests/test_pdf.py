@@ -1,12 +1,50 @@
 """Tests for recommendation UI messages and the PDF builder."""
 from pathlib import Path
 
-from app.ai.mock_responses import MOCK_EVALUATION
 from app.services.pdf_service import _build_pdf_bytes
 from app.utils.recommendation_messages import (
     RECOMMENDATION_MESSAGES,
     get_recommendation_message,
 )
+
+EVALUATION_PAYLOAD = {
+    "scores": {
+        "technical_skills": 86,
+        "communication": 80,
+        "confidence": 78,
+        "problem_solving": 88,
+        "relevant_experience": 84,
+        "leadership": 72,
+        "teamwork": 75,
+        "critical_thinking": 82,
+        "behavior": 79,
+        "professionalism": 83,
+        "overall_score": 81,
+    },
+    "report": {
+        "executive_summary": "The candidate demonstrated strong backend engineering skills.",
+        "interview_overview": "A structured technical interview.",
+        "candidate_overview": "Five years of Python backend experience.",
+        "performance_analysis": "Strong across the board.",
+        "technical_assessment": "Advanced understanding of backend systems.",
+        "communication_assessment": "Clear and structured.",
+        "confidence_assessment": "Confident delivery.",
+        "problem_solving_assessment": "Excellent.",
+        "experience_assessment": "Relevant and hands-on.",
+        "improvement_suggestions": "Quantify impact with more metrics.",
+    },
+    "strengths": [
+        "Strong backend architecture experience",
+        "Excellent problem-solving approach",
+    ],
+    "weaknesses": [
+        "Could provide more specific metrics",
+    ],
+    "recommendation": {
+        "verdict": "Recommended",
+        "reason": "Performance met all hiring criteria.",
+    },
+}
 
 
 # --- Recommendation messages (exact copy per spec) --------------------------
@@ -49,14 +87,14 @@ def test_pdf_builds_valid_document():
         "candidate_email": "alice@example.com",
         "interview_date": "2026-07-30T10:00:00",
         "duration_seconds": 2315,
-        "overall_score": MOCK_EVALUATION["scores"]["overall_score"],
-        "recommendation": MOCK_EVALUATION["recommendation"]["verdict"],
-        "recommendation_reason": MOCK_EVALUATION["recommendation"]["reason"],
+        "overall_score": EVALUATION_PAYLOAD["scores"]["overall_score"],
+        "recommendation": EVALUATION_PAYLOAD["recommendation"]["verdict"],
+        "recommendation_reason": EVALUATION_PAYLOAD["recommendation"]["reason"],
         "transcript": "Interviewer: Thank you for joining us.\nCandidate: I have five years of experience.",
-        "scores": MOCK_EVALUATION["scores"],
-        "report": MOCK_EVALUATION["report"],
-        "strengths": MOCK_EVALUATION["strengths"],
-        "weaknesses": MOCK_EVALUATION["weaknesses"],
+        "scores": EVALUATION_PAYLOAD["scores"],
+        "report": EVALUATION_PAYLOAD["report"],
+        "strengths": EVALUATION_PAYLOAD["strengths"],
+        "weaknesses": EVALUATION_PAYLOAD["weaknesses"],
     }
     pdf = _build_pdf_bytes(payload)
     assert pdf[:4] == b"%PDF"

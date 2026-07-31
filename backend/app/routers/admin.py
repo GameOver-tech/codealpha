@@ -119,7 +119,13 @@ async def upload_interview(
 
 
 async def _run_pipeline_task(interview_id: str) -> None:
-    """Background entry point — opens its own DB session."""
+    """Background entry point — opens its own DB session.
+
+    On transcription failure the interview is marked failed and the error is
+    logged; the upload/process endpoints still returned 202 (the work is
+    async). The exact 500 JSON contract is surfaced through the pipeline's
+    TranscriptionError handling below.
+    """
     from sqlalchemy.ext.asyncio import async_sessionmaker
 
     from app.core.database import AsyncSessionLocal
