@@ -3,6 +3,8 @@ regenerate results from a stored transcript, and delete interviews.
 """
 from __future__ import annotations
 
+import asyncio
+import traceback
 import uuid
 from datetime import datetime, timezone
 
@@ -121,21 +123,33 @@ async def upload_interview(
 async def _run_pipeline_task(interview_id: str) -> None:
     """Background entry point — opens its own DB session.
 
-    On transcription failure the interview is marked failed and the error is
-    logged; the upload/process endpoints still returned 202 (the work is
-    async). The exact 500 JSON contract is surfaced through the pipeline's
-    TranscriptionError handling below.
+    The pipeline itself guarantees the interview ends in COMPLETED or
+    FAILED. This wrapper logs any escaped error and attempts a final
+    FAILED status as a safety net.
     """
-    from sqlalchemy.ext.asyncio import async_sessionmaker
-
     from app.core.database import AsyncSessionLocal
 
-    session_factory: async_sessionmaker = AsyncSessionLocal
-    async with session_factory() as db:
+    async with AsyncSessionLocal() as db:
         try:
             await run_interview_pipeline(db, interview_id)
+        except asyncio.CancelledError:
+            logger.warning("Pipeline task cancelled for interview %s", interview_id)
+            raise
         except Exception as exc:  # noqa: BLE001
-            logger.error("Background pipeline failed for %s: %s", interview_id, exc)
+            logger.exception("Background pipeline failed for %s", interview_id)
+            try:
+                from app.repositories.interview import InterviewRepository
+
+                # Safety net: guarantee terminal FAILED state.
+                await InterviewRepository(db).mark_failed(
+                    interview_id,
+                    reason=f"{exc}"[:1000],
+                    stage="background_task",
+                    traceback_text=traceback.format_exc()[-4000:],
+                )
+                await db.commit()
+            except Exception:  # noqa: BLE001
+                logger.exception("Safety-net FAILED status also failed for %s", interview_id)
 
 
 @router.post("/process", status_code=202)
@@ -166,6 +180,37 @@ async def process_interview(
         "interview_id": str(interview.id),
         "status": "processing",
         "message": "Processing started. Check the interview status to track progress.",
+    }
+
+
+# --- Progress / status -------------------------------------------------------
+
+
+@router.get("/interview/{interview_id}/progress")
+async def get_interview_progress(
+    interview_id: str,
+    current_user: User = Depends(require_role("admin")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get the processing progress (0-100) and current stage for an interview."""
+    repo = InterviewRepository(db)
+    interview = await repo.get(str(interview_id))
+    if interview is None:
+        raise NotFoundError("Interview not found")
+
+    return {
+        "interview_id": str(interview.id),
+        "status": interview.status.value,
+        "progress": interview.processing_progress,
+        "stage": interview.current_stage or "",
+        "failure_stage": interview.failure_stage or "",
+        "failure_reason": interview.failure_reason or "",
+        "started_at": interview.started_at.isoformat() if interview.started_at else None,
+        "processing_finished_at": (
+            interview.processing_finished_at.isoformat()
+            if interview.processing_finished_at
+            else None
+        ),
     }
 
 
@@ -330,9 +375,18 @@ async def list_interviews(
                 "candidate_email": candidate.email if candidate else "—",
                 "job_title": interview.job_title,
                 "status": interview.status.value,
+                "progress": interview.processing_progress,
+                "stage": interview.current_stage or "",
                 "duration_seconds": interview.duration_seconds,
                 "overall_score": interview.scores.overall_score if interview.scores else None,
                 "recommendation": rec.verdict.value if rec else None,
+                "failure_reason": interview.failure_reason,
+                "failure_stage": interview.failure_stage,
+                "processing_finished_at": (
+                    interview.processing_finished_at.isoformat()
+                    if interview.processing_finished_at
+                    else None
+                ),
                 "created_at": interview.created_at.isoformat() if interview.created_at else None,
             }
         )

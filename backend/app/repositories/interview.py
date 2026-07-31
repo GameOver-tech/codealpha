@@ -62,8 +62,46 @@ class InterviewRepository(BaseRepository[Interview]):
             values["error_message"] = ""
         if status == InterviewStatus.PROCESSING:
             values["started_at"] = datetime.now(timezone.utc)
+            values["processing_progress"] = 0
+            values["current_stage"] = "processing"
+            # Clear stale failure diagnostics from a previous attempt.
+            values["failure_reason"] = ""
+            values["failure_stage"] = ""
+            values["failure_traceback"] = ""
         if status == InterviewStatus.COMPLETED:
             values["completed_at"] = datetime.now(timezone.utc)
+            values["processing_finished_at"] = datetime.now(timezone.utc)
+            values["processing_progress"] = 100
+            values["current_stage"] = "completed"
+            values["failure_reason"] = ""
+            values["failure_stage"] = ""
+            values["failure_traceback"] = ""
+        await self.update(id, **values)
+
+    async def mark_failed(
+        self,
+        id: uuid.UUID | str,
+        *,
+        reason: str,
+        stage: str = "",
+        traceback_text: str = "",
+    ) -> None:
+        """Mark an interview as failed with full diagnostic detail.
+
+        This is the guaranteed terminal state for any processing error —
+        an interview can never be left stuck in 'processing'.
+        """
+        now = datetime.now(timezone.utc)
+        values = {
+            "status": InterviewStatus.FAILED,
+            "error_message": reason[:1000],
+            "failure_reason": reason[:1000],
+            "failure_stage": stage[:100],
+            "failure_traceback": traceback_text[:4000],
+            "processing_finished_at": now,
+            "completed_at": now,
+            "current_stage": stage[:100] or "failed",
+        }
         await self.update(id, **values)
 
     async def create(

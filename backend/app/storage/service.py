@@ -103,14 +103,39 @@ class SupabaseStorage:
         return self._client
 
     def upload(self, local_path: str, dest_path: str) -> str:
+        """Upload a file to Supabase Storage with 3 retry attempts."""
         client = self._get_client()
         if client is None:
             return dest_path
-        with open(local_path, "rb") as f:
-            client.storage.from_(settings.STORAGE_BUCKET).upload(
-                path=dest_path, file=f, file_options={"content-type": "application/octet-stream"}
-            )
-        return dest_path
+        import time
+
+        last_exc: Exception | None = None
+        for attempt in range(3):
+            try:
+                with open(local_path, "rb") as f:
+                    client.storage.from_(settings.STORAGE_BUCKET).upload(
+                        path=dest_path,
+                        file=f,
+                        file_options={"content-type": "application/octet-stream"},
+                    )
+                logger.info(
+                    "Storage upload OK: %s -> %s (attempt %s/3)",
+                    local_path,
+                    dest_path,
+                    attempt + 1,
+                )
+                return dest_path
+            except Exception as exc:  # noqa: BLE001
+                last_exc = exc
+                logger.warning(
+                    "Storage upload attempt %s/3 failed for %s: %s",
+                    attempt + 1,
+                    dest_path,
+                    exc,
+                )
+                if attempt < 2:
+                    time.sleep(1.0 * (2**attempt))
+        raise RuntimeError(f"Storage upload failed after 3 attempts: {last_exc}")
 
     def signed_url(self, path: str, expires_in: int = 3600) -> str:
         client = self._get_client()

@@ -34,6 +34,31 @@ def _is_video(path: Path) -> bool:
     return path.suffix.lower() in VIDEO_EXTENSIONS
 
 
+def _find_ffmpeg() -> str:
+    """Locate the ffmpeg executable.
+
+    Checks PATH first, then common install locations (winget, chocolatey,
+    scoop, manual installs) so a freshly-installed ffmpeg works without a
+    shell restart.
+    """
+    import shutil
+
+    found = shutil.which("ffmpeg")
+    if found:
+        return found
+
+    candidates = [
+        Path.home() / "scoop" / "shims" / "ffmpeg.exe",
+        Path("C:/ffmpeg/bin/ffmpeg.exe"),
+        Path("C:/ProgramData/chocolatey/bin/ffmpeg.exe"),
+        *sorted(Path.home().glob("AppData/Local/Microsoft/WinGet/Packages/Gyan.FFmpeg*/**/bin/ffmpeg.exe")),
+    ]
+    for candidate in candidates:
+        if candidate.is_file():
+            return str(candidate)
+    return "ffmpeg"  # let subprocess raise the original FileNotFoundError
+
+
 def extract_audio(source_path: str, work_dir: str | None = None) -> str:
     """Extract a WAV stream from a video file using ffmpeg.
 
@@ -51,10 +76,11 @@ def extract_audio(source_path: str, work_dir: str | None = None) -> str:
     target_dir.mkdir(parents=True, exist_ok=True)
     target = target_dir / f"{source.stem}_extracted.wav"
 
+    ffmpeg_bin = _find_ffmpeg()
     try:
         result = subprocess.run(
             [
-                "ffmpeg",
+                ffmpeg_bin,
                 "-y",
                 "-i",
                 str(source),
@@ -140,11 +166,26 @@ def _detected_speakers(segments: list[dict[str, Any]]) -> list[str]:
     return seen
 
 
+def _results_to_dict(results) -> dict[str, Any]:
+    """Normalize the Deepgram SDK response to a plain dict.
+
+    The SDK returns typed objects (PrerecordedResponse / Results) in newer
+    versions; older versions return plain dicts. Both are handled here.
+    """
+    if isinstance(results, dict):
+        return results
+    if hasattr(results, "to_dict"):
+        return results.to_dict()
+    return dict(results)
+
+
 def _call_deepgram(file_path: str) -> dict[str, Any]:
     """Run Deepgram transcription (blocking call wrapped for async use).
 
     Retries transient failures (network timeouts, 5xx) with exponential
-    backoff before giving up. Returns the complete raw ``results`` object.
+    backoff before giving up. Each attempt is bounded by a wall-clock
+    timeout so a hung network call can never stall the pipeline.
+    Returns the complete raw ``results`` dict.
     """
     try:
         from deepgram import DeepgramClient, PrerecordedOptions
@@ -160,7 +201,6 @@ def _call_deepgram(file_path: str) -> dict[str, Any]:
 
     options = PrerecordedOptions(
         model=settings.DEEPGRAM_MODEL,
-        tier=settings.DEEPGRAM_TIER,
         punctuate=True,
         utterances=True,
         diarize=True,
@@ -173,40 +213,75 @@ def _call_deepgram(file_path: str) -> dict[str, Any]:
         source = {"buffer": audio.read(), "mimetype": mimetype}
 
     logger.info(
-        "Deepgram request: file=%s bytes=%s model=%s tier=%s",
+        "Deepgram request: file=%s bytes=%s model=%s",
         Path(file_path).name,
         len(source["buffer"]),
         settings.DEEPGRAM_MODEL,
-        settings.DEEPGRAM_TIER,
     )
 
     last_exc: Exception | None = None
     for attempt in range(3):
         try:
-            response = client.listen.prerecorded.v("1").transcribe_file(source, options)
-            results = response.get("results", {})
+            results = _run_deepgram_with_timeout(client, options, source)
+            results = _results_to_dict(results)
+            # The SDK response object's to_dict() wraps the payload under
+            # "results"; unwrap it so callers see {channels, utterances, ...}.
+            if "results" in results and isinstance(results["results"], dict):
+                results = results["results"]
             if not results:
                 raise TranscriptionError("Deepgram returned an empty response")
             logger.info(
-                "Deepgram response OK: status=%s",
-                response.get("metadata", {}).get("request_id", "unknown"),
+                "Deepgram response OK: request_id=%s",
+                (results.get("metadata") or {}).get("request_id", "unknown"),
             )
             return results
         except TranscriptionError:
             raise
+        except TimeoutError as exc:
+            last_exc = exc
+            logger.warning("Deepgram attempt %s/3 timed out", attempt + 1)
         except Exception as exc:  # noqa: BLE001
             last_exc = exc
-            delay = 1.0 * (2**attempt)
             logger.warning(
-                "Deepgram attempt %s/3 failed: %s. Retrying in %.1fs",
+                "Deepgram attempt %s/3 failed: %s",
                 attempt + 1,
                 exc,
-                delay,
             )
-            if attempt < 2:
-                time.sleep(delay)
+        if attempt < 2:
+            time.sleep(1.0 * (2**attempt))
 
     raise TranscriptionError(f"Deepgram transcription failed after 3 attempts: {last_exc}")
+
+
+DEEPGRAM_CALL_TIMEOUT_SECONDS = 90
+
+
+def _run_deepgram_with_timeout(client, options, source) -> dict[str, Any]:
+    """Run the blocking Deepgram SDK call with a hard wall-clock timeout.
+
+    The SDK call is synchronous and has no internal timeout, so it is run
+    in a worker thread and abandoned if it exceeds the timeout. Works on
+    Windows (no SIGALRM) and POSIX alike.
+    """
+    from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeout
+
+    def _call() -> dict[str, Any]:
+        response = client.listen.prerecorded.v("1").transcribe_file(source, options)
+        # Newer SDK returns PrerecordedResponse objects; the caller's
+        # _results_to_dict() normalizes whatever comes back.
+        if isinstance(response, dict):
+            return response.get("results", {}) or {}
+        return response
+
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        future = pool.submit(_call)
+        try:
+            return future.result(timeout=DEEPGRAM_CALL_TIMEOUT_SECONDS)
+        except FutureTimeout:
+            future.cancel()
+            raise TimeoutError(
+                f"Deepgram request exceeded {DEEPGRAM_CALL_TIMEOUT_SECONDS}s"
+            )
 
 
 def _guess_mimetype(file_path: str) -> str:
@@ -241,7 +316,7 @@ def _validate_transcript(full_text: str) -> None:
         raise TranscriptionError("Deepgram returned an empty transcript.")
     if len(full_text.strip()) <= 20:
         raise TranscriptionError(
-            "Transcript is too short to evaluate (must exceed 20 characters)."
+            "Insufficient speech detected (transcript is too short to evaluate)."
         )
 
 

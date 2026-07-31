@@ -460,10 +460,12 @@ async def generate_interview_pdf(db, interview_id) -> dict[str, Any]:
     local_path.write_bytes(pdf_bytes)
 
     remote_path = storage_path
+    synced = False
     try:
         remote_path = copy_local_to_supabase(str(local_path), storage_path)
+        synced = True
     except Exception as exc:  # noqa: BLE001
-        logger.warning("Supabase storage sync skipped for %s: %s", filename, exc)
+        logger.warning("Supabase storage sync failed for %s: %s", filename, exc)
 
     # Record metadata.
     from app.models.generated_pdf import GeneratedPdf
@@ -477,7 +479,10 @@ async def generate_interview_pdf(db, interview_id) -> dict[str, Any]:
     db.add(pdf_record)
     await db.commit()
 
-    cleanup_local_file(str(local_path))
+    # Only remove the local copy when the remote sync succeeded; otherwise
+    # keep the local file so the PDF remains downloadable.
+    if synced:
+        cleanup_local_file(str(local_path))
 
     return {
         "filename": filename,

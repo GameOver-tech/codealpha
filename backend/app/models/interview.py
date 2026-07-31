@@ -40,8 +40,14 @@ class Interview(UUIDMixin, TimestampMixin, Base):
     job_description: Mapped[str] = mapped_column(String(1000), default="", nullable=False)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    processing_finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     duration_seconds: Mapped[int] = mapped_column(default=0, nullable=False)
     error_message: Mapped[str] = mapped_column(String(1000), default="", nullable=False)
+    failure_reason: Mapped[str] = mapped_column(String(1000), default="", nullable=False)
+    failure_stage: Mapped[str] = mapped_column(String(100), default="", nullable=False)
+    failure_traceback: Mapped[str] = mapped_column(String(4000), default="", nullable=False)
+    processing_progress: Mapped[int] = mapped_column(default=0, nullable=False)  # 0-100
+    current_stage: Mapped[str] = mapped_column(String(100), default="", nullable=False)
 
     files: Mapped[list["InterviewFile"]] = relationship(
         back_populates="interview", cascade="all, delete-orphan"

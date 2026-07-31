@@ -26,6 +26,9 @@ class InterviewStatusOut(ORMModel):
     updated_at: datetime | None = None
     duration_seconds: int = 0
     error_message: str = ""
+    failure_reason: str = ""
+    failure_stage: str = ""
+    processing_finished_at: datetime | None = None
     recommendation: str | None = None
 
 

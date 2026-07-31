@@ -56,8 +56,8 @@ class Settings(BaseSettings):
 
     # --- Deepgram ---
     DEEPGRAM_API_KEY: str = ""
-    DEEPGRAM_MODEL: str = "nova-3"
-    DEEPGRAM_TIER: str = "enhanced"
+    # nova-2 is available on standard plans; nova-3 requires a paid tier.
+    DEEPGRAM_MODEL: str = "nova-2"
 
     # --- LLM Provider ---
     LLM_PROVIDER: str = "openrouter"  # openrouter | gemini | groq
