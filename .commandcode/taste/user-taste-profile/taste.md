@@ -1,0 +1,18 @@
+# User Taste Profile
+- Prefers Python with FastAPI for building backend API services. Confidence: 0.9
+- Prefers a structured project organization separating core config, dependencies, routers, services, and models into distinct directories. Confidence: 0.9
+- Prefers using Pydantic models for typed request/response schemas in APIs. Confidence: 0.8
+- Prefers idempotent setup/seed scripts that skip gracefully rather than erroring if already run. Confidence: 0.7
+- Prefers security-first JWT verification on every protected endpoint — treat every request as untrusted until verified. Confidence: 0.9
+- Prefers never hardcoding secrets; all secrets in environment variables with a `.env.example` file. Confidence: 0.9
+- Prefers using service-role keys only server-side, never exposed to frontend. Confidence: 0.8
+- Prefers robust error handling wrapping every external API call in try/except, never leaving processes stuck in intermediate states on failure. Confidence: 0.8
+- Prefers mock/demo modes for services depending on external APIs, so the full pipeline works end-to-end even without live API keys. Confidence: 0.8
+- Prefers incremental development with checkpoint check-ins at each stage before proceeding to the next. Confidence: 0.9
+- Prefers comprehensive documentation including setup instructions, environment variable guidance, and example curl requests for all endpoints. Confidence: 0.8
+- Prefers testing authenticated endpoints through the interactive Swagger UI (`/docs`) using an HTTP bearer token from a seeded admin account, rather than only curl. Confidence: 0.7
+- Prefers the backend API to expose its own login/authentication endpoint (e.g., `POST /api/auth/login`) that issues bearer tokens, so tokens can be generated directly from the API/Swagger instead of fetched manually from an external auth service. Confidence: 0.8
+- Communicates UI/API issues by attaching screenshots (e.g., of the Swagger docs page) alongside a brief description of the problem. Confidence: 0.5
+- Reports API test failures by pasting the full Swagger request/response output (generated curl, request URL, response body and headers) for the failing endpoint. Confidence: 0.5
+- When an endpoint fails in Swagger, expects a root-cause explanation that distinguishes expected behavior (e.g., role-based 403s) from real bugs, plus concrete instructions for how to test — including test accounts for each required role (e.g., admin AND candidate). Confidence: 0.7
+- When reporting an error, expects the assistant to fix all related issues uncovered during the investigation (not just the reported symptom) and verify the fixes end-to-end. Confidence: 0.6
