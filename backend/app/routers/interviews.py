@@ -19,6 +19,7 @@ from app.schemas.interview import (
     InterviewStatusOut,
 )
 from app.utils.exceptions import ForbiddenError, NotFoundError
+from app.utils.helpers import duration_from_segments
 from app.utils.recommendation_messages import get_recommendation_message
 
 logger = get_logger(__name__)
@@ -28,6 +29,12 @@ router = APIRouter(prefix="/api/interview", tags=["Candidate"])
 
 def _status_out(interview) -> InterviewStatusOut:
     rec = interview.recommendation
+    # Real duration from the transcript's last segment end timestamp; fall
+    # back to the stored value when no timestamped segments exist.
+    transcript = interview.transcript
+    duration = duration_from_segments(transcript.segments if transcript else None)
+    if not duration:
+        duration = int(interview.duration_seconds or 0)
     return InterviewStatusOut(
         id=str(interview.id),
         title=interview.title,
@@ -36,7 +43,7 @@ def _status_out(interview) -> InterviewStatusOut:
         job_title=interview.job_title,
         created_at=interview.created_at,
         updated_at=interview.updated_at,
-        duration_seconds=interview.duration_seconds,
+        duration_seconds=duration,
         error_message=interview.error_message,
         failure_reason=interview.failure_reason,
         failure_stage=interview.failure_stage,
@@ -90,6 +97,15 @@ async def get_interview_result(
     verdict = rec.verdict.value if rec else None
     message = get_recommendation_message(rec.verdict.value) if rec else ""
 
+    # Interview duration: the real length of the recording. The authoritative
+    # source is the transcript's last segment end timestamp (the end of the
+    # actual video/audio); fall back to the stored value only when no
+    # timestamped segments exist.
+    transcript = interview.transcript
+    duration = duration_from_segments(transcript.segments if transcript else None)
+    if not duration:
+        duration = int(interview.duration_seconds or 0)
+
     return CandidateSummary(
         interview_id=str(interview.id),
         status=interview.status.value,
@@ -97,6 +113,7 @@ async def get_interview_result(
         candidate_name=current_user.full_name,
         candidate_email=current_user.email,
         interview_date=interview.completed_at or interview.created_at,
+        duration_seconds=duration,
         recommendation=verdict,
         message=message,
     )

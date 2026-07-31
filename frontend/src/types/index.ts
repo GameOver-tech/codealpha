@@ -172,6 +172,7 @@ export interface CandidateSummary {
   candidate_name: string
   candidate_email: string
   interview_date: string | null
+  duration_seconds: number
   recommendation: string | null
   message: string
 }

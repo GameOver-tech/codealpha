@@ -1,7 +1,10 @@
 import { Badge, type BadgeProps } from '@/components/ui/badge'
 import type { InterviewStatusValue, RecommendationVerdict } from '@/types'
 
-const STATUS_META: Record<InterviewStatusValue, { label: string; variant: BadgeProps['variant'] }> = {
+/** Backend status values plus the candidate-visible "pending" pseudo-status. */
+export type StatusValue = InterviewStatusValue | 'pending'
+
+const STATUS_META: Record<StatusValue, { label: string; variant: BadgeProps['variant'] }> = {
   uploaded: { label: 'Uploaded', variant: 'secondary' },
   processing: { label: 'Processing', variant: 'default' },
   transcript_ready: { label: 'Transcribing', variant: 'default' },
@@ -9,17 +12,18 @@ const STATUS_META: Record<InterviewStatusValue, { label: string; variant: BadgeP
   pdf_generated: { label: 'Generating PDF', variant: 'default' },
   completed: { label: 'Completed', variant: 'success' },
   failed: { label: 'Failed', variant: 'destructive' },
+  pending: { label: 'Pending', variant: 'secondary' },
 }
 
-export function statusLabel(status: InterviewStatusValue): string {
+export function statusLabel(status: StatusValue): string {
   return STATUS_META[status]?.label ?? status
 }
 
-export function statusVariant(status: InterviewStatusValue): BadgeProps['variant'] {
+export function statusVariant(status: StatusValue): BadgeProps['variant'] {
   return STATUS_META[status]?.variant ?? 'secondary'
 }
 
-export function StatusBadge({ status, className }: { status: InterviewStatusValue; className?: string }) {
+export function StatusBadge({ status, className }: { status: StatusValue; className?: string }) {
   return (
     <Badge variant={statusVariant(status)} className={className}>
       {status === 'processing' && <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-current" />}

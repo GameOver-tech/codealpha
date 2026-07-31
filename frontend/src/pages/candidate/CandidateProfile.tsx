@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
+import { motion } from 'framer-motion'
 import { Camera, Save, Building2, GraduationCap, Wrench, DollarSign } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { Button, Card, CardContent, Input, Label, Skeleton, Textarea } from '@/components/ui'
@@ -70,7 +71,12 @@ export function CandidateProfile() {
   }
 
   return (
-    <div className="space-y-6">
+    <motion.div
+      initial={{ opacity: 0, y: 16 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.35, ease: 'easeOut' }}
+      className="space-y-6"
+    >
       <PageHeader
         title="Profile"
         description="Manage your personal and professional information."
@@ -82,52 +88,64 @@ export function CandidateProfile() {
       />
 
       {/* Identity card */}
-      <Card className="overflow-hidden">
-        <div className="h-28 bg-gradient-to-r from-primary via-blue-500 to-blue-400" />
-        <CardContent className="-mt-12 pb-6">
-          <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-end">
-            <div className="relative">
-              <Avatar className="h-24 w-24 border-4 border-card shadow-card">
-                <AvatarImage
-                  src={mediaUrl(profile?.profile_picture_url)}
-                  alt={user?.full_name ?? ''}
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3, delay: 0.05 }}
+      >
+        <Card className="overflow-hidden">
+          <div className="h-28 bg-gradient-to-r from-primary via-blue-500 to-blue-400" />
+          <CardContent className="-mt-12 pb-6">
+            <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-end">
+              <div className="relative">
+                <Avatar className="h-24 w-24 border-4 border-card shadow-card">
+                  <AvatarImage
+                    src={mediaUrl(profile?.profile_picture_url)}
+                    alt={user?.full_name ?? ''}
+                  />
+                  <AvatarFallback className="text-2xl">{initials(user?.full_name ?? 'U')}</AvatarFallback>
+                </Avatar>
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploading}
+                  className="absolute -bottom-1 -right-1 flex h-9 w-9 items-center justify-center rounded-full border-4 border-card bg-primary text-white shadow-card transition-colors hover:bg-primary-dark disabled:opacity-60"
+                  aria-label="Change profile picture"
+                >
+                  <Camera className="h-4 w-4" />
+                </button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  className="hidden"
+                  onChange={handlePicture}
                 />
-                <AvatarFallback className="text-2xl">{initials(user?.full_name ?? 'U')}</AvatarFallback>
-              </Avatar>
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                disabled={uploading}
-                className="absolute -bottom-1 -right-1 flex h-9 w-9 items-center justify-center rounded-full border-4 border-card bg-primary text-white shadow-card transition-colors hover:bg-primary-dark disabled:opacity-60"
-                aria-label="Change profile picture"
-              >
-                <Camera className="h-4 w-4" />
-              </button>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/jpeg,image/png,image/webp"
-                className="hidden"
-                onChange={handlePicture}
-              />
-            </div>
-            <div className="text-center sm:pb-1 sm:text-left">
-              <h2 className="font-display text-2xl font-bold text-foreground">{user?.full_name}</h2>
-              <p className="text-sm text-muted-foreground">
-                {user?.email}
-                {user?.phone && ` · ${user.phone}`}
-              </p>
-              {profile?.current_company && (
-                <p className="mt-1 inline-flex items-center gap-1.5 text-xs font-medium text-primary">
-                  <Building2 className="h-3.5 w-3.5" />
-                  {profile.current_company}
+              </div>
+              <div className="text-center sm:pb-1 sm:text-left">
+                <h2 className="font-display text-2xl font-bold text-foreground">{user?.full_name}</h2>
+                <p className="text-sm text-muted-foreground">
+                  {user?.email}
+                  {user?.phone && ` · ${user.phone}`}
                 </p>
-              )}
+                {profile?.current_company && (
+                  <p className="mt-1 inline-flex items-center gap-1.5 text-xs font-medium text-primary">
+                    <Building2 className="h-3.5 w-3.5" />
+                    {profile.current_company}
+                  </p>
+                )}
+              </div>
             </div>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      </motion.div>
 
-      <form onSubmit={handleSubmit((values) => updateMutation.mutate(values))} className="space-y-6">
+      <motion.form
+        onSubmit={handleSubmit((values) => updateMutation.mutate(values))}
+        className="space-y-6"
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3, delay: 0.1 }}
+      >
         <CardSection title="Professional information" description="Tell recruiters about your background.">
           <div className="grid gap-5 sm:grid-cols-2">
             <div className="space-y-2 sm:col-span-2">
@@ -211,7 +229,7 @@ export function CandidateProfile() {
             Save changes
           </Button>
         </div>
-      </form>
-    </div>
+      </motion.form>
+    </motion.div>
   )
 }

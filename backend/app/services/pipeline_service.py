@@ -41,6 +41,7 @@ from app.repositories.interview import InterviewRepository
 from app.repositories.interview_file import ActivityLogRepository
 from app.repositories.user import UserRepository
 from app.utils.exceptions import BadRequestError, TranscriptionError
+from app.utils.helpers import duration_from_segments
 
 logger = get_logger(__name__)
 
@@ -64,6 +65,16 @@ def _summarize_transcript(text: str, max_words: int = 120) -> str:
         picked.append(para)
         word_count += len(words)
     return " ".join(picked) + ("…" if word_count == max_words else "")
+
+
+def _duration_from_segments(segments: list[dict[str, Any]] | None) -> int:
+    """Derive interview duration from the last transcript segment's end time.
+
+    This is the required source of truth for the interview duration: the
+    transcription timestamps. Returns 0 when segments are missing or carry
+    no usable end timestamps so callers can fall back to media metadata.
+    """
+    return duration_from_segments(segments)
 
 
 class InterviewPipeline:
@@ -263,10 +274,23 @@ class InterviewPipeline:
                 },
             )
             self._verify_row(transcript, "transcript", interview_id)
-            if interview.duration_seconds == 0 and result.get("duration"):
-                interview.duration_seconds = int(result["duration"])
+
+            # Interview duration: the source of truth is the transcription
+            # timestamps (last segment's end time). Only when segments carry
+            # no timestamps do we fall back to the media duration reported by
+            # Deepgram, and finally to the duration probed at upload time.
+            duration = _duration_from_segments(transcript.segments)
+            if not duration:
+                duration = int(result.get("duration") or 0)
+            if not duration:
+                duration = int(interview.duration_seconds or 0)
+            interview.duration_seconds = duration
             await self.db.commit()
-            logger.info("[Stage 4] Transcript saved: length=%s", len(transcript.full_text))
+            logger.info(
+                "[Stage 4] Transcript saved: length=%s duration=%ss",
+                len(transcript.full_text),
+                interview.duration_seconds,
+            )
 
         # Validate before ANY downstream step.
         self._validate_transcript_source(transcript)

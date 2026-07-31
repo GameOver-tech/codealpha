@@ -110,14 +110,6 @@ export default function AppRouter() {
                 </Suspense>
               }
             />
-            <Route
-              path="/dashboard/status"
-              element={
-                <Suspense fallback={<FullScreenLoader />}>
-                  <CandidateProcessing />
-                </Suspense>
-              }
-            />
           </Route>
         </Route>
 

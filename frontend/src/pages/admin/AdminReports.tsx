@@ -13,6 +13,9 @@ import { initials } from '@/lib/utils'
 export function AdminReports() {
   const { data: interviews, isLoading, isError } = useAdminInterviews()
   const [search, setSearch] = useState('')
+  // Per-report loading state — only the card whose Download was clicked
+  // shows a spinner. Never a single global boolean.
+  const [downloadingId, setDownloadingId] = useState<string | null>(null)
 
   const completed = useMemo(() => {
     if (!interviews) return []
@@ -28,7 +31,14 @@ export function AdminReports() {
   }, [interviews, search])
 
   const downloadMutation = useMutation({
-    mutationFn: (id: string) => adminApi.reportPdf(id),
+    mutationFn: async (id: string) => {
+      setDownloadingId(id)
+      try {
+        return await adminApi.reportPdf(id)
+      } finally {
+        setDownloadingId((current) => (current === id ? null : current))
+      }
+    },
     onSuccess: (blob, id) => {
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
@@ -120,7 +130,8 @@ export function AdminReports() {
                         variant="outline"
                         size="sm"
                         onClick={() => downloadMutation.mutate(interview.id)}
-                        loading={downloadMutation.isPending}
+                        loading={downloadingId === interview.id}
+                        disabled={downloadingId !== null && downloadingId !== interview.id}
                       >
                         <Download />
                         PDF

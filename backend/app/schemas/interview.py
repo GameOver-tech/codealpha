@@ -163,6 +163,7 @@ class CandidateSummary(BaseModel):
     candidate_name: str
     candidate_email: str
     interview_date: datetime | None = None
+    duration_seconds: int = 0
     recommendation: str | None = None
     message: str = ""
 
