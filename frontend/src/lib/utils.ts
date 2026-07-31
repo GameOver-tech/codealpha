@@ -14,8 +14,11 @@ export function formatBytes(bytes: number): string {
 
 export function formatDuration(seconds: number): string {
   if (!seconds || seconds <= 0) return '—'
-  const m = Math.floor(seconds / 60)
-  const s = Math.round(seconds % 60)
+  const total = Math.round(seconds)
+  const h = Math.floor(total / 3600)
+  const m = Math.floor((total % 3600) / 60)
+  const s = total % 60
+  if (h > 0) return `${h}h ${m.toString().padStart(2, '0')}m ${s.toString().padStart(2, '0')}s`
   return `${m}m ${s.toString().padStart(2, '0')}s`
 }
 

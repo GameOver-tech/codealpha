@@ -59,6 +59,77 @@ def _find_ffmpeg() -> str:
     return "ffmpeg"  # let subprocess raise the original FileNotFoundError
 
 
+def _find_ffprobe() -> str:
+    """Locate the ffprobe executable (ships with the ffmpeg toolchain).
+
+    Mirrors ``_find_ffmpeg``: checks PATH first, then the common install
+    locations (winget, chocolatey, scoop, manual installs).
+    """
+    import shutil
+
+    found = shutil.which("ffprobe")
+    if found:
+        return found
+
+    candidates = [
+        Path.home() / "scoop" / "shims" / "ffprobe.exe",
+        Path("C:/ffmpeg/bin/ffprobe.exe"),
+        Path("C:/ProgramData/chocolatey/bin/ffprobe.exe"),
+        *sorted(Path.home().glob("AppData/Local/Microsoft/WinGet/Packages/Gyan.FFmpeg*/**/bin/ffprobe.exe")),
+    ]
+    for candidate in candidates:
+        if candidate.is_file():
+            return str(candidate)
+    return "ffprobe"  # let subprocess raise the original FileNotFoundError
+
+
+def probe_media_duration(file_path: str) -> float:
+    """Return the actual duration (seconds) of an audio/video file.
+
+    Uses ffprobe (part of the ffmpeg toolchain already required by the
+    pipeline) to read the container's real duration. Returns 0.0 when the
+    duration cannot be determined (missing ffprobe, probe failure) so the
+    caller can fall back to Deepgram metadata instead of failing the upload.
+    """
+    path = Path(file_path)
+    if not path.is_file():
+        return 0.0
+
+    ffprobe_bin = _find_ffprobe()
+    try:
+        result = subprocess.run(
+            [
+                ffprobe_bin,
+                "-v", "error",
+                "-show_entries", "format=duration",
+                "-of", "default=noprint_wrappers=1:nokey=1",
+                str(path),
+            ],
+            capture_output=True,
+            timeout=30,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        logger.warning("ffprobe duration probe failed for %s", path.name)
+        return 0.0
+
+    if result.returncode != 0:
+        logger.warning(
+            "ffprobe duration probe error for %s: %s",
+            path.name,
+            (result.stderr or b"").decode("utf-8", errors="replace")[-300:],
+        )
+        return 0.0
+
+    try:
+        duration = float((result.stdout or b"").decode("utf-8", errors="replace").strip())
+    except (TypeError, ValueError):
+        return 0.0
+    if not duration or duration < 0:
+        return 0.0
+    logger.info("Media duration probed for %s: %.2fs", path.name, duration)
+    return duration
+
+
 def extract_audio(source_path: str, work_dir: str | None = None) -> str:
     """Extract a WAV stream from a video file using ffmpeg.
 
@@ -380,6 +451,11 @@ async def transcribe_audio(file_path: str) -> dict[str, Any]:
 
     metadata = results.get("metadata", {}) or {}
     duration = round(float(metadata.get("duration", 0) or 0), 2)
+    # Fallback: when Deepgram omits metadata duration, derive it from the
+    # last segment's end timestamp so the pipeline never stores 0 seconds.
+    if not duration and segments:
+        last_end = max((float(s.get("end") or 0) for s in segments), default=0.0)
+        duration = round(last_end, 2)
     language = metadata.get("detected_language") or metadata.get("language") or "en"
 
     # Overall confidence: average of word-level confidence when available.

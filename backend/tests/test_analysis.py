@@ -15,6 +15,7 @@ from app.ai.deepgram import (
     _validate_transcript,
     extract_audio,
     _is_video,
+    probe_media_duration,
 )
 from app.utils.exceptions import TranscriptionError
 
@@ -86,6 +87,35 @@ def test_extract_audio_passthrough_for_audio_files(tmp_path_factory=None):
         audio.write_bytes(b"not real audio but extension is what matters")
         result = extract_audio(str(audio))
         assert result == str(audio)
+
+
+def test_probe_media_duration_missing_file_returns_zero():
+    assert probe_media_duration(str(Path("does-not-exist-xyz.mp4"))) == 0.0
+
+
+def test_probe_media_duration_reads_real_audio():
+    """The probe must return the actual media duration (Issue: 0m 00s)."""
+    import shutil
+    import subprocess
+    import tempfile
+
+    if shutil.which("ffmpeg") is None and shutil.which("ffprobe") is None:
+        pytest.skip("ffmpeg toolchain not available")
+    with tempfile.TemporaryDirectory() as tmp:
+        audio = Path(tmp) / "probe.wav"
+        result = subprocess.run(
+            [
+                "ffmpeg", "-y", "-f", "lavfi", "-i", "sine=frequency=440:duration=5.5",
+                "-ar", "16000", "-ac", "1", str(audio),
+            ],
+            capture_output=True,
+            timeout=60,
+        )
+        if result.returncode != 0:
+            pytest.skip("ffmpeg could not generate test audio")
+        duration = probe_media_duration(str(audio))
+        assert duration > 0
+        assert abs(duration - 5.5) < 0.6
 
 
 # --- Speech analysis --------------------------------------------------------

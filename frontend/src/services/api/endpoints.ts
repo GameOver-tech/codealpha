@@ -14,6 +14,7 @@ import type {
   Profile,
   ProfileUpdate,
   RecommendationMessage,
+  RegisteredCandidate,
   RegisterRequest,
   ScoreMap,
   TokenResponse,
@@ -121,6 +122,8 @@ export const adminApi = {
     ),
 
   interviews: () => api.get<AdminInterview[]>('/api/admin/interviews'),
+
+  registeredCandidates: () => api.get<RegisteredCandidate[]>('/api/admin/candidates/registered'),
 
   regenerate: (interviewId: string) =>
     api.post<ProcessResponse>('/api/admin/regenerate', { interview_id: interviewId }),

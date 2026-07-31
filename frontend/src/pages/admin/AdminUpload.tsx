@@ -1,29 +1,106 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useDropzone } from 'react-dropzone'
-import { motion } from 'framer-motion'
-import { UploadCloud, FileVideo, X, AlertTriangle, CheckCircle2, Mail } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
+import { motion, AnimatePresence } from 'framer-motion'
+import { UploadCloud, FileVideo, X, AlertTriangle, CheckCircle2, Mail, Search, Users } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { Button, Card, CardContent, Input, Label, Textarea, Progress } from '@/components/ui'
 import { PageHeader } from '@/components/shared'
 import { adminApi, getErrorMessage } from '@/services/api'
-import { formatBytes } from '@/lib/utils'
+import { formatBytes, cn } from '@/lib/utils'
+import type { RegisteredCandidate } from '@/types'
 
 const ACCEPTED_EXTENSIONS = ['mp4', 'mov', 'avi', 'mkv', 'mp3', 'wav', 'm4a', 'flac', 'aac']
 const MAX_SIZE = 200 * 1024 * 1024 // 200 MB
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 export function AdminUpload() {
   const navigate = useNavigate()
   const [file, setFile] = useState<File | null>(null)
-  const [candidateEmail, setCandidateEmail] = useState('')
+  const [selected, setSelected] = useState<RegisteredCandidate | null>(null)
+  const [query, setQuery] = useState('')
+  const [open, setOpen] = useState(false)
+  const [highlighted, setHighlighted] = useState(0)
   const [jobTitle, setJobTitle] = useState('')
   const [jobDescription, setJobDescription] = useState('')
   const [uploading, setUploading] = useState(false)
   const [progress, setProgress] = useState(0)
   const [error, setError] = useState<string | null>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+  const listRef = useRef<HTMLDivElement>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
 
-  const emailInvalid = candidateEmail.trim().length > 0 && !EMAIL_RE.test(candidateEmail.trim())
+  // Load every active registered candidate once (staleTime keeps it cached).
+  const { data: candidates = [], isLoading: loadingCandidates } = useQuery({
+    queryKey: ['admin', 'registered-candidates'],
+    queryFn: async () => (await adminApi.registeredCandidates()).data,
+    staleTime: 5 * 60 * 1000,
+  })
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    if (!q) return candidates
+    return candidates.filter(
+      (c) =>
+        c.full_name.toLowerCase().includes(q) ||
+        c.email.toLowerCase().includes(q),
+    )
+  }, [candidates, query])
+
+  // Reset the highlighted row whenever the filtered list changes.
+  useEffect(() => setHighlighted(0), [filtered.length, open])
+
+  // Close the dropdown on outside click. The container wraps BOTH the input
+  // and the dropdown list, so clicking an option never counts as "outside" —
+  // otherwise the mousedown listener would close the list before the option's
+  // click event fires, silently breaking selection.
+  useEffect(() => {
+    const onPointerDown = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', onPointerDown)
+    return () => document.removeEventListener('mousedown', onPointerDown)
+  }, [])
+
+  // Keep the highlighted option in view while navigating with the keyboard.
+  useEffect(() => {
+    const el = listRef.current?.querySelector<HTMLElement>(`[data-index="${highlighted}"]`)
+    el?.scrollIntoView({ block: 'nearest' })
+  }, [highlighted])
+
+  const pick = useCallback((candidate: RegisteredCandidate) => {
+    setSelected(candidate)
+    setQuery('')
+    setOpen(false)
+  }, [])
+
+  const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault()
+      if (!open) {
+        setOpen(true)
+        return
+      }
+      setHighlighted((h) =>
+        e.key === 'ArrowDown'
+          ? Math.min(h + 1, Math.max(filtered.length - 1, 0))
+          : Math.max(h - 1, 0),
+      )
+    } else if (e.key === 'Enter') {
+      if (!open) {
+        e.preventDefault()
+        setOpen(true)
+        return
+      }
+      e.preventDefault()
+      const option = filtered[highlighted]
+      if (option) pick(option)
+    } else if (e.key === 'Escape') {
+      setOpen(false)
+    }
+  }
 
   const validateFile = useCallback((candidate: File): string | null => {
     const ext = candidate.name.split('.').pop()?.toLowerCase() ?? ''
@@ -52,7 +129,7 @@ export function AdminUpload() {
     [validateFile],
   )
 
-  const { getRootProps, getInputProps, isDragActive, open } = useDropzone({
+  const { getRootProps, getInputProps, isDragActive, open: openFilePicker } = useDropzone({
     onDrop,
     accept: {
       'video/*': ['.mp4', '.mov', '.avi', '.mkv'],
@@ -64,7 +141,7 @@ export function AdminUpload() {
   })
 
   const handleUpload = async () => {
-    if (!file) return
+    if (!file || !selected) return
     setUploading(true)
     setProgress(15)
     const timer = window.setInterval(() => {
@@ -77,7 +154,9 @@ export function AdminUpload() {
       })
     }, 400)
     try {
-      const res = await adminApi.upload(file, candidateEmail.trim(), jobTitle || 'Interview', jobDescription)
+      // The upload flow is unchanged — the selected candidate's email is
+      // passed straight to the existing endpoint.
+      const res = await adminApi.upload(file, selected.email, jobTitle || 'Interview', jobDescription)
       window.clearInterval(timer)
       setProgress(100)
       toast.success(`Upload successful! Processing started for ${res.candidate_email}.`)
@@ -121,7 +200,7 @@ export function AdminUpload() {
             <p className="mt-1.5 text-sm text-muted-foreground">
               MP4, MOV, AVI, MKV, MP3, WAV, M4A, FLAC, AAC · up to 200MB
             </p>
-            <Button variant="outline" className="mt-6" onClick={open} disabled={uploading}>
+            <Button variant="outline" className="mt-6" onClick={openFilePicker} disabled={uploading}>
               Choose file
             </Button>
           </div>
@@ -171,27 +250,100 @@ export function AdminUpload() {
       <Card>
         <CardContent className="space-y-5 p-6 sm:p-8">
           <div className="space-y-2">
-            <Label htmlFor="candidate_email">
-              Candidate email <span className="text-destructive">*</span>
+            <Label htmlFor="candidate_search">
+              Candidate <span className="text-destructive">*</span>
             </Label>
-            <div className="relative">
+            {/* Container wraps BOTH the input and the dropdown so clicking an
+                option never registers as an outside click. */}
+            <div ref={containerRef} className="relative">
               <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
-                id="candidate_email"
-                type="email"
-                value={candidateEmail}
-                onChange={(e) => setCandidateEmail(e.target.value)}
-                placeholder="candidate@company.com"
-                className="pl-9"
-                aria-invalid={emailInvalid}
+                id="candidate_search"
+                ref={inputRef}
+                type="text"
+                value={selected ? `${selected.full_name} (${selected.email})` : query}
+                onChange={(e) => {
+                  if (selected) setSelected(null)
+                  setQuery(e.target.value)
+                  setOpen(true)
+                }}
+                onFocus={() => setOpen(true)}
+                onKeyDown={onKeyDown}
+                placeholder="Search candidate by name or email…"
+                className="pl-9 pr-9"
+                autoComplete="off"
+                disabled={uploading}
               />
+              <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+
+              {/* Searchable candidate dropdown */}
+              <AnimatePresence>
+                {open && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -6 }}
+                    transition={{ duration: 0.12 }}
+                    className="absolute left-0 right-0 z-20 mt-1.5 overflow-hidden rounded-xl border border-border bg-popover shadow-card"
+                  >
+                    <div ref={listRef} className="max-h-72 overflow-y-auto p-1.5">
+                      {loadingCandidates ? (
+                        <p className="px-3 py-6 text-center text-sm text-muted-foreground">
+                          Loading candidates…
+                        </p>
+                      ) : filtered.length === 0 ? (
+                        <p className="px-3 py-6 text-center text-sm text-muted-foreground">
+                          No candidates match “{query}”.
+                        </p>
+                      ) : (
+                        filtered.map((candidate, index) => {
+                          const active = index === highlighted
+                          return (
+                            <button
+                              key={candidate.id}
+                              type="button"
+                              data-index={index}
+                              onMouseEnter={() => setHighlighted(index)}
+                              onClick={() => pick(candidate)}
+                              className={cn(
+                                'flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors',
+                                active ? 'bg-primary/10 text-primary' : 'hover:bg-accent',
+                              )}
+                            >
+                              <span
+                                className={cn(
+                                  'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
+                                  active ? 'bg-primary/15 text-primary' : 'bg-muted text-muted-foreground',
+                                )}
+                              >
+                                <Users className="h-4 w-4" />
+                              </span>
+                              <span className="min-w-0">
+                                <span className="block truncate text-sm font-semibold text-foreground">
+                                  {candidate.full_name}
+                                </span>
+                                <span className="block truncate text-xs text-muted-foreground">
+                                  {candidate.email}
+                                </span>
+                              </span>
+                            </button>
+                          )
+                        })
+                      )}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
-            {emailInvalid && (
-              <p className="text-xs font-medium text-destructive">Enter a valid email address.</p>
+            {selected && (
+              <p className="flex items-center gap-1.5 text-xs font-medium text-success">
+                <CheckCircle2 className="h-3.5 w-3.5" />
+                {selected.full_name} · {selected.email}
+              </p>
             )}
             <p className="text-xs text-muted-foreground">
-              The interview will be linked to the registered candidate with this email. The candidate
-              must have an account first — unknown emails are rejected.
+              Only active registered candidates are listed. The interview will be linked to the
+              selected candidate's account.
             </p>
           </div>
           <div className="space-y-2">
@@ -217,7 +369,7 @@ export function AdminUpload() {
             size="lg"
             className="w-full"
             onClick={handleUpload}
-            disabled={!file || Boolean(error) || !candidateEmail.trim() || emailInvalid}
+            disabled={!file || Boolean(error) || !selected}
             loading={uploading}
           >
             <UploadCloud />
