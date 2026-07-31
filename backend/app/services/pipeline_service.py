@@ -416,6 +416,12 @@ class InterviewPipeline:
         )
         await self.db.commit()
 
+        # ---- Stage 10b: Notify the candidate by email (best-effort) ----
+        # As soon as the result is generated the candidate receives their
+        # outcome automatically. Never fails the pipeline — failures are
+        # logged and recorded in the audit trail.
+        await self._send_result_email(interview_id)
+
         # ---- Stage 11: Remove the temporary media file ----
         # Only the transcript + AI evaluation remain permanently. The raw
         # upload is no longer needed and is deleted to free storage.
@@ -427,6 +433,55 @@ class InterviewPipeline:
             _elapsed(),
         )
         return interview
+
+    async def _send_result_email(self, interview_id) -> None:
+        """Email the candidate their result as soon as processing completes.
+
+        Best-effort: SMTP failures never fail the pipeline — they are logged
+        and recorded in the audit trail so delivery can be retried manually.
+        """
+        try:
+            from app.services.email_service import send_result_email
+            from app.utils.recommendation_messages import get_recommendation_message
+
+            interview = await self._load(interview_id)
+            candidate = interview.candidate
+            if candidate is None or not candidate.email:
+                logger.info("No candidate email for %s — skipping result email", interview_id)
+                return
+
+            rec = interview.recommendation
+            verdict = rec.verdict.value if rec else None
+
+            outcome = send_result_email(
+                to_email=candidate.email,
+                candidate_name=candidate.full_name,
+                job_title=interview.job_title,
+                status=interview.status.value,
+                verdict=verdict or "",
+                message=get_recommendation_message(verdict) if rec else "",
+            )
+
+            await self.activity.log(
+                candidate.id,
+                "result_email_sent",
+                "interview",
+                str(interview_id),
+                {
+                    "email": candidate.email,
+                    "status": outcome["status"],
+                    "verdict": verdict,
+                },
+            )
+            await self.db.commit()
+            logger.info(
+                "Result email for interview %s -> %s (%s)",
+                interview_id,
+                candidate.email,
+                outcome["status"],
+            )
+        except Exception as exc:  # noqa: BLE001 — email must never break the pipeline
+            logger.exception("Result email failed for interview %s: %s", interview_id, exc)
 
     async def _cleanup_media(self, interview_id) -> None:
         """Delete the uploaded recording now that processing is complete.
