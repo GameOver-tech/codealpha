@@ -22,9 +22,10 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.create_index("ix_interviews_created_at", "interviews", ["created_at"])
-    op.create_index("ix_interviews_status", "interviews", ["status"])
-    op.create_index("ix_interviews_candidate_id", "interviews", ["candidate_id"])
+    op.execute("CREATE INDEX IF NOT EXISTS ix_interviews_created_at ON interviews (created_at)")
+    op.execute("CREATE INDEX IF NOT EXISTS ix_interviews_status ON interviews (status)")
+    # ix_interviews_candidate_id already exists from 0001_initial — recreate is a no-op.
+    op.execute("CREATE INDEX IF NOT EXISTS ix_interviews_candidate_id ON interviews (candidate_id)")
 
 
 def downgrade() -> None:

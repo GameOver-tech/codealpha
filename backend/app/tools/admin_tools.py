@@ -1,0 +1,448 @@
+"""Admin tool handlers for the AI assistant.
+
+Every handler receives the acting User and the request args, returns a
+JSON-serializable dict, and performs its own role check (defense in depth —
+the registry already restricts exposure). Write actions are audited to
+activity_logs. All enforcement lives here, never in the LLM.
+"""
+from __future__ import annotations
+
+import uuid
+from datetime import datetime, timezone
+
+from sqlalchemy import or_, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.logging import get_logger
+from app.core.supabase_client import get_supabase_service
+from app.models.user import User, UserRole
+from app.repositories.activity_log import ActivityLogRepository
+from app.repositories.candidate_profile import CandidateProfileRepository
+from app.repositories.interview import InterviewRepository
+from app.repositories.user import UserRepository
+from app.tools import analytics
+from app.utils.exceptions import BadRequestError, NotFoundError
+
+logger = get_logger(__name__)
+
+VALID_ADMIN_STATUSES = {
+    "Pending", "Processing", "Completed", "Recommended",
+    "Not Recommended", "Need Further Review", "Rejected", "Selected",
+}
+
+
+def _require_admin(actor: User) -> None:
+    if actor.role.value != "admin":
+        from app.utils.exceptions import ForbiddenError
+
+        raise ForbiddenError("Requires admin role")
+
+
+def _serialize_interview(interview) -> dict:
+    rec = interview.recommendation
+    candidate = interview.candidate
+    profile = candidate.profile if candidate else None
+    return {
+        "id": str(interview.id),
+        "candidate_id": str(interview.candidate_id) if interview.candidate_id else None,
+        "candidate_name": candidate.full_name if candidate else None,
+        "candidate_email": candidate.email if candidate else None,
+        "skills": profile.skills if profile else None,
+        "job_title": interview.job_title,
+        "status": interview.status.value,
+        "admin_status": interview.admin_status,
+        "overall_score": interview.scores.overall_score if interview.scores else None,
+        "recommendation": rec.verdict.value if rec else None,
+        "duration_seconds": interview.duration_seconds,
+        "created_at": interview.created_at.isoformat() if interview.created_at else None,
+        "completed_at": interview.completed_at.isoformat() if interview.completed_at else None,
+    }
+
+
+# --- Dashboard --------------------------------------------------------------
+
+
+async def get_dashboard_stats(db: AsyncSession, actor: User, **args) -> dict:
+    _require_admin(actor)
+    return await analytics.dashboard_stats(db)
+
+
+# --- Candidates -------------------------------------------------------------
+
+
+async def list_candidates(db: AsyncSession, actor: User, **args) -> dict:
+    _require_admin(actor)
+    search = (args.get("search") or "").strip().lower()
+    limit = min(int(args.get("limit") or 50), 100)
+    offset = int(args.get("offset") or 0)
+
+    repo = UserRepository(db)
+    stmt = select(User).where(User.role == UserRole.CANDIDATE)
+    if search:
+        like = f"%{search}%"
+        stmt = stmt.where(
+            or_(
+                User.email.ilike(like),
+                User.first_name.ilike(like),
+                User.last_name.ilike(like),
+            )
+        )
+    stmt = stmt.order_by(User.created_at.desc()).limit(limit).offset(offset)
+    result = await db.execute(stmt)
+    users = list(result.scalars().all())
+
+    items = []
+    for user in users:
+        profile = user.profile
+        items.append(
+            {
+                "id": str(user.id),
+                "email": user.email,
+                "name": user.full_name,
+                "phone": user.phone,
+                "gender": user.gender,
+                "is_active": user.is_active,
+                "skills": profile.skills if profile else None,
+                "education": profile.education if profile else None,
+                "experience": profile.experience if profile else None,
+                "current_company": profile.current_company if profile else None,
+                "created_at": user.created_at.isoformat() if user.created_at else None,
+            }
+        )
+    return {"total": len(items), "items": items}
+
+
+async def get_candidate(db: AsyncSession, actor: User, **args) -> dict:
+    _require_admin(actor)
+    email = (args.get("email") or "").strip().lower()
+    if not email:
+        raise BadRequestError("email is required")
+    repo = UserRepository(db)
+    user = await repo.get_by_email(email)
+    if user is None or user.role != UserRole.CANDIDATE:
+        raise NotFoundError(f"No candidate found with email '{email}'")
+    profile = user.profile
+    return {
+        "id": str(user.id),
+        "email": user.email,
+        "name": user.full_name,
+        "phone": user.phone,
+        "gender": user.gender,
+        "is_active": user.is_active,
+        "skills": profile.skills if profile else None,
+        "education": profile.education if profile else None,
+        "experience": profile.experience if profile else None,
+        "current_company": profile.current_company if profile else None,
+        "expected_salary": profile.expected_salary if profile else None,
+        "resume_url": profile.resume_url if profile else None,
+        "created_at": user.created_at.isoformat() if user.created_at else None,
+    }
+
+
+async def update_candidate(db: AsyncSession, actor: User, **args) -> dict:
+    _require_admin(actor)
+    email = (args.get("email") or "").strip().lower()
+    if not email:
+        raise BadRequestError("email is required")
+    repo = UserRepository(db)
+    user = await repo.get_by_email(email)
+    if user is None or user.role != UserRole.CANDIDATE:
+        raise NotFoundError(f"No candidate found with email '{email}'")
+
+    updated = {}
+    if args.get("first_name"):
+        user.first_name = args["first_name"]
+        updated["first_name"] = args["first_name"]
+    if args.get("last_name"):
+        user.last_name = args["last_name"]
+        updated["last_name"] = args["last_name"]
+    if args.get("phone") is not None:
+        user.phone = args["phone"]
+        updated["phone"] = args["phone"]
+    if args.get("gender") is not None:
+        user.gender = args["gender"]
+        updated["gender"] = args["gender"]
+    if args.get("is_active") is not None:
+        user.is_active = bool(args["is_active"])
+        updated["is_active"] = user.is_active
+
+    profile_data = {}
+    for key in ("experience", "skills", "education", "current_company", "expected_salary"):
+        if args.get(key) is not None:
+            profile_data[key] = args[key]
+    if profile_data:
+        await CandidateProfileRepository(db).upsert(user.id, profile_data)
+        updated.update(profile_data)
+
+    await db.flush()
+    return {"email": user.email, "updated": updated}
+
+
+async def delete_candidate(db: AsyncSession, actor: User, **args) -> dict:
+    _require_admin(actor)
+    email = (args.get("email") or "").strip().lower()
+    if not email:
+        raise BadRequestError("email is required")
+    repo = UserRepository(db)
+    user = await repo.get_by_email(email)
+    if user is None or user.role != UserRole.CANDIDATE:
+        raise NotFoundError(f"No candidate found with email '{email}'")
+
+    # Deletes cascade to candidate_profiles and interviews (with their artifacts).
+    await repo.delete(user.id)
+    await ActivityLogRepository(db).log(
+        actor.id,
+        "candidate_deleted",
+        "user",
+        str(user.id),
+        {"email": user.email},
+    )
+    await db.commit()
+    return {"message": f"Candidate '{email}' deleted."}
+
+
+async def create_candidate(db: AsyncSession, actor: User, **args) -> dict:
+    _require_admin(actor)
+    email = (args.get("email") or "").strip().lower()
+    password = args.get("password") or ""
+    first_name = args.get("first_name") or ""
+    last_name = args.get("last_name") or ""
+    if not email or not password:
+        raise BadRequestError("email and password are required")
+
+    existing = await UserRepository(db).get_by_email(email)
+    if existing:
+        raise BadRequestError(f"A user with email '{email}' already exists")
+
+    try:
+        sb = get_supabase_service()
+        created = sb.auth.admin.create_user(
+            {"email": email, "password": password, "email_confirm": True}
+        )
+        auth_uid = created.user.id
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Supabase create_user failed for %s: %s", email, exc)
+        raise BadRequestError(
+            f"Could not create Supabase auth user for '{email}'. "
+            "The email may already be registered."
+        )
+
+    try:
+        sb.table("profiles").insert(
+            {
+                "id": auth_uid,
+                "email": email,
+                "role": "candidate",
+                "full_name": f"{first_name} {last_name}".strip(),
+            }
+        ).execute()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Could not write legacy profiles row for %s: %s", email, exc)
+
+    user = await UserRepository(db).create_candidate(
+        email=email,
+        first_name=first_name,
+        last_name=last_name,
+        phone=args.get("phone") or "",
+        gender=args.get("gender") or "",
+        auth_uid=auth_uid,
+    )
+    await ActivityLogRepository(db).log(
+        actor.id,
+        "candidate_created",
+        "user",
+        str(user.id),
+        {"email": email},
+    )
+    await db.commit()
+    return {
+        "id": str(user.id),
+        "email": user.email,
+        "name": user.full_name,
+        "message": f"Candidate '{email}' created.",
+    }
+
+
+# --- Interviews -------------------------------------------------------------
+
+
+async def list_interviews(db: AsyncSession, actor: User, **args) -> dict:
+    _require_admin(actor)
+    status = (args.get("status") or "").strip().lower()
+    limit = min(int(args.get("limit") or 50), 100)
+    offset = int(args.get("offset") or 0)
+
+    repo = InterviewRepository(db)
+    interviews = await repo.list_all_full()
+    if status:
+        interviews = [i for i in interviews if i.status.value == status]
+    if limit:
+        interviews = interviews[offset : offset + limit]
+    return {"total": len(interviews), "items": [_serialize_interview(i) for i in interviews]}
+
+
+async def update_interview_status(db: AsyncSession, actor: User, **args) -> dict:
+    _require_admin(actor)
+    interview_id = str(args.get("interview_id") or "").strip()
+    status = str(args.get("status") or "").strip()
+    if not interview_id or not status:
+        raise BadRequestError("interview_id and status are required")
+    if status not in VALID_ADMIN_STATUSES:
+        raise BadRequestError(
+            f"Invalid status '{status}'. Use one of: {', '.join(sorted(VALID_ADMIN_STATUSES))}."
+        )
+
+    repo = InterviewRepository(db)
+    interview = await repo.get(interview_id)
+    if interview is None:
+        raise NotFoundError("Interview not found")
+
+    previous = interview.admin_status
+    await repo.update(interview_id, admin_status=status)
+    await ActivityLogRepository(db).log(
+        actor.id,
+        "status_updated",
+        "interview",
+        interview_id,
+        {"from": previous, "to": status},
+    )
+    await db.commit()
+    return {"interview_id": str(interview.id), "admin_status": status}
+
+
+# --- Analytics --------------------------------------------------------------
+
+
+async def get_analytics(db: AsyncSession, actor: User, **args) -> dict:
+    _require_admin(actor)
+    months = min(int(args.get("months") or 6), 24)
+    return {
+        "funnel": await analytics.hiring_funnel(db),
+        "success_rate": await analytics.success_rate(db),
+        "avg_duration_seconds": await analytics.avg_duration_seconds(db),
+        "monthly_trends": await analytics.monthly_trends(db, months=months),
+    }
+
+
+# --- Users ------------------------------------------------------------------
+
+
+async def list_users(db: AsyncSession, actor: User, **args) -> dict:
+    _require_admin(actor)
+    role = (args.get("role") or "").strip().lower()
+    limit = min(int(args.get("limit") or 50), 100)
+    offset = int(args.get("offset") or 0)
+
+    repo = UserRepository(db)
+    stmt = select(User).order_by(User.created_at.desc()).limit(limit).offset(offset)
+    if role:
+        stmt = select(User).where(User.role == UserRole(role)).order_by(
+            User.created_at.desc()
+        ).limit(limit).offset(offset)
+    result = await db.execute(stmt)
+    users = list(result.scalars().all())
+    return {
+        "total": len(users),
+        "items": [
+            {
+                "id": str(u.id),
+                "email": u.email,
+                "name": u.full_name,
+                "role": u.role.value,
+                "is_active": u.is_active,
+                "created_at": u.created_at.isoformat() if u.created_at else None,
+            }
+            for u in users
+        ],
+    }
+
+
+async def change_role(db: AsyncSession, actor: User, **args) -> dict:
+    _require_admin(actor)
+    email = (args.get("email") or "").strip().lower()
+    role = (args.get("role") or "").strip().lower()
+    if not email or role not in ("admin", "candidate"):
+        raise BadRequestError("email and role ('admin' | 'candidate') are required")
+    if email == actor.email:
+        raise BadRequestError("You cannot change your own role")
+
+    repo = UserRepository(db)
+    user = await repo.get_by_email(email)
+    if user is None:
+        raise NotFoundError(f"No user found with email '{email}'")
+
+    new_role = UserRole(role)
+    await repo.set_role(user.id, new_role)
+    await ActivityLogRepository(db).log(
+        actor.id,
+        "role_changed",
+        "user",
+        str(user.id),
+        {"from": user.role.value, "to": role},
+    )
+    await db.commit()
+    return {"email": user.email, "role": role}
+
+
+# --- Notifications & logs ---------------------------------------------------
+
+
+async def send_notification(db: AsyncSession, actor: User, **args) -> dict:
+    _require_admin(actor)
+    email = (args.get("email") or "").strip().lower()
+    message = (args.get("message") or "").strip()
+    if not email or not message:
+        raise BadRequestError("email and message are required")
+
+    repo = UserRepository(db)
+    user = await repo.get_by_email(email)
+    if user is None:
+        raise NotFoundError(f"No user found with email '{email}'")
+
+    # Record-only: no SMTP integration exists yet. The notification is
+    # persisted to the audit log so it can be delivered by a future worker.
+    await ActivityLogRepository(db).log(
+        actor.id,
+        "notification_sent",
+        "user",
+        str(user.id),
+        {"email": email, "message": message[:500]},
+    )
+    await db.commit()
+    return {
+        "status": "queued",
+        "email": email,
+        "message": "Notification recorded (delivery integration is not configured yet).",
+    }
+
+
+async def get_system_logs(db: AsyncSession, actor: User, **args) -> dict:
+    _require_admin(actor)
+    limit = min(int(args.get("limit") or 25), 100)
+    action = (args.get("action") or "").strip()
+
+    from app.models.activity_log import ActivityLog
+
+    stmt = select(ActivityLog).order_by(ActivityLog.created_at.desc()).limit(limit)
+    if action:
+        stmt = (
+            select(ActivityLog)
+            .where(ActivityLog.action.ilike(f"%{action}%"))
+            .order_by(ActivityLog.created_at.desc())
+            .limit(limit)
+        )
+    result = await db.execute(stmt)
+    logs = list(result.scalars().all())
+    return {
+        "total": len(logs),
+        "items": [
+            {
+                "action": log.action,
+                "entity_type": log.entity_type,
+                "entity_id": log.entity_id,
+                "details": log.details or {},
+                "created_at": log.created_at.isoformat() if log.created_at else None,
+            }
+            for log in logs
+        ],
+    }

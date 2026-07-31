@@ -42,7 +42,7 @@ async def dashboard_stats(db: AsyncSession) -> dict:
             Recommendation,
             Recommendation.verdict == RecommendationVerdict.NOT_RECOMMENDED,
         ),
-        "avg_score": avg_score,
+        "avg_score": round(float(avg_score), 1),
     }
 
 

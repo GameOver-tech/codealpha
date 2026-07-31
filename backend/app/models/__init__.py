@@ -15,7 +15,6 @@ from app.models.recommendation import Recommendation, RecommendationVerdict
 from app.models.interview_report import InterviewReport
 from app.models.generated_pdf import GeneratedPdf
 from app.models.activity_log import ActivityLog
-from app.models.chat import ChatConversation, ChatMessage
 
 __all__ = [
     "Base",
@@ -40,6 +39,4 @@ __all__ = [
     "InterviewReport",
     "GeneratedPdf",
     "ActivityLog",
-    "ChatConversation",
-    "ChatMessage",
 ]

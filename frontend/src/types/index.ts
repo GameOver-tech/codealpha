@@ -297,3 +297,22 @@ export interface ApiError {
   message?: string
   reason?: string
 }
+
+// --- Chat assistant (stateless widget) ---
+
+export interface ChatHistoryItem {
+  role: 'user' | 'assistant'
+  content: string
+}
+
+export interface ChatRequest {
+  message: string
+  history: ChatHistoryItem[]
+}
+
+/** Tool activity shown alongside an assistant message while streaming. */
+export interface StreamToolEvent {
+  name: string
+  status: 'started' | 'done' | 'error'
+  error?: string
+}

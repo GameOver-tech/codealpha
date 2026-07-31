@@ -1,10 +1,11 @@
-import { api, API_BASE_URL } from './client'
+import { api, API_BASE_URL, getToken } from './client'
 import type {
   AdminInterview,
   AdminUploadResponse,
   AnalysisBundle,
   CandidateSummary,
   ChangePasswordRequest,
+  ChatRequest,
   InterviewProgress,
   InterviewStatus,
   Job,
@@ -132,6 +133,93 @@ export const adminApi = {
 
   deleteInterview: (interviewId: string) =>
     api.delete<MessageResponse>(`/api/admin/interview/${interviewId}`),
+}
+
+// --- Chat assistant (stateless widget) ---
+// Streaming uses raw fetch — axios cannot consume a Server-Sent Events body.
+// History is sent with every request; nothing is stored server-side.
+
+export interface StreamChatEvents {
+  onMessage?: (delta: string) => void
+  onTool?: (tool: { name: string; status: string; error?: string }) => void
+  onDone?: (content: string) => void
+  onError?: (message: string) => void
+}
+
+export function streamChat(
+  payload: ChatRequest,
+  events: StreamChatEvents,
+  signal?: AbortSignal,
+): Promise<void> {
+  return fetch(`${API_BASE_URL}/api/chat`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${getToken() ?? ''}`,
+    },
+    body: JSON.stringify(payload),
+    signal,
+  }).then(async (resp) => {
+    if (!resp.ok) {
+      let message = `Chat request failed (${resp.status})`
+      try {
+        const data = await resp.json()
+        message = data?.detail ?? data?.message ?? message
+      } catch {
+        /* non-JSON error body */
+      }
+      events.onError?.(message)
+      return
+    }
+
+    const reader = resp.body?.getReader()
+    if (!reader) {
+      events.onError?.('No response body')
+      return
+    }
+    const decoder = new TextDecoder()
+    let buffer = ''
+
+    const dispatch = (raw: string) => {
+      const lines = raw.split('\n')
+      let event = 'message'
+      for (const line of lines) {
+        if (line.startsWith('event:')) event = line.slice(6).trim()
+        else if (line.startsWith('data:')) {
+          const data = line.slice(5).trim()
+          if (!data) continue
+          try {
+            const parsed = JSON.parse(data)
+            if (event === 'message') events.onMessage?.(parsed.delta ?? '')
+            else if (event === 'tool') {
+              events.onTool?.({
+                name: parsed.name ?? '',
+                status: parsed.status ?? 'done',
+                error: parsed.error,
+              })
+            } else if (event === 'done') events.onDone?.(parsed.content ?? '')
+            else if (event === 'error') events.onError?.(parsed.message ?? 'Something went wrong')
+          } catch {
+            /* skip malformed SSE payload */
+          }
+        }
+      }
+    }
+
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      const events_ = buffer.split('\n\n')
+      buffer = events_.pop() ?? ''
+      for (const chunk of events_) dispatch(chunk)
+    }
+    if (buffer.trim()) dispatch(buffer)
+  })
+}
+
+export const chatApi = {
+  stream: streamChat,
 }
 
 export { API_BASE_URL }
