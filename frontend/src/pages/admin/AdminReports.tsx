@@ -4,9 +4,9 @@ import { motion } from 'framer-motion'
 import { Search, FileText, Download, RefreshCw, Video } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { Button, Card, CardContent, Input, Skeleton } from '@/components/ui'
-import { Avatar, AvatarFallback, EmptyState, PageHeader, RecommendationBadge, StatusBadge } from '@/components/shared'
+import { Avatar, AvatarFallback, AvatarImage, EmptyState, PageHeader, RecommendationBadge, StatusBadge } from '@/components/shared'
 import { useAdminInterviews } from '@/hooks'
-import { adminApi, getErrorMessage } from '@/services/api'
+import { adminApi, mediaUrl, getErrorMessage } from '@/services/api'
 import { useMutation } from '@tanstack/react-query'
 import { initials } from '@/lib/utils'
 
@@ -95,6 +95,10 @@ export function AdminReports() {
                 <CardContent className="p-5">
                   <div className="flex items-start gap-4">
                     <Avatar className="h-11 w-11">
+                      <AvatarImage
+                        src={mediaUrl(interview.candidate_profile?.profile_picture_url)}
+                        alt={interview.candidate_name}
+                      />
                       <AvatarFallback>{initials(interview.candidate_name)}</AvatarFallback>
                     </Avatar>
                     <div className="min-w-0 flex-1">

@@ -12,7 +12,7 @@ import {
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { Button, Card, CardContent, Skeleton } from '@/components/ui'
-import { EmptyState, PageHeader, StatusBadge, AdminStatusBadge, CircularProgress, RecommendationBadge } from '@/components/shared'
+import { EmptyState, PageHeader, StatusBadge, AdminStatusBadge, RecommendationBadge } from '@/components/shared'
 import type { RecommendationVerdict } from '@/types'
 import { useAuth } from '@/context'
 import { useInterviewStatus, useInterviewResult, queryKeys } from '@/hooks'
@@ -123,14 +123,14 @@ export function DashboardOverview() {
                 </div>
               </CardContent>
 
-              {status.status === 'completed' && result?.scores && (
-                <div className="flex items-center justify-center border-t border-border/60 bg-gradient-to-br from-primary/5 to-transparent p-6 md:border-l md:border-t-0 md:p-10">
-                  <CircularProgress
-                    value={result.scores.overall_score}
-                    size={150}
-                    label="Overall score"
-                    color={result.scores.overall_score >= 70 ? '#22C55E' : result.scores.overall_score >= 50 ? '#F59E0B' : '#EF4444'}
-                  />
+              {status.status === 'completed' && result?.recommendation && (
+                <div className="flex flex-col items-center justify-center gap-3 border-t border-border/60 bg-gradient-to-br from-primary/5 to-transparent p-6 md:border-l md:border-t-0 md:p-10">
+                  <RecommendationBadge verdict={result.recommendation as RecommendationVerdict} />
+                  {result.message && (
+                    <p className="max-w-[220px] text-center text-xs text-muted-foreground">
+                      {result.message}
+                    </p>
+                  )}
                 </div>
               )}
             </div>
@@ -155,9 +155,9 @@ export function DashboardOverview() {
           },
           {
             icon: Trophy,
-            label: 'Overall score',
-            value: result?.scores ? `${Math.round(result.scores.overall_score)}/100` : '—',
-            sub: result?.recommendation?.verdict ?? 'Pending evaluation',
+            label: 'Recommendation',
+            value: result?.recommendation ?? '—',
+            sub: result?.message || 'Pending evaluation',
           },
           {
             icon: Clock,

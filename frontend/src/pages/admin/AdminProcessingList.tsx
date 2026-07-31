@@ -2,8 +2,9 @@ import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { Loader2, AlertTriangle, ArrowRight, Video } from 'lucide-react'
 import { Button, Card, CardContent, Progress, Skeleton } from '@/components/ui'
-import { Avatar, AvatarFallback, EmptyState, PageHeader, StatusBadge } from '@/components/shared'
+import { Avatar, AvatarFallback, AvatarImage, EmptyState, PageHeader, StatusBadge } from '@/components/shared'
 import { useAdminInterviews } from '@/hooks'
+import { mediaUrl } from '@/services/api'
 import { initials } from '@/lib/utils'
 
 export function AdminProcessingList() {
@@ -64,6 +65,10 @@ export function AdminProcessingList() {
                 <CardContent className="p-5">
                   <div className="flex items-center gap-4">
                     <Avatar className="h-10 w-10">
+                      <AvatarImage
+                        src={mediaUrl(interview.candidate_profile?.profile_picture_url)}
+                        alt={interview.candidate_name}
+                      />
                       <AvatarFallback>{initials(interview.candidate_name)}</AvatarFallback>
                     </Avatar>
                     <div className="min-w-0 flex-1">

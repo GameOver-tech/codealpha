@@ -1,7 +1,10 @@
 """Candidate profile endpoints — view, edit, upload profile picture."""
 from __future__ import annotations
 
+from pathlib import Path
+
 from fastapi import APIRouter, Depends, File, UploadFile, status
+from fastapi.responses import FileResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -21,6 +24,21 @@ router = APIRouter(prefix="/api/profile", tags=["Profile"])
 
 MAX_PICTURE_BYTES = 5 * 1024 * 1024  # 5 MB
 ALLOWED_PICTURE_TYPES = {"image/jpeg", "image/png", "image/webp"}
+
+
+def resolve_picture_file(path: str):
+    """Resolve a stored picture path to a local file if present."""
+    if not path:
+        return None
+    # Local upload dir file (avatars/...)
+    local = Path(settings.UPLOAD_DIR) / path
+    if local.is_file():
+        return local
+    # Absolute path fallback
+    direct = Path(path)
+    if direct.is_file():
+        return direct
+    return None
 
 
 async def _get_or_create_profile(db: AsyncSession, user: User):
@@ -82,21 +100,54 @@ async def upload_profile_picture(
         storage.delete(rel_path)
         raise BadRequestError("Profile picture must be 5MB or smaller")
 
-    # Sync to Supabase Storage when configured.
-    remote_path = rel_path
+    # Best-effort sync to Supabase Storage; the local copy is kept so the
+    # picture is always servable via /api/profile/picture regardless of
+    # storage connectivity.
     if settings.SUPABASE_URL:
         try:
             from app.storage import copy_local_to_supabase
 
-            remote_path = copy_local_to_supabase(storage.abs_path(rel_path), rel_path)
-            storage.delete(rel_path)
+            copy_local_to_supabase(storage.abs_path(rel_path), rel_path)
         except Exception as exc:  # noqa: BLE001
             logger.warning("Avatar sync to Supabase failed: %s", exc)
 
     repo = CandidateProfileRepository(db)
     profile = await repo.upsert(
-        current_user.id, {"profile_picture_url": remote_path}
+        current_user.id, {"profile_picture_url": rel_path}
     )
     await db.commit()
     await db.refresh(profile)
     return profile
+
+
+@router.get("/picture")
+async def get_profile_picture(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Serve the authenticated user's profile picture.
+
+    Resolves the stored path from local disk first, then falls back to a
+    Supabase Storage signed URL. Returns 404 when no picture is set.
+    """
+    repo = CandidateProfileRepository(db)
+    profile = await repo.get_by_user(current_user.id)
+    if profile is None or not profile.profile_picture_url:
+        raise NotFoundError("No profile picture uploaded")
+
+    local = resolve_picture_file(profile.profile_picture_url)
+    if local is not None:
+        return FileResponse(str(local))
+
+    # Fallback: signed URL from Supabase Storage.
+    if settings.SUPABASE_URL:
+        try:
+            from app.storage.service import SupabaseStorage
+
+            url = SupabaseStorage().signed_url(profile.profile_picture_url)
+            if url:
+                return RedirectResponse(url)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Could not build signed URL for avatar: %s", exc)
+
+    raise NotFoundError("Profile picture file is not available")

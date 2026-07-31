@@ -10,3 +10,9 @@
 - Judges the app by actually using it: a runtime crash that blanks a page or throws uncaught console errors is a defect even when typecheck and build pass — real usage flows (e.g., logging in as a role and navigating) must render without errors. Confidence: 0.75
 - Per-role navigation: each role's sidebar/menu must expose only that role's allowed features (e.g., candidates never see upload/admin items; admins get the full suite) — cross-role links are defects. Confidence: 0.85
 - Never store files/media client-side (no Base64 blobs); file downloads like PDFs use blob responses with client-side object URLs, and actions that create artifacts (e.g., PDF regeneration) should trigger the download directly from a generated blob. Confidence: 0.75
+
+- Candidate-facing pages render only the minimal allowed outcome (recommendation verdict + status) and never attempt to display scores, transcripts, or the report; restricted download actions (e.g., candidate PDF) are removed from the candidate UI entirely rather than merely disabled. Confidence: 0.8
+
+- User-uploaded images (avatars/profile pictures) must actually display after upload; load them through an authenticated backend endpoint that resolves the real storage (local file or Supabase signed URL) rather than building a URL client-side from a stored path. Confidence: 0.6
+
+- Expects the admin dashboard to be a professional, data-driven SaaS analytics dashboard: stat cards, charts, and recent-activity tables populated from real database endpoints (never placeholders or empty stubs), so it looks and behaves like a real SaaS product. Confidence: 0.75

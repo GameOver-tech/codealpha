@@ -9,7 +9,7 @@ import { Button, Card, CardContent, Input, Label, Skeleton, Textarea } from '@/c
 import { Avatar, AvatarFallback, AvatarImage, PageHeader, CardSection } from '@/components/shared'
 import { useAuth } from '@/context'
 import { useProfile, queryKeys } from '@/hooks'
-import { profileApi, getErrorMessage } from '@/services/api'
+import { profileApi, mediaUrl, getErrorMessage } from '@/services/api'
 import { initials } from '@/lib/utils'
 
 const profileSchema = z.object({
@@ -89,7 +89,7 @@ export function CandidateProfile() {
             <div className="relative">
               <Avatar className="h-24 w-24 border-4 border-card shadow-card">
                 <AvatarImage
-                  src={profile?.profile_picture_url ? `/media/${profile.profile_picture_url}` : undefined}
+                  src={mediaUrl(profile?.profile_picture_url)}
                   alt={user?.full_name ?? ''}
                 />
                 <AvatarFallback className="text-2xl">{initials(user?.full_name ?? 'U')}</AvatarFallback>

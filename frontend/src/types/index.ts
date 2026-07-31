@@ -164,6 +164,18 @@ export interface InterviewResult {
   pdf: PdfMeta | null
 }
 
+/** Candidate-facing result — only the hiring decision, never the report. */
+export interface CandidateSummary {
+  interview_id: string
+  status: InterviewStatusValue
+  admin_status: string
+  candidate_name: string
+  candidate_email: string
+  interview_date: string | null
+  recommendation: string | null
+  message: string
+}
+
 export interface TranscriptSegment {
   start: number
   end: number

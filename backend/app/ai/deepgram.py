@@ -182,12 +182,15 @@ def _results_to_dict(results) -> dict[str, Any]:
 def _call_deepgram(file_path: str) -> dict[str, Any]:
     """Run Deepgram transcription (blocking call wrapped for async use).
 
-    Retries transient failures (network timeouts, 5xx) with exponential
-    backoff before giving up. Each attempt is bounded by a wall-clock
-    timeout so a hung network call can never stall the pipeline.
-    Returns the complete raw ``results`` dict.
+    The file is streamed to Deepgram from an open file handle (StreamSource)
+    instead of buffering the whole recording in memory, and an explicit
+    httpx timeout that scales with file size is passed to the SDK so large
+    uploads are not cut short by the client default. Retries transient
+    failures with exponential backoff. Returns the raw ``results`` dict.
     """
     try:
+        import httpx
+
         from deepgram import DeepgramClient, PrerecordedOptions
     except ImportError as exc:  # pragma: no cover
         raise TranscriptionError(
@@ -208,21 +211,30 @@ def _call_deepgram(file_path: str) -> dict[str, Any]:
         detect_language=True,
     )
 
+    path = Path(file_path)
+    size_bytes = path.stat().st_size
     mimetype = _guess_mimetype(file_path)
-    with open(file_path, "rb") as audio:
-        source = {"buffer": audio.read(), "mimetype": mimetype}
+
+    # Generous, size-scaled timeout so large recordings upload completely.
+    timeout = httpx.Timeout(_deepgram_timeout_for_size(size_bytes), connect=30.0)
 
     logger.info(
-        "Deepgram request: file=%s bytes=%s model=%s",
-        Path(file_path).name,
-        len(source["buffer"]),
+        "Deepgram request: file=%s bytes=%s model=%s timeout=%ss",
+        path.name,
+        size_bytes,
         settings.DEEPGRAM_MODEL,
+        _deepgram_timeout_for_size(size_bytes),
     )
 
     last_exc: Exception | None = None
     for attempt in range(3):
         try:
-            results = _run_deepgram_with_timeout(client, options, source)
+            # StreamSource streams the open file handle — no full in-memory copy.
+            with open(file_path, "rb") as audio:
+                source = {"stream": audio, "mimetype": mimetype}
+                results = client.listen.prerecorded.v("1").transcribe_file(
+                    source, options, timeout=timeout
+                )
             results = _results_to_dict(results)
             # The SDK response object's to_dict() wraps the payload under
             # "results"; unwrap it so callers see {channels, utterances, ...}.
@@ -253,35 +265,18 @@ def _call_deepgram(file_path: str) -> dict[str, Any]:
     raise TranscriptionError(f"Deepgram transcription failed after 3 attempts: {last_exc}")
 
 
-DEEPGRAM_CALL_TIMEOUT_SECONDS = 90
+def _deepgram_timeout_for_size(size_bytes: int) -> int:
+    """Pick a wall-clock timeout that scales with upload size.
 
-
-def _run_deepgram_with_timeout(client, options, source) -> dict[str, Any]:
-    """Run the blocking Deepgram SDK call with a hard wall-clock timeout.
-
-    The SDK call is synchronous and has no internal timeout, so it is run
-    in a worker thread and abandoned if it exceeds the timeout. Works on
-    Windows (no SIGALRM) and POSIX alike.
+    Base 90s for small files, +30s per 25MB beyond the first 25MB, capped
+    at 10 minutes so a genuinely large recording is never cut short.
     """
-    from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeout
+    base = DEEPGRAM_CALL_TIMEOUT_SECONDS
+    extra = int(max(0, (size_bytes - 25 * 1024 * 1024)) // (25 * 1024 * 1024)) * 30
+    return min(base + extra, 600)
 
-    def _call() -> dict[str, Any]:
-        response = client.listen.prerecorded.v("1").transcribe_file(source, options)
-        # Newer SDK returns PrerecordedResponse objects; the caller's
-        # _results_to_dict() normalizes whatever comes back.
-        if isinstance(response, dict):
-            return response.get("results", {}) or {}
-        return response
 
-    with ThreadPoolExecutor(max_workers=1) as pool:
-        future = pool.submit(_call)
-        try:
-            return future.result(timeout=DEEPGRAM_CALL_TIMEOUT_SECONDS)
-        except FutureTimeout:
-            future.cancel()
-            raise TimeoutError(
-                f"Deepgram request exceeded {DEEPGRAM_CALL_TIMEOUT_SECONDS}s"
-            )
+DEEPGRAM_CALL_TIMEOUT_SECONDS = 90
 
 
 def _guess_mimetype(file_path: str) -> str:

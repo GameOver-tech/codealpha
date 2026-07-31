@@ -11,11 +11,12 @@ import {
   X,
   ScanEye,
   ClipboardList,
-  Download,
 } from 'lucide-react'
 import { Avatar, AvatarFallback, AvatarImage, Button } from '@/components/ui'
 import { ThemeToggle } from '@/components/shared'
 import { useAuth } from '@/context'
+import { useProfile } from '@/hooks'
+import { mediaUrl } from '@/services/api'
 import { initials } from '@/lib/utils'
 
 const NAV_ITEMS = [
@@ -23,7 +24,6 @@ const NAV_ITEMS = [
   { to: '/dashboard/profile', label: 'My Profile', icon: UserRound },
   { to: '/dashboard/status', label: 'Interview Status', icon: ClipboardList },
   { to: '/dashboard/results', label: 'Results', icon: FileText },
-  { to: '/dashboard/reports', label: 'Reports', icon: Download },
   { to: '/dashboard/settings', label: 'Settings', icon: Settings },
 ]
 
@@ -31,6 +31,7 @@ export function CandidateLayout() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
   const [mobileOpen, setMobileOpen] = useState(false)
+  const { data: profile } = useProfile()
 
   const handleLogout = async () => {
     await logout()
@@ -72,7 +73,7 @@ export function CandidateLayout() {
       <div className="border-t border-border/60 p-4">
         <div className="flex items-center gap-3 rounded-xl bg-muted/60 p-3">
           <Avatar className="h-10 w-10">
-            <AvatarImage src={undefined} alt={user?.full_name ?? ''} />
+            <AvatarImage src={mediaUrl(profile?.profile_picture_url)} alt={user?.full_name ?? ''} />
             <AvatarFallback>{initials(user?.full_name ?? 'U')}</AvatarFallback>
           </Avatar>
           <div className="min-w-0 flex-1">

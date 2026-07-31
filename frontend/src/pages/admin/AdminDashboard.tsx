@@ -22,8 +22,9 @@ import {
   Video,
 } from 'lucide-react'
 import { Button, Card, CardContent, CardHeader, CardTitle, Skeleton } from '@/components/ui'
-import { Avatar, AvatarFallback, EmptyState, PageHeader, RecommendationBadge, StatusBadge } from '@/components/shared'
+import { Avatar, AvatarFallback, AvatarImage, EmptyState, PageHeader, RecommendationBadge, StatusBadge } from '@/components/shared'
 import { useAdminInterviews } from '@/hooks'
+import { mediaUrl } from '@/services/api'
 import { initials } from '@/lib/utils'
 import type { AdminInterview } from '@/types'
 
@@ -228,6 +229,10 @@ export function AdminDashboard() {
                   className="flex items-center gap-4 py-3.5 transition-colors hover:bg-accent/50"
                 >
                   <Avatar className="h-10 w-10">
+                    <AvatarImage
+                      src={mediaUrl(interview.candidate_profile?.profile_picture_url)}
+                      alt={interview.candidate_name}
+                    />
                     <AvatarFallback>{initials(interview.candidate_name)}</AvatarFallback>
                   </Avatar>
                   <div className="min-w-0 flex-1">

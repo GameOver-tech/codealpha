@@ -149,6 +149,24 @@ class InterviewResult(BaseModel):
     pdf: PdfMeta | None = None
 
 
+class CandidateSummary(BaseModel):
+    """Candidate-facing result — only the hiring decision, never the report.
+
+    Candidates see their pipeline status + the recommendation verdict and a
+    friendly message. Scores, transcript, strengths/weaknesses and the report
+    stay admin-only.
+    """
+
+    interview_id: str
+    status: str
+    admin_status: str = "Pending"
+    candidate_name: str
+    candidate_email: str
+    interview_date: datetime | None = None
+    recommendation: str | None = None
+    message: str = ""
+
+
 class PdfMeta(BaseModel):
     id: str
     filename: str

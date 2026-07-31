@@ -42,10 +42,10 @@ import {
   TabsTrigger,
   Badge,
 } from '@/components/ui'
-import { CircularProgress, EmptyState, PageHeader, RecommendationBadge, StatusBadge, AdminStatusBadge } from '@/components/shared'
+import { CircularProgress, EmptyState, PageHeader, RecommendationBadge, StatusBadge, AdminStatusBadge, Avatar, AvatarImage, AvatarFallback } from '@/components/shared'
 import { useAdminAnalysis, useAdminInterviews, useAdminProgress, queryKeys } from '@/hooks'
-import { adminApi, getErrorMessage } from '@/services/api'
-import { formatDuration } from '@/lib/utils'
+import { adminApi, mediaUrl, getErrorMessage } from '@/services/api'
+import { formatDuration, initials } from '@/lib/utils'
 
 const ADMIN_STATUSES = [
   'Pending',
@@ -244,7 +244,16 @@ export function AdminCandidateDetail() {
         <Card>
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
-              <h3 className="font-display text-base font-bold text-foreground">Candidate profile</h3>
+              <div className="flex items-center gap-3">
+                <Avatar className="h-11 w-11">
+                  <AvatarImage
+                    src={mediaUrl(meta.candidate_profile.profile_picture_url)}
+                    alt={meta.candidate_name}
+                  />
+                  <AvatarFallback>{initials(meta.candidate_name)}</AvatarFallback>
+                </Avatar>
+                <h3 className="font-display text-base font-bold text-foreground">Candidate profile</h3>
+              </div>
               {meta.candidate_profile.current_company && (
                 <Badge variant="secondary">{meta.candidate_profile.current_company}</Badge>
               )}

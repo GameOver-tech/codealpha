@@ -3,9 +3,9 @@ import type {
   AdminInterview,
   AdminUploadResponse,
   AnalysisBundle,
+  CandidateSummary,
   ChangePasswordRequest,
   InterviewProgress,
-  InterviewResult,
   InterviewStatus,
   Job,
   LoginRequest,
@@ -50,12 +50,14 @@ export const profileApi = {
 
 export const candidateApi = {
   interviewStatus: () => api.get<InterviewStatus>('/api/interview/status'),
-  interviewResult: () => api.get<InterviewResult>('/api/interview/result'),
-  /** Download the PDF blob for the candidate's latest interview. */
-  resultPdf: async () => {
-    const res = await api.get<Blob>('/api/interview/result/pdf', { responseType: 'blob' })
-    return res.data
-  },
+  interviewResult: () => api.get<CandidateSummary>('/api/interview/result'),
+}
+
+/** Build a public URL for a locally-stored upload (avatars, etc.). */
+export function mediaUrl(path: string | null | undefined): string | undefined {
+  if (!path) return undefined
+  if (/^https?:\/\//.test(path)) return path
+  return `${API_BASE_URL}/media/${path}`
 }
 
 export const adminApi = {

@@ -171,11 +171,21 @@ def test_candidate_result_endpoint(client, monkeypatch):
     r = client.get("/api/interview/result")
     assert r.status_code == 200, r.text
     data = r.json()
+    # Candidates only see status + recommendation verdict — never scores,
+    # transcript, strengths/weaknesses or the report.
     assert data["interview_id"] == ids["interview_id"]
-    assert data["scores"]["overall_score"] == 81.0
-    assert data["recommendation"]["verdict"] == "Recommended"
-    assert data["strengths"] == ["Strong communication"]
-    assert data["report"]["executive_summary"] == "Good"
+    assert data["recommendation"] == "Recommended"
+    assert "scores" not in data
+    assert "transcript" not in data
+    assert "strengths" not in data
+    assert "report" not in data
+
+
+def test_candidate_cannot_download_pdf(client, monkeypatch):
+    ids = asyncio.run(_seed(database.AsyncSessionLocal))
+    _authed_client(client, ids["user_id"])
+    r = client.get("/api/interview/result/pdf")
+    assert r.status_code == 403, r.text
 
 
 def test_admin_transcript_endpoint(client, monkeypatch):

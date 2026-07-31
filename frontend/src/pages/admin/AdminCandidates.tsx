@@ -15,9 +15,9 @@ import {
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { Button, Card, CardContent, Input, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Skeleton, Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui'
-import { Avatar, AvatarFallback, EmptyState, PageHeader, RecommendationBadge, StatusBadge } from '@/components/shared'
+import { Avatar, AvatarFallback, AvatarImage, EmptyState, PageHeader, RecommendationBadge, StatusBadge } from '@/components/shared'
 import { useAdminInterviews, queryKeys } from '@/hooks'
-import { adminApi, getErrorMessage } from '@/services/api'
+import { adminApi, mediaUrl, getErrorMessage } from '@/services/api'
 import { formatDuration, initials } from '@/lib/utils'
 import type { InterviewStatusValue, RecommendationVerdict } from '@/types'
 
@@ -230,6 +230,10 @@ export function AdminCandidates() {
                       <td className="px-5 py-4">
                         <div className="flex items-center gap-3">
                           <Avatar className="h-9 w-9">
+                            <AvatarImage
+                              src={mediaUrl(interview.candidate_profile?.profile_picture_url)}
+                              alt={interview.candidate_name}
+                            />
                             <AvatarFallback>{initials(interview.candidate_name)}</AvatarFallback>
                           </Avatar>
                           <div>

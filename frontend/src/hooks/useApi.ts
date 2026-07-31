@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { candidateApi, adminApi, jobsApi, profileApi } from '@/services/api'
+import type { CandidateSummary } from '@/types'
 
 export const queryKeys = {
   me: ['auth', 'me'] as const,
@@ -42,7 +43,7 @@ export function useInterviewStatus() {
 export function useInterviewResult() {
   return useQuery({
     queryKey: queryKeys.interviewResult,
-    queryFn: async () => (await candidateApi.interviewResult()).data,
+    queryFn: async () => (await candidateApi.interviewResult()).data as CandidateSummary,
     retry: 1,
   })
 }
