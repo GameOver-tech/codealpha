@@ -18,3 +18,5 @@ class ActivityLog(UUIDMixin, TimestampMixin, Base):
     entity_type: Mapped[str] = mapped_column(String(50), default="", nullable=False)
     entity_id: Mapped[str] = mapped_column(String(100), default="", nullable=False)
     details: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    # Optional link to the chat conversation that triggered the action.
+    conversation_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)

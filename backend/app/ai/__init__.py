@@ -48,6 +48,19 @@ def get_llm_provider():
     )
 
 
+def get_chat_provider():
+    """Return the Groq chat provider used by the AI assistant.
+
+    The assistant requires Groq credentials (function calling + streaming);
+    other providers are not used for chat.
+    """
+    from app.ai.chat.groq_client import GroqChatProvider
+
+    if not GroqChatProvider.has_credentials():
+        raise BadRequestError("GROQ_API_KEY is missing — the AI assistant requires it.")
+    return GroqChatProvider()
+
+
 # Re-export analysis entry points (lazy imports keep import-time light).
 def transcribe_audio(file_path: str):
     from app.ai.deepgram import transcribe_audio as _impl

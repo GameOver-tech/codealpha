@@ -63,6 +63,7 @@ class ActivityLogRepository(BaseRepository[ActivityLog]):
         entity_type: str = "",
         entity_id: str = "",
         details: dict | None = None,
+        conversation_id: str | None = None,
     ) -> ActivityLog:
         return await self.add(
             ActivityLog(
@@ -71,5 +72,6 @@ class ActivityLogRepository(BaseRepository[ActivityLog]):
                 entity_type=entity_type,
                 entity_id=entity_id,
                 details=details or {},
+                conversation_id=conversation_id,
             )
         )

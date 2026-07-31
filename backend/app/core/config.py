@@ -67,8 +67,18 @@ class Settings(BaseSettings):
     GEMINI_MODEL: str = "gemini-2.0-flash"
     GROQ_API_KEY: str = ""
     GROQ_MODEL: str = "llama-3.1-8b-instant"
+    # llama-3.1-8b-instant does not support function calling — the chat
+    # assistant uses its own model capable of tool calls.
+    GROQ_CHAT_MODEL: str = "llama-3.3-70b-versatile"
     LLM_MAX_TOKENS: int = 8192
     LLM_TEMPERATURE: float = 0.3
+
+    # --- Chat assistant ---
+    CHAT_ENABLED: bool = True
+    CHAT_MAX_TURNS: int = 6
+    CHAT_MAX_MESSAGES: int = 40
+    CHAT_CONTEXT_TTL_DAYS: int = 30
+    CHAT_ACTIVITY_LOGGING: bool = True
 
     # --- Redis ---
     REDIS_URL: str = "redis://localhost:6379/0"
