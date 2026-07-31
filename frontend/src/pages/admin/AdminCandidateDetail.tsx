@@ -43,7 +43,7 @@ import {
   Badge,
 } from '@/components/ui'
 import { CircularProgress, EmptyState, PageHeader, RecommendationBadge, StatusBadge, AdminStatusBadge, Avatar, AvatarImage, AvatarFallback } from '@/components/shared'
-import { useAdminAnalysis, useAdminInterviews, useAdminProgress, queryKeys } from '@/hooks'
+import { useAdminAnalysis, useAdminInterviewMeta, useAdminProgress, queryKeys } from '@/hooks'
 import { adminApi, mediaUrl, getErrorMessage } from '@/services/api'
 import { formatDuration, initials } from '@/lib/utils'
 
@@ -97,8 +97,7 @@ export function AdminCandidateDetail() {
   const [overrideVerdict, setOverrideVerdict] = useState<(typeof VERDICTS)[number]>('Recommended')
   const [overrideReason, setOverrideReason] = useState('')
 
-  const { data: interviews } = useAdminInterviews()
-  const meta = interviews?.find((i) => i.id === interviewId)
+  const { data: meta } = useAdminInterviewMeta(interviewId)
   const { data: progress } = useAdminProgress(interviewId)
   const { data: bundle, isLoading, isError } = useAdminAnalysis(interviewId)
 

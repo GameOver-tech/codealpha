@@ -238,6 +238,30 @@ def test_admin_scores_endpoint(client, monkeypatch):
     assert r.json()["overall_score"] == 81.0
 
 
+def test_admin_dashboard_endpoint(client, monkeypatch):
+    """The dashboard endpoint returns aggregated stats + recent interviews."""
+    ids = asyncio.run(_seed(database.AsyncSessionLocal))
+    _authed_admin_client(client)
+    r = client.get("/api/admin/dashboard")
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert "stats" in data
+    assert "status_counts" in data
+    assert "recent" in data
+    assert data["stats"]["total_interviews"] >= 1
+    assert data["stats"]["total_candidates"] >= 1
+    # Recent list is bounded and contains the seeded interview.
+    assert len(data["recent"]) <= 6
+    assert any(item["id"] == ids["interview_id"] for item in data["recent"])
+
+
+def test_admin_dashboard_requires_admin(client, monkeypatch):
+    ids = asyncio.run(_seed(database.AsyncSessionLocal))
+    _authed_client(client, ids["user_id"])
+    r = client.get("/api/admin/dashboard")
+    assert r.status_code == 403, r.text
+
+
 def test_admin_recommendation_endpoint(client, monkeypatch):
     ids = asyncio.run(_seed(database.AsyncSessionLocal))
     _authed_admin_client(client)

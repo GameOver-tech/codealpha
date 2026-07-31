@@ -291,6 +291,38 @@ export interface RecommendationMessage {
   message: string
 }
 
+/** Aggregated dashboard payload — server-side counts + recent interviews. */
+export interface AdminDashboardStats {
+  total_candidates: number
+  total_interviews: number
+  interviewed_candidates: number
+  processing: number
+  failed: number
+  recommended: number
+  not_recommended: number
+  avg_score: number
+}
+
+export interface AdminDashboardRecent {
+  id: string
+  candidate_id: string
+  candidate_name: string
+  candidate_email: string
+  job_title: string
+  status: InterviewStatusValue
+  admin_status: string
+  overall_score: number | null
+  recommendation: RecommendationVerdict | null
+  profile_picture_url: string | null
+  created_at: string | null
+}
+
+export interface AdminDashboard {
+  stats: AdminDashboardStats
+  status_counts: Record<string, number>
+  recent: AdminDashboardRecent[]
+}
+
 export interface RegisteredCandidate {
   id: string
   full_name: string

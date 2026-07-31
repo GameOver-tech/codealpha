@@ -9,6 +9,8 @@ export const queryKeys = {
   interviewStatus: ['interview', 'status'] as const,
   interviewResult: ['interview', 'result'] as const,
   adminInterviews: ['admin', 'interviews'] as const,
+  adminInterviewMeta: (id: string) => ['admin', 'interview', 'meta', id] as const,
+  adminDashboard: ['admin', 'dashboard'] as const,
   adminProgress: (id: string) => ['admin', 'progress', id] as const,
   adminAnalysis: (id: string) => ['admin', 'analysis', id] as const,
   adminTranscript: (id: string) => ['admin', 'transcript', id] as const,
@@ -67,7 +69,31 @@ export function useAdminInterviews() {
   return useQuery({
     queryKey: queryKeys.adminInterviews,
     queryFn: async () => (await adminApi.interviews()).data,
+    staleTime: 30 * 1000,
+    // Poll in the background so status changes surface without manual
+    // refresh, but not faster than the data actually changes.
+    refetchInterval: (query) =>
+      query.state.data && query.state.data.some((i) => ['uploaded', 'processing', 'transcript_ready', 'ai_evaluation', 'pdf_generated'].includes(i.status))
+        ? 15 * 1000
+        : 60 * 1000,
+  })
+}
+
+export function useAdminDashboard() {
+  return useQuery({
+    queryKey: queryKeys.adminDashboard,
+    queryFn: async () => (await adminApi.dashboard()).data,
+    staleTime: 15 * 1000,
     refetchInterval: 30 * 1000,
+  })
+}
+
+export function useAdminInterviewMeta(interviewId: string | undefined) {
+  return useQuery({
+    queryKey: queryKeys.adminInterviewMeta(interviewId ?? ''),
+    queryFn: async () => (await adminApi.interviewMeta(interviewId!)).data,
+    enabled: Boolean(interviewId),
+    staleTime: 30 * 1000,
   })
 }
 

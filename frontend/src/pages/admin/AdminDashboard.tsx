@@ -23,10 +23,10 @@ import {
 } from 'lucide-react'
 import { Button, Card, CardContent, CardHeader, CardTitle, Skeleton } from '@/components/ui'
 import { Avatar, AvatarFallback, AvatarImage, EmptyState, PageHeader, RecommendationBadge, StatusBadge } from '@/components/shared'
-import { useAdminInterviews } from '@/hooks'
+import { useAdminDashboard } from '@/hooks'
 import { mediaUrl } from '@/services/api'
 import { initials } from '@/lib/utils'
-import type { AdminInterview } from '@/types'
+import type { AdminDashboardRecent } from '@/types'
 
 const STATUS_COLORS: Record<string, string> = {
   uploaded: '#2563EB',
@@ -77,7 +77,7 @@ function DashboardStatCard({
 }
 
 export function AdminDashboard() {
-  const { data: interviews, isLoading, isError } = useAdminInterviews()
+  const { data, isLoading, isError } = useAdminDashboard()
 
   if (isLoading) {
     return (
@@ -93,7 +93,7 @@ export function AdminDashboard() {
     )
   }
 
-  if (isError || !interviews) {
+  if (isError || !data) {
     return (
       <EmptyState
         icon={Video}
@@ -103,21 +103,12 @@ export function AdminDashboard() {
     )
   }
 
-  const total = interviews.length
-  const completed = interviews.filter((i) => i.status === 'completed').length
-  const processing = interviews.filter(
-    (i) => !['completed', 'failed'].includes(i.status),
-  ).length
-  const failed = interviews.filter((i) => i.status === 'failed').length
-
-  const recent = [...interviews]
-    .sort((a, b) => new Date(b.created_at ?? 0).getTime() - new Date(a.created_at ?? 0).getTime())
-    .slice(0, 6)
-
+  const stats = data.stats
   const statusCounts = Object.keys(STATUS_COLORS).map((status) => ({
     status,
-    count: interviews.filter((i) => i.status === status).length,
+    count: data.status_counts[status] ?? 0,
   }))
+  const recent: AdminDashboardRecent[] = data.recent ?? []
 
   return (
     <div className="space-y-6">
@@ -128,10 +119,10 @@ export function AdminDashboard() {
 
       {/* Stats */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <DashboardStatCard icon={Users} label="Total interviews" value={total} sub="All time" color="#2563EB" delay={0} />
-        <DashboardStatCard icon={CheckCircle2} label="Completed" value={completed} sub="Reports generated" color="#22C55E" delay={0.05} />
-        <DashboardStatCard icon={Loader2} label="Processing" value={processing} sub="In the pipeline" color="#F59E0B" delay={0.1} />
-        <DashboardStatCard icon={XCircle} label="Failed" value={failed} sub="Need attention" color="#EF4444" delay={0.15} />
+        <DashboardStatCard icon={Users} label="Total interviews" value={stats.total_interviews} sub={`${stats.total_candidates} candidates`} color="#2563EB" delay={0} />
+        <DashboardStatCard icon={CheckCircle2} label="Completed" value={stats.interviewed_candidates} sub="Reports generated" color="#22C55E" delay={0.05} />
+        <DashboardStatCard icon={Loader2} label="Processing" value={stats.processing} sub="In the pipeline" color="#F59E0B" delay={0.1} />
+        <DashboardStatCard icon={XCircle} label="Failed" value={stats.failed} sub="Need attention" color="#EF4444" delay={0.15} />
       </div>
 
       {/* Charts */}
@@ -172,7 +163,7 @@ export function AdminDashboard() {
           <CardContent className="h-72">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart
-                data={[...interviews]
+                data={[...recent]
                   .sort((a, b) => new Date(a.created_at ?? 0).getTime() - new Date(b.created_at ?? 0).getTime())
                   .map((i) => ({
                     date: new Date(i.created_at ?? 0).toLocaleDateString(),
@@ -222,7 +213,7 @@ export function AdminDashboard() {
             </p>
           ) : (
             <div className="divide-y divide-border/60">
-              {recent.map((interview: AdminInterview) => (
+              {recent.map((interview: AdminDashboardRecent) => (
                 <Link
                   key={interview.id}
                   to={`/admin/candidates/${interview.id}`}
@@ -230,7 +221,7 @@ export function AdminDashboard() {
                 >
                   <Avatar className="h-10 w-10">
                     <AvatarImage
-                      src={mediaUrl(interview.candidate_profile?.profile_picture_url)}
+                      src={mediaUrl(interview.profile_picture_url)}
                       alt={interview.candidate_name}
                     />
                     <AvatarFallback>{initials(interview.candidate_name)}</AvatarFallback>
