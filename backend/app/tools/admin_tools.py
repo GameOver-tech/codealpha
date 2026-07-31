@@ -410,6 +410,63 @@ async def update_interview_status(db: AsyncSession, actor: User, **args) -> dict
     return {"interview_id": str(interview.id), "admin_status": status}
 
 
+async def send_interview_result_email(db: AsyncSession, actor: User, **args) -> dict:
+    """Send the candidate's interview result via email.
+
+    Resolves the candidate by email, takes their most recent completed
+    interview, and emails the result (status, recommendation, message).
+    """
+    _require_admin(actor)
+    email = (args.get("email") or "").strip().lower()
+    if not email:
+        raise BadRequestError("email is required")
+
+    users = UserRepository(db)
+    candidate = await users.get_by_email(email)
+    if candidate is None or candidate.role != UserRole.CANDIDATE:
+        raise NotFoundError(f"No candidate found with email '{email}'")
+
+    interviews = InterviewRepository(db)
+    items = await interviews.list_by_candidate(candidate.id)
+    if not items:
+        raise NotFoundError(f"Candidate '{email}' has no interviews yet.")
+
+    interview = items[0]
+    rec = interview.recommendation
+    verdict = rec.verdict.value if rec else None
+
+    from app.services.email_service import send_result_email
+    from app.utils.recommendation_messages import get_recommendation_message
+
+    outcome = send_result_email(
+        to_email=candidate.email,
+        candidate_name=candidate.full_name,
+        job_title=interview.job_title,
+        status=interview.status.value,
+        verdict=verdict or "",
+        message=get_recommendation_message(verdict) if rec else "",
+    )
+
+    await ActivityLogRepository(db).log(
+        actor.id,
+        "result_email_sent",
+        "interview",
+        str(interview.id),
+        {"email": candidate.email, "status": outcome["status"], "verdict": verdict},
+    )
+    await db.commit()
+
+    return {
+        "candidate_email": candidate.email,
+        "candidate_name": candidate.full_name,
+        "job_title": interview.job_title,
+        "status": interview.status.value,
+        "recommendation": verdict,
+        "email_status": outcome["status"],
+        "detail": outcome["detail"],
+    }
+
+
 # --- Analytics --------------------------------------------------------------
 
 

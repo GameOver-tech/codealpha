@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { NavLink, Outlet } from 'react-router-dom'
+import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
   LayoutDashboard,
@@ -8,21 +8,17 @@ import {
   Menu,
   X,
   ScanEye,
-  ClipboardList,
-  Bell,
-  Search,
-  ChevronDown,
+  LogOut,
   type LucideIcon,
 } from 'lucide-react'
-import { Avatar, AvatarFallback, AvatarImage, Button, Badge } from '@/components/ui'
-import { ThemeToggle, RecommendationBadge, StatusBadge, AccountMenu } from '@/components/shared'
+import { Avatar, AvatarFallback, AvatarImage, Button } from '@/components/ui'
+import { ThemeToggle } from '@/components/shared'
 import { ChatSidebar } from '@/components/chat'
 import { useAuth } from '@/context'
-import { useProfile, useInterviewStatus } from '@/hooks'
+import { useProfile } from '@/hooks'
 import { mediaUrl } from '@/services/api'
 import { initials } from '@/lib/utils'
 import { cn } from '@/lib/utils'
-import type { RecommendationVerdict } from '@/types'
 
 interface NavItem {
   to: string
@@ -39,7 +35,6 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
   {
     label: 'My Space',
     items: [
-      { to: '/dashboard/status', label: 'Interview Status', icon: ClipboardList },
       { to: '/dashboard/results', label: 'Results', icon: FileText },
       { to: '/dashboard/settings', label: 'Settings', icon: Settings },
     ],
@@ -47,10 +42,15 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
 ]
 
 export function CandidateLayout() {
-  const { user } = useAuth()
+  const { user, logout } = useAuth()
   const [mobileOpen, setMobileOpen] = useState(false)
   const { data: profile } = useProfile()
-  const { data: status, isLoading: statusLoading } = useInterviewStatus()
+  const navigate = useNavigate()
+
+  const handleLogout = async () => {
+    await logout()
+    navigate('/login')
+  }
 
   const sidebar = (
     <div className="flex h-full flex-col">
@@ -95,33 +95,15 @@ export function CandidateLayout() {
           </div>
         ))}
 
-        {/* Interview status card */}
-        <div className="pt-2">
-          <div className="rounded-xl border border-border/60 bg-muted/40 p-3">
-            <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground/50">Interview</p>
-            <div className="mt-2 flex flex-wrap items-center gap-1.5">
-              {statusLoading && !status ? (
-                <span className="h-5 w-20 animate-pulse rounded-full bg-muted" />
-              ) : status ? (
-                <StatusBadge status={status.status} />
-              ) : (
-                <Badge variant="secondary">No interview</Badge>
-              )}
-              {status?.recommendation && (
-                <RecommendationBadge verdict={status.recommendation as RecommendationVerdict} />
-              )}
-            </div>
-          </div>
-        </div>
       </nav>
 
-      {/* Account */}
+      {/* Account — clicking the profile opens Settings directly. */}
       <div className="border-t border-border/60 p-3">
-        <AccountMenu basePath="/dashboard">
-          <button
-            type="button"
-            className="flex w-full cursor-pointer items-center gap-3 rounded-xl p-2 text-left transition-colors hover:bg-accent"
-            aria-label="Open account menu"
+        <div className="flex items-center gap-1 rounded-xl p-2">
+          <NavLink
+            to="/dashboard/settings"
+            className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 rounded-lg text-left transition-colors hover:bg-accent"
+            aria-label="Open profile settings"
           >
             <span className="relative shrink-0">
               <Avatar className="h-9 w-9 border-2 border-card">
@@ -134,9 +116,17 @@ export function CandidateLayout() {
               <span className="block truncate text-[13px] font-semibold text-foreground">{user?.full_name}</span>
               <span className="block truncate text-[11px] text-muted-foreground">{user?.email}</span>
             </span>
-            <ChevronDown className="h-4 w-4 text-muted-foreground/60" />
+          </NavLink>
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-lg text-muted-foreground/60 transition-colors hover:bg-destructive/10 hover:text-destructive"
+            aria-label="Log out"
+            title="Log out"
+          >
+            <LogOut className="h-4 w-4" />
           </button>
-        </AccountMenu>
+        </div>
       </div>
     </div>
   )
@@ -187,37 +177,22 @@ export function CandidateLayout() {
             <Button variant="ghost" size="icon" className="lg:hidden" onClick={() => setMobileOpen(true)} aria-label="Open menu">
               <Menu className="h-5 w-5" />
             </Button>
-            <div className="relative hidden md:block">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/60" />
-              <input
-                type="search"
-                placeholder="Search…"
-                className="h-9 w-64 rounded-lg border border-border/60 bg-muted/40 pl-9 pr-3 text-sm text-foreground placeholder:text-muted-foreground/60 focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/10"
-              />
-            </div>
             <span className="font-display text-sm font-semibold text-muted-foreground lg:hidden">Candidate</span>
           </div>
 
           <div className="flex items-center gap-1.5">
-            <Button variant="ghost" size="icon" aria-label="Notifications" className="relative">
-              <Bell className="h-[1.15rem] w-[1.15rem]" />
-              <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-primary ring-2 ring-background" />
-            </Button>
             <ThemeToggle />
-            <div className="ml-1 border-l border-border/60 pl-2">
-              <AccountMenu basePath="/dashboard">
-                <button
-                  type="button"
-                  className="flex cursor-pointer items-center gap-2 rounded-full p-0.5 transition-shadow hover:ring-2 hover:ring-primary/30"
-                  aria-label="Open account menu"
-                >
-                  <Avatar className="h-8 w-8 border-2 border-card">
-                    <AvatarImage src={mediaUrl(profile?.profile_picture_url)} alt={user?.full_name ?? ''} />
-                    <AvatarFallback>{initials(user?.full_name ?? 'U')}</AvatarFallback>
-                  </Avatar>
-                </button>
-              </AccountMenu>
-            </div>
+            {/* Avatar — clicking opens Settings directly. */}
+            <NavLink
+              to="/dashboard/settings"
+              className="ml-1 flex cursor-pointer items-center gap-2 rounded-full border-l border-border/60 p-0.5 pl-2 transition-shadow hover:ring-2 hover:ring-primary/30"
+              aria-label="Open profile settings"
+            >
+              <Avatar className="h-8 w-8 border-2 border-card">
+                <AvatarImage src={mediaUrl(profile?.profile_picture_url)} alt={user?.full_name ?? ''} />
+                <AvatarFallback>{initials(user?.full_name ?? 'U')}</AvatarFallback>
+              </Avatar>
+            </NavLink>
           </div>
         </header>
 

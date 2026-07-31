@@ -100,6 +100,15 @@ class Settings(BaseSettings):
     UPLOAD_DIR: str = str(Path(__file__).resolve().parents[3] / "uploads")
     GENERATED_DIR: str = str(Path(__file__).resolve().parents[3] / "generated")
 
+    # --- Email (SMTP) ---
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_USERNAME: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM: str = "HireLens AI <no-reply@hirelens.ai>"
+    SMTP_USE_TLS: bool = True
+    EMAIL_ENABLED: bool = False
+
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.CORS_ORIGINS.split(",") if o.strip()]

@@ -21,6 +21,7 @@ import type {
   TokenResponse,
   Transcript,
   User,
+  UserUpdate,
 } from '@/types'
 
 export const authApi = {
@@ -28,6 +29,7 @@ export const authApi = {
   login: (payload: LoginRequest) => api.post<TokenResponse>('/api/auth/login', payload),
   logout: () => api.post<MessageResponse>('/api/auth/logout'),
   me: () => api.get<User>('/api/auth/me'),
+  updateMe: (payload: UserUpdate) => api.put<User>('/api/auth/me', payload),
   changePassword: (payload: ChangePasswordRequest) =>
     api.put<MessageResponse>('/api/auth/me/password', payload),
 }
@@ -223,6 +225,22 @@ export function streamChat(
 
 export const chatApi = {
   stream: streamChat,
+  uploadInterview: async (file: File, candidateEmail: string, jobTitle?: string) => {
+    const form = new FormData()
+    form.append('file', file)
+    form.append('candidate_email', candidateEmail)
+    if (jobTitle) form.append('job_title', jobTitle)
+    const res = await api.post<{
+      interview_id: string
+      candidate_email: string
+      status: string
+      message: string
+    }>('/api/chat/upload', form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 0,
+    })
+    return res.data
+  },
 }
 
 export { API_BASE_URL }

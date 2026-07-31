@@ -164,6 +164,14 @@ ADMIN_TOOLS: dict = {
         ),
         admin_tools.send_notification,
     ),
+    "send_interview_result_email": (
+        "Send a candidate's interview result to their email address. Resolves the "
+        "candidate by email, takes their most recent interview, and emails the "
+        "status, recommendation, and message. Use when the admin asks to email "
+        "a result to a candidate.",
+        _params(email=_str("The candidate's email address", required=True)),
+        admin_tools.send_interview_result_email,
+    ),
     "get_system_logs": (
         "Get recent system activity (audit log), optionally filtered by action name.",
         _params(

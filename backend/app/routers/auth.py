@@ -20,6 +20,7 @@ from app.schemas.auth import (
     MessageResponse,
     RegisterRequest,
     TokenResponse,
+    UpdateMeRequest,
     UserOut,
 )
 from app.utils.exceptions import ConflictError, NotFoundError
@@ -150,6 +151,26 @@ async def logout(current_user: User = Depends(get_current_user)):
 async def get_me(current_user: User = Depends(get_current_user)):
     """Return the authenticated user's details."""
     return _user_out(current_user)
+
+
+@router.put("/me", response_model=UserOut)
+async def update_me(
+    payload: UpdateMeRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Update the authenticated user's personal details (name, phone, gender)."""
+    updates = {k: v for k, v in payload.model_dump().items() if v is not None}
+    if not updates:
+        return _user_out(current_user)
+
+    repo = UserRepository(db)
+    await repo.update(current_user.id, **updates)
+    await db.commit()
+
+    updated = await repo.get(current_user.id)
+    logger.info("User %s updated profile", current_user.id)
+    return _user_out(updated)
 
 
 @router.put("/me/password", response_model=MessageResponse)
