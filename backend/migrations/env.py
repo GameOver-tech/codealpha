@@ -30,7 +30,14 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
+# Set the URL without configparser %-interpolation issues (e.g. URL-encoded
+# passwords containing '%40' — doubled to '%%40' so configparser passes it
+# through literally).
+config.set_section_option(
+    config.config_ini_section,
+    "sqlalchemy.url",
+    settings.DATABASE_URL.replace("%", "%%"),
+)
 
 target_metadata = Base.metadata
 
