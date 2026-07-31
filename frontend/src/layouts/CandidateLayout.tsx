@@ -4,13 +4,14 @@ import { AnimatePresence, motion } from 'framer-motion'
 import {
   LayoutDashboard,
   UserRound,
-  Upload,
   FileText,
   Settings,
   LogOut,
   Menu,
   X,
   ScanEye,
+  ClipboardList,
+  Download,
 } from 'lucide-react'
 import { Avatar, AvatarFallback, AvatarImage, Button } from '@/components/ui'
 import { ThemeToggle } from '@/components/shared'
@@ -18,10 +19,11 @@ import { useAuth } from '@/context'
 import { initials } from '@/lib/utils'
 
 const NAV_ITEMS = [
-  { to: '/dashboard', label: 'Overview', icon: LayoutDashboard, end: true },
-  { to: '/dashboard/profile', label: 'Profile', icon: UserRound },
-  { to: '/upload', label: 'Upload Interview', icon: Upload },
-  { to: '/dashboard/results', label: 'Interview Results', icon: FileText },
+  { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, end: true },
+  { to: '/dashboard/profile', label: 'My Profile', icon: UserRound },
+  { to: '/dashboard/status', label: 'Interview Status', icon: ClipboardList },
+  { to: '/dashboard/results', label: 'Results', icon: FileText },
+  { to: '/dashboard/reports', label: 'Reports', icon: Download },
   { to: '/dashboard/settings', label: 'Settings', icon: Settings },
 ]
 

@@ -237,6 +237,7 @@ def _build_story(payload: dict[str, Any]) -> list[Any]:
     meta = [
         ["Candidate Name", cand_name],
         ["Candidate Email", cand_email],
+        ["Job Position", _safe(payload.get("job_title")) or "—"],
         ["Interview Date", _format_date(interview_date)],
         ["Interview Duration", _format_duration(duration)],
     ]
@@ -273,32 +274,36 @@ def _build_story(payload: dict[str, Any]) -> list[Any]:
     story.append(Paragraph("1. Executive Summary", styles.h1))
     story.append(Paragraph(_safe(report.get("executive_summary")) or "No summary available.", styles.body))
 
-    # ---- Section 2: Transcript Summary ----
-    story.append(Paragraph("2. Transcript Summary", styles.h1))
+    # ---- Section 2: Candidate Overview ----
+    story.append(Paragraph("2. Candidate Overview", styles.h1))
+    story.append(Paragraph(_safe(report.get("candidate_overview")) or "No candidate overview available.", styles.body))
+
+    # ---- Section 3: Transcript Summary ----
+    story.append(Paragraph("3. Transcript Summary", styles.h1))
     if transcript:
         summary_text = transcript if len(transcript) <= 1200 else transcript[:1200] + "…"
         story.append(Paragraph(_safe(summary_text), styles.body))
     else:
         story.append(Paragraph("No transcript available.", styles.body))
 
-    # ---- Sections 3-7: Evaluations ----
+    # ---- Sections 4-8: Evaluations ----
     section_map = [
-        ("3. Technical Evaluation", "technical_assessment"),
-        ("4. Communication Evaluation", "communication_assessment"),
-        ("5. Confidence Analysis", "confidence_assessment"),
-        ("6. Problem Solving Evaluation", "problem_solving_assessment"),
-        ("7. Relevant Experience", "experience_assessment"),
+        ("4. Technical Evaluation", "technical_assessment"),
+        ("5. Communication Evaluation", "communication_assessment"),
+        ("6. Confidence Analysis", "confidence_assessment"),
+        ("7. Problem Solving Evaluation", "problem_solving_assessment"),
+        ("8. Relevant Experience", "experience_assessment"),
     ]
     for title, key in section_map:
         story.append(Paragraph(title, styles.h1))
         story.append(Paragraph(_safe(report.get(key)) or "Not assessed.", styles.body))
 
-    # ---- Sections 8-9: Strengths / Weaknesses ----
-    story.extend(_build_strengths_weaknesses_section(strengths, "8. Strengths"))
-    story.extend(_build_strengths_weaknesses_section(weaknesses, "9. Weaknesses"))
+    # ---- Sections 9-10: Strengths / Weaknesses ----
+    story.extend(_build_strengths_weaknesses_section(strengths, "9. Strengths"))
+    story.extend(_build_strengths_weaknesses_section(weaknesses, "10. Weaknesses"))
 
-    # ---- Section 10: Improvement Suggestions ----
-    story.append(Paragraph("10. Improvement Suggestions", styles.h1))
+    # ---- Section 11: Improvement Suggestions ----
+    story.append(Paragraph("11. Improvement Suggestions", styles.h1))
     suggestions = _parse_lines(report.get("improvement_suggestions"))
     if suggestions:
         for line in suggestions:
@@ -306,9 +311,9 @@ def _build_story(payload: dict[str, Any]) -> list[Any]:
     else:
         story.append(Paragraph("No suggestions recorded.", styles.body))
 
-    # ---- Section 11: Final Score Table ----
+    # ---- Section 12: Final Score Table ----
     story.append(PageBreak())
-    story.append(Paragraph("11. Final Score Table", styles.h1))
+    story.append(Paragraph("12. Final Score Table", styles.h1))
 
     score_labels = [
         ("Technical", "technical_skills"),
@@ -410,6 +415,7 @@ def _build_payload(interview, *, transcript_text: str = "") -> dict[str, Any]:
     return {
         "candidate_name": user.full_name if user else "Candidate",
         "candidate_email": user.email if user else "—",
+        "job_title": interview.job_title,
         "interview_date": interview.created_at,
         "duration_seconds": interview.duration_seconds,
         "overall_score": scores.overall_score if scores else 0,
@@ -432,6 +438,27 @@ def _build_payload(interview, *, transcript_text: str = "") -> dict[str, Any]:
         "strengths": strengths,
         "weaknesses": weaknesses,
     }
+
+
+async def generate_pdf_ondemand(db, interview_id) -> tuple[bytes, str]:
+    """Generate a professional PDF in memory from stored interview results.
+
+    Used by the admin 'Generate PDF' / 'Regenerate PDF' actions. Reads ONLY
+    already-persisted data (transcript, scores, recommendation, report,
+    strengths, weaknesses) — never calls Deepgram or the LLM, never writes
+    the PDF to disk, never stores it. Returns (pdf_bytes, filename).
+    """
+    from app.repositories.interview import InterviewRepository
+
+    interviews = InterviewRepository(db)
+    interview = await interviews.get_full(interview_id)
+    if interview is None:
+        raise BadRequestError(f"Interview {interview_id} not found")
+
+    payload = _build_payload(interview)
+    pdf_bytes = await _generate_pdf_bytes_async(payload)
+    filename = f"HireLens-Report-{_safe(payload['candidate_name']).replace(' ', '-')}.pdf"
+    return pdf_bytes, filename
 
 
 async def generate_interview_pdf(db, interview_id) -> dict[str, Any]:

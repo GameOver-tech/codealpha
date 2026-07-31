@@ -288,3 +288,113 @@ def test_jobs_create_and_list(client, monkeypatch):
     r = client.get("/api/jobs")
     assert r.status_code == 200, r.text
     assert len(r.json()) == 1
+
+
+def test_admin_upload_requires_candidate_email(client, monkeypatch):
+    """Upload without a candidate_email must be rejected (no anonymous interviews)."""
+    from app.models.user import User, UserRole
+
+    async def _seed_admin():
+        async with database.AsyncSessionLocal() as db:
+            admin = User(email="admin@test.com", first_name="A", last_name="D", role=UserRole.ADMIN)
+            db.add(admin)
+            await db.commit()
+            return str(admin.id)
+
+    admin_id = asyncio.run(_seed_admin())
+
+    async def _fake_admin(credentials=None, db=object()):
+        async with database.AsyncSessionLocal() as session:
+            from app.repositories.user import UserRepository
+
+            return await UserRepository(session).get(admin_id)
+
+    app.dependency_overrides[auth_deps.get_current_user] = _fake_admin
+
+    # No candidate_email field -> 422 validation error
+    r = client.post(
+        "/api/admin/upload",
+        files={"file": ("rec.mp4", b"fake-video-bytes", "video/mp4")},
+        data={"job_title": "Engineer"},
+    )
+    assert r.status_code == 422, r.text
+
+
+def test_admin_upload_unknown_email_404(client, monkeypatch):
+    """Uploading for a non-existent candidate email must be rejected with 404."""
+    from app.models.user import User, UserRole
+
+    async def _seed_admin():
+        async with database.AsyncSessionLocal() as db:
+            admin = User(email="admin@test.com", first_name="A", last_name="D", role=UserRole.ADMIN)
+            db.add(admin)
+            await db.commit()
+            return str(admin.id)
+
+    admin_id = asyncio.run(_seed_admin())
+
+    async def _fake_admin(credentials=None, db=object()):
+        async with database.AsyncSessionLocal() as session:
+            from app.repositories.user import UserRepository
+
+            return await UserRepository(session).get(admin_id)
+
+    app.dependency_overrides[auth_deps.get_current_user] = _fake_admin
+
+    r = client.post(
+        "/api/admin/upload",
+        files={"file": ("rec.mp4", b"fake-video-bytes", "video/mp4")},
+        data={"candidate_email": "does-not-exist@test.com", "job_title": "Engineer"},
+    )
+    assert r.status_code == 404, r.text
+    assert "No candidate found" in r.json()["detail"]
+
+
+def test_admin_upload_links_to_candidate(client, monkeypatch):
+    """Upload for an existing candidate links the interview to their user id."""
+    from app.models.interview import Interview, InterviewStatus
+    from app.models.user import User, UserRole
+    from app.repositories.interview import InterviewRepository
+
+    async def _seed():
+        async with database.AsyncSessionLocal() as db:
+            admin = User(email="admin@test.com", first_name="A", last_name="D", role=UserRole.ADMIN)
+            db.add(admin)
+            await db.flush()
+            candidate = User(
+                email="real-candidate@test.com",
+                first_name="Real",
+                last_name="Candidate",
+                role=UserRole.CANDIDATE,
+            )
+            db.add(candidate)
+            await db.commit()
+            return {"admin_id": str(admin.id), "candidate_id": str(candidate.id)}
+
+    ids = asyncio.run(_seed())
+
+    async def _fake_admin(credentials=None, db=object()):
+        async with database.AsyncSessionLocal() as session:
+            from app.repositories.user import UserRepository
+
+            return await UserRepository(session).get(ids["admin_id"])
+
+    app.dependency_overrides[auth_deps.get_current_user] = _fake_admin
+
+    r = client.post(
+        "/api/admin/upload",
+        files={"file": ("rec.mp4", b"fake-video-bytes", "video/mp4")},
+        data={"candidate_email": "real-candidate@test.com", "job_title": "Engineer"},
+    )
+    assert r.status_code == 201, r.text
+    data = r.json()
+    assert data["candidate_id"] == ids["candidate_id"]
+    assert data["candidate_email"] == "real-candidate@test.com"
+
+    # The interview must be owned by the candidate, not the admin.
+    async def _verify():
+        async with database.AsyncSessionLocal() as db:
+            interviews = await InterviewRepository(db).list_by_candidate(ids["candidate_id"])
+            return len(interviews) == 1
+
+    assert asyncio.run(_verify())

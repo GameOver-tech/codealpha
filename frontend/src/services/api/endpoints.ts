@@ -59,9 +59,10 @@ export const candidateApi = {
 }
 
 export const adminApi = {
-  upload: async (file: File, jobTitle: string, jobDescription: string) => {
+  upload: async (file: File, candidateEmail: string, jobTitle: string, jobDescription: string) => {
     const form = new FormData()
     form.append('file', file)
+    form.append('candidate_email', candidateEmail)
     form.append('job_title', jobTitle)
     if (jobDescription) form.append('job_description', jobDescription)
     const res = await api.post<AdminUploadResponse>('/api/admin/upload', form, {
@@ -101,6 +102,21 @@ export const adminApi = {
     })
     return res.data
   },
+
+  regenerateReportPdf: async (interviewId: string) => {
+    const res = await api.get<Blob>('/api/admin/report/pdf/regenerate', {
+      params: { interview_id: interviewId },
+      responseType: 'blob',
+    })
+    return res.data
+  },
+
+  updateStatus: (interviewId: string, status: string) =>
+    api.put<{ interview_id: string; admin_status: string; message: string }>(
+      `/api/admin/interview/${interviewId}/status`,
+      null,
+      { params: { status } },
+    ),
 
   interviews: () => api.get<AdminInterview[]>('/api/admin/interviews'),
 

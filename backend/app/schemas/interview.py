@@ -21,6 +21,7 @@ class InterviewStatusOut(ORMModel):
     id: uuid.UUID
     title: str
     status: str
+    admin_status: str = "Pending"
     job_title: str
     created_at: datetime | None = None
     updated_at: datetime | None = None

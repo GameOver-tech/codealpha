@@ -44,3 +44,25 @@ export function RecommendationBadge({
   if (!verdict) return <Badge variant="secondary" className={className}>Pending</Badge>
   return <Badge variant={REC_META[verdict] ?? 'secondary'} className={className}>{verdict}</Badge>
 }
+
+const ADMIN_STATUS_META: Record<string, { variant: BadgeProps['variant']; dot?: string }> = {
+  Pending: { variant: 'secondary' },
+  Processing: { variant: 'default', dot: '#2563EB' },
+  Completed: { variant: 'success' },
+  Recommended: { variant: 'success' },
+  'Not Recommended': { variant: 'destructive' },
+  'Need Further Review': { variant: 'warning' },
+  Rejected: { variant: 'destructive' },
+  Selected: { variant: 'success' },
+}
+
+/** Badge for the admin-controlled review status (human-set). */
+export function AdminStatusBadge({ status, className }: { status: string; className?: string }) {
+  const meta = ADMIN_STATUS_META[status] ?? { variant: 'secondary' as const }
+  return (
+    <Badge variant={meta.variant} className={className}>
+      {meta.dot && <span className="h-1.5 w-1.5 animate-pulse rounded-full" style={{ backgroundColor: meta.dot }} />}
+      {status || 'Pending'}
+    </Badge>
+  )
+}

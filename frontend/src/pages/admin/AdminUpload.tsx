@@ -2,7 +2,7 @@ import { useCallback, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useDropzone } from 'react-dropzone'
 import { motion } from 'framer-motion'
-import { UploadCloud, FileVideo, X, AlertTriangle, CheckCircle2 } from 'lucide-react'
+import { UploadCloud, FileVideo, X, AlertTriangle, CheckCircle2, Mail } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { Button, Card, CardContent, Input, Label, Textarea, Progress } from '@/components/ui'
 import { PageHeader } from '@/components/shared'
@@ -11,15 +11,19 @@ import { formatBytes } from '@/lib/utils'
 
 const ACCEPTED_EXTENSIONS = ['mp4', 'mov', 'avi', 'mkv', 'mp3', 'wav', 'm4a', 'flac', 'aac']
 const MAX_SIZE = 200 * 1024 * 1024 // 200 MB
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 export function AdminUpload() {
   const navigate = useNavigate()
   const [file, setFile] = useState<File | null>(null)
+  const [candidateEmail, setCandidateEmail] = useState('')
   const [jobTitle, setJobTitle] = useState('')
   const [jobDescription, setJobDescription] = useState('')
   const [uploading, setUploading] = useState(false)
   const [progress, setProgress] = useState(0)
   const [error, setError] = useState<string | null>(null)
+
+  const emailInvalid = candidateEmail.trim().length > 0 && !EMAIL_RE.test(candidateEmail.trim())
 
   const validateFile = useCallback((candidate: File): string | null => {
     const ext = candidate.name.split('.').pop()?.toLowerCase() ?? ''
@@ -73,10 +77,10 @@ export function AdminUpload() {
       })
     }, 400)
     try {
-      const res = await adminApi.upload(file, jobTitle || 'Interview', jobDescription)
+      const res = await adminApi.upload(file, candidateEmail.trim(), jobTitle || 'Interview', jobDescription)
       window.clearInterval(timer)
       setProgress(100)
-      toast.success('Upload successful! Processing started.')
+      toast.success(`Upload successful! Processing started for ${res.candidate_email}.`)
       navigate(`/admin/processing/${res.interview_id}`)
     } catch (uploadError) {
       window.clearInterval(timer)
@@ -167,6 +171,30 @@ export function AdminUpload() {
       <Card>
         <CardContent className="space-y-5 p-6 sm:p-8">
           <div className="space-y-2">
+            <Label htmlFor="candidate_email">
+              Candidate email <span className="text-destructive">*</span>
+            </Label>
+            <div className="relative">
+              <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                id="candidate_email"
+                type="email"
+                value={candidateEmail}
+                onChange={(e) => setCandidateEmail(e.target.value)}
+                placeholder="candidate@company.com"
+                className="pl-9"
+                aria-invalid={emailInvalid}
+              />
+            </div>
+            {emailInvalid && (
+              <p className="text-xs font-medium text-destructive">Enter a valid email address.</p>
+            )}
+            <p className="text-xs text-muted-foreground">
+              The interview will be linked to the registered candidate with this email. The candidate
+              must have an account first — unknown emails are rejected.
+            </p>
+          </div>
+          <div className="space-y-2">
             <Label htmlFor="job_title">Job title</Label>
             <Input
               id="job_title"
@@ -185,7 +213,13 @@ export function AdminUpload() {
               rows={5}
             />
           </div>
-          <Button size="lg" className="w-full" onClick={handleUpload} disabled={!file || Boolean(error)} loading={uploading}>
+          <Button
+            size="lg"
+            className="w-full"
+            onClick={handleUpload}
+            disabled={!file || Boolean(error) || !candidateEmail.trim() || emailInvalid}
+            loading={uploading}
+          >
             <UploadCloud />
             Submit interview
           </Button>

@@ -8,3 +8,5 @@
 - Requires performance discipline: lazy-loaded routes, code splitting, memoization, and debouncing. Confidence: 0.85
 - Authentication should use JWT with secure token storage, auto-refresh of login state, protected routes, and role-based routing that isolates different user roles. Confidence: 0.85
 - Judges the app by actually using it: a runtime crash that blanks a page or throws uncaught console errors is a defect even when typecheck and build pass — real usage flows (e.g., logging in as a role and navigating) must render without errors. Confidence: 0.75
+- Per-role navigation: each role's sidebar/menu must expose only that role's allowed features (e.g., candidates never see upload/admin items; admins get the full suite) — cross-role links are defects. Confidence: 0.85
+- Never store files/media client-side (no Base64 blobs); file downloads like PDFs use blob responses with client-side object URLs, and actions that create artifacts (e.g., PDF regeneration) should trigger the download directly from a generated blob. Confidence: 0.75

@@ -1,23 +1,21 @@
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
 import {
-  Upload,
   FileText,
   Clock,
   Trophy,
-  ArrowRight,
   AlertTriangle,
   Loader2,
   Video,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
-import { Button, Card, CardContent, CardHeader, CardTitle, Skeleton } from '@/components/ui'
-import { EmptyState, PageHeader, StatusBadge, CircularProgress, RecommendationBadge } from '@/components/shared'
+import { Button, Card, CardContent, Skeleton } from '@/components/ui'
+import { EmptyState, PageHeader, StatusBadge, AdminStatusBadge, CircularProgress, RecommendationBadge } from '@/components/shared'
 import type { RecommendationVerdict } from '@/types'
 import { useAuth } from '@/context'
-import { useInterviewStatus, useInterviewResult, useJobs, queryKeys } from '@/hooks'
+import { useInterviewStatus, useInterviewResult, queryKeys } from '@/hooks'
 import { getErrorMessage } from '@/services/api'
 import { formatDuration } from '@/lib/utils'
 
@@ -29,7 +27,6 @@ export function DashboardOverview() {
 
   const statusQuery = useInterviewStatus()
   const resultQuery = useInterviewResult()
-  const jobsQuery = useJobs()
 
   const status = statusQuery.data
   const result = resultQuery.data
@@ -49,8 +46,6 @@ export function DashboardOverview() {
       setRefreshing(false)
     }
   }
-
-  const activeJobs = jobsQuery.data?.filter((job) => job.is_active) ?? []
 
   return (
     <div className="space-y-6">
@@ -81,6 +76,7 @@ export function DashboardOverview() {
               <CardContent className="flex flex-col justify-center p-6 md:p-8">
                 <div className="flex flex-wrap items-center gap-3">
                   <StatusBadge status={status.status} />
+                  <AdminStatusBadge status={status.admin_status} />
                   {status.recommendation && (
                     <RecommendationBadge verdict={status.recommendation as RecommendationVerdict} />
                   )}
@@ -112,15 +108,14 @@ export function DashboardOverview() {
                     <Button onClick={() => navigate('/dashboard/results')}>
                       <FileText />
                       View results
-                      <ArrowRight />
                     </Button>
                   ) : status.status === 'failed' ? (
-                    <Button onClick={() => navigate('/upload')}>
-                      <Upload />
-                      Upload again
+                    <Button onClick={() => navigate('/dashboard/status')}>
+                      <AlertTriangle />
+                      View failure details
                     </Button>
                   ) : (
-                    <Button onClick={() => navigate('/dashboard/processing')} loading={!status}>
+                    <Button onClick={() => navigate('/dashboard/status')} loading={!status}>
                       <Loader2 className={status ? 'animate-spin' : ''} />
                       Track processing
                     </Button>
@@ -144,13 +139,7 @@ export function DashboardOverview() {
           <EmptyState
             icon={Video}
             title="No interview yet"
-            description="Upload your first interview recording to get an AI-powered evaluation."
-            action={
-              <Button size="lg" onClick={() => navigate('/upload')}>
-                <Upload />
-                Upload your first interview
-              </Button>
-            }
+            description="Your recruiter will upload your interview recording here. Once it's evaluated, you'll see your full AI report in this dashboard."
           />
         )}
       </motion.div>
@@ -191,46 +180,6 @@ export function DashboardOverview() {
           </Card>
         ))}
       </div>
-
-      {/* Open positions */}
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle>Open positions</CardTitle>
-          <Link to="/jobs" className="text-xs font-semibold text-primary hover:underline">
-            View all
-          </Link>
-        </CardHeader>
-        <CardContent>
-          {jobsQuery.isLoading ? (
-            <div className="space-y-3">
-              {[0, 1].map((i) => (
-                <Skeleton key={i} className="h-16 w-full" />
-              ))}
-            </div>
-          ) : activeJobs.length > 0 ? (
-            <ul className="divide-y divide-border/60">
-              {activeJobs.slice(0, 5).map((job) => (
-                <li key={job.id} className="flex items-center justify-between gap-4 py-3.5">
-                  <div className="min-w-0">
-                    <p className="truncate font-semibold text-foreground">{job.title}</p>
-                    <p className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">{job.description}</p>
-                  </div>
-                  <Button variant="ghost" size="sm" asChild>
-                    <Link to={`/jobs/${job.id}`}>
-                      Apply
-                      <ArrowRight />
-                    </Link>
-                  </Button>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="py-6 text-center text-sm text-muted-foreground">
-              No open positions right now. Check back soon.
-            </p>
-          )}
-        </CardContent>
-      </Card>
     </div>
   )
 }

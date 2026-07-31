@@ -413,12 +413,77 @@ class InterviewPipeline:
             {"status": "completed"},
         )
         await self.db.commit()
+
+        # ---- Stage 11: Remove the temporary media file ----
+        # Only the transcript + AI evaluation remain permanently. The raw
+        # upload is no longer needed and is deleted to free storage.
+        await self._cleanup_media(interview_id)
+
         logger.info(
             "[Stage 10] Processing completed for interview %s in %.1fs",
             interview_id,
             _elapsed(),
         )
         return interview
+
+    async def _cleanup_media(self, interview_id) -> None:
+        """Delete the uploaded recording now that processing is complete.
+
+        The interview_files row (metadata) is kept for the audit trail, but
+        the actual media bytes on disk (and any Supabase Storage copy) are
+        removed. The pipeline never needs the raw media again — everything
+        downstream reads the persisted transcript + evaluation.
+        """
+        try:
+            from app.repositories.interview_file import InterviewFileRepository
+            from app.storage.service import LocalStorage, SupabaseStorage, cleanup_local_file
+
+            files = InterviewFileRepository(self.db)
+            rows = await files.list_by_interview(interview_id)
+            if not rows:
+                logger.info("[Stage 11] No media files to clean up for %s", interview_id)
+                return
+
+            storage = LocalStorage()
+            for row in rows:
+                # Local disk copy.
+                if row.storage_path:
+                    if storage.exists(row.storage_path):
+                        storage.delete(row.storage_path)
+                        logger.info(
+                            "[Stage 11] Deleted local media %s for interview %s",
+                            row.storage_path,
+                            interview_id,
+                        )
+                    else:
+                        cleanup_local_file(row.storage_path)
+
+                    # Remove the now-empty per-interview directory.
+                    parent = Path(settings.UPLOAD_DIR) / row.storage_path
+                    if parent.parent.is_dir() and not any(parent.parent.iterdir()):
+                        try:
+                            parent.parent.rmdir()
+                        except OSError:
+                            pass
+
+                # Remote Supabase Storage copy (best-effort).
+                if settings.SUPABASE_URL:
+                    try:
+                        SupabaseStorage().delete(row.storage_path)
+                    except Exception as exc:  # noqa: BLE001
+                        logger.warning(
+                            "[Stage 11] Could not delete remote media %s: %s",
+                            row.storage_path,
+                            exc,
+                        )
+
+            # Clear the storage path on the existing rows so the audit trail
+            # shows the media was purged without creating duplicate rows.
+            for row in rows:
+                row.storage_path = ""
+            await self.db.commit()
+        except Exception as exc:  # noqa: BLE001 — cleanup must never fail the pipeline
+            logger.exception("Media cleanup failed for interview %s: %s", interview_id, exc)
 
     async def _generate_pdf(self, interview_id) -> None:
         """Generate and store the professional PDF report (imported lazily)."""
@@ -464,6 +529,55 @@ async def sweep_stuck_interviews(db: AsyncSession, stale_after_seconds: int = 90
         await db.commit()
         logger.warning("Swept stuck interview %s (stale %ss) -> FAILED", interview.id, int(age))
     return len(stuck)
+
+
+async def sweep_orphaned_media(db: AsyncSession, limit: int = 100) -> int:
+    """Delete media files belonging to interviews already in a terminal state.
+
+    Runs at startup to reclaim storage from any uploads whose pipeline
+    finished (or failed) before the per-interview cleanup existed. Only
+    transcript + evaluation remain permanently — the raw media is removed.
+    """
+    from sqlalchemy import select
+
+    from app.models.interview_file import InterviewFile
+    from app.storage.service import LocalStorage, SupabaseStorage
+
+    terminal_statuses = (InterviewStatus.COMPLETED, InterviewStatus.FAILED)
+    stmt = (
+        select(InterviewFile)
+        .join(Interview, Interview.id == InterviewFile.interview_id)
+        .where(Interview.status.in_(terminal_statuses))
+        .where(InterviewFile.storage_path != "")
+        .limit(limit)
+    )
+    result = await db.execute(stmt)
+    rows = list(result.scalars().all())
+    if not rows:
+        return 0
+
+    storage = LocalStorage()
+    remote = SupabaseStorage() if settings.SUPABASE_URL else None
+    purged = 0
+    for row in rows:
+        try:
+            if storage.exists(row.storage_path):
+                storage.delete(row.storage_path)
+            elif row.storage_path and (Path(settings.UPLOAD_DIR) / row.storage_path).exists():
+                (Path(settings.UPLOAD_DIR) / row.storage_path).unlink(missing_ok=True)
+            if remote is not None and row.storage_path:
+                remote.delete(row.storage_path)
+            # Remove the (now empty) per-interview directory.
+            parent = Path(settings.UPLOAD_DIR) / row.storage_path
+            if parent.parent.is_dir() and not any(parent.parent.iterdir()):
+                parent.parent.rmdir()
+            row.storage_path = ""
+            purged += 1
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Media sweep failed for file %s: %s", row.id, exc)
+    await db.commit()
+    logger.info("Media sweep: purged %s file(s) for terminal interviews", purged)
+    return purged
 
 
 async def enqueue_interview_processing(interview_id) -> bool:

@@ -61,6 +61,7 @@ export interface InterviewStatus {
   id: string
   title: string
   status: InterviewStatusValue
+  admin_status: string
   job_title: string
   created_at: string | null
   updated_at: string | null
@@ -221,6 +222,8 @@ export interface ProfileUpdate {
 export interface AdminUploadResponse {
   interview_id: string
   file_id: string
+  candidate_id: string
+  candidate_email: string
   status: string
   message: string
 }
@@ -242,11 +245,21 @@ export interface InterviewProgress {
   processing_finished_at: string | null
 }
 
+export interface CandidateProfileSummary {
+  skills: string
+  education: string
+  experience: string
+  current_company: string
+  profile_picture_url: string
+}
+
 export interface AdminInterview {
   id: string
   candidate_id: string
   candidate_name: string
   candidate_email: string
+  candidate_profile: CandidateProfileSummary | null
+  admin_status: string
   job_title: string
   status: InterviewStatusValue
   progress: number

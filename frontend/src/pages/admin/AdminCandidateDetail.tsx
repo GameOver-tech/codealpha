@@ -26,6 +26,7 @@ import {
   Loader2,
   ShieldCheck,
   AlertTriangle,
+  ClipboardCheck,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import {
@@ -41,10 +42,21 @@ import {
   TabsTrigger,
   Badge,
 } from '@/components/ui'
-import { CircularProgress, EmptyState, PageHeader, RecommendationBadge, StatusBadge } from '@/components/shared'
+import { CircularProgress, EmptyState, PageHeader, RecommendationBadge, StatusBadge, AdminStatusBadge } from '@/components/shared'
 import { useAdminAnalysis, useAdminInterviews, useAdminProgress, queryKeys } from '@/hooks'
 import { adminApi, getErrorMessage } from '@/services/api'
 import { formatDuration } from '@/lib/utils'
+
+const ADMIN_STATUSES = [
+  'Pending',
+  'Processing',
+  'Completed',
+  'Recommended',
+  'Not Recommended',
+  'Need Further Review',
+  'Rejected',
+  'Selected',
+]
 
 const SCORE_LABELS: { key: string; label: string }[] = [
   { key: 'technical_skills', label: 'Technical' },
@@ -113,6 +125,29 @@ export function AdminCandidateDetail() {
     onError: (error) => toast.error(getErrorMessage(error)),
   })
 
+  const regeneratePdfMutation = useMutation({
+    mutationFn: (id: string) => adminApi.regenerateReportPdf(id),
+    onSuccess: (blob) => {
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `HireLens-Report-${meta?.candidate_name ?? interviewId}.pdf`
+      a.click()
+      URL.revokeObjectURL(url)
+      toast.success('PDF regenerated from stored results')
+    },
+    onError: (error) => toast.error(getErrorMessage(error)),
+  })
+
+  const statusMutation = useMutation({
+    mutationFn: (status: string) => adminApi.updateStatus(interviewId!, status),
+    onSuccess: (res) => {
+      toast.success(res.data.message)
+      queryClient.invalidateQueries({ queryKey: queryKeys.adminInterviews })
+    },
+    onError: (error) => toast.error(getErrorMessage(error)),
+  })
+
   const overrideMutation = useMutation({
     mutationFn: () => adminApi.overrideRecommendation(interviewId!, overrideVerdict, overrideReason),
     onSuccess: (res) => {
@@ -167,14 +202,23 @@ export function AdminCandidateDetail() {
         title={meta?.candidate_name ?? 'Candidate Report'}
         description={meta?.candidate_email ?? interviewId}
         actions={
-          <Button
-            variant="outline"
-            onClick={() => reportPdfMutation.mutate(interviewId!)}
-            loading={reportPdfMutation.isPending}
-          >
-            <Download />
-            Download report
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              onClick={() => regeneratePdfMutation.mutate(interviewId!)}
+              loading={regeneratePdfMutation.isPending}
+            >
+              <RefreshCw />
+              Regenerate PDF
+            </Button>
+            <Button
+              onClick={() => reportPdfMutation.mutate(interviewId!)}
+              loading={reportPdfMutation.isPending}
+            >
+              <Download />
+              Download report
+            </Button>
+          </div>
         }
       />
 
@@ -188,11 +232,46 @@ export function AdminCandidateDetail() {
         </Button>
         {meta && <Badge variant="secondary">{meta.job_title}</Badge>}
         {meta && <StatusBadge status={meta.status} />}
+        {meta && <AdminStatusBadge status={meta.admin_status} />}
         {bundle.recommendation && <RecommendationBadge verdict={bundle.recommendation.verdict} />}
         {meta?.duration_seconds ? (
           <Badge variant="outline">{formatDuration(meta.duration_seconds)}</Badge>
         ) : null}
       </div>
+
+      {/* Candidate profile card */}
+      {meta?.candidate_profile && (
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <h3 className="font-display text-base font-bold text-foreground">Candidate profile</h3>
+              {meta.candidate_profile.current_company && (
+                <Badge variant="secondary">{meta.candidate_profile.current_company}</Badge>
+              )}
+            </div>
+            <div className="mt-4 grid gap-4 md:grid-cols-2">
+              <div>
+                <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Skills</p>
+                <p className="mt-1 text-sm text-foreground">
+                  {meta.candidate_profile.skills || 'Not provided'}
+                </p>
+              </div>
+              <div>
+                <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Education</p>
+                <p className="mt-1 text-sm text-foreground">
+                  {meta.candidate_profile.education || 'Not provided'}
+                </p>
+              </div>
+              <div className="md:col-span-2">
+                <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Experience</p>
+                <p className="mt-1 text-sm text-foreground">
+                  {meta.candidate_profile.experience || 'Not provided'}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <Tabs defaultValue="overview" className="space-y-6">
         <TabsList className="flex-wrap">
@@ -391,6 +470,41 @@ export function AdminCandidateDetail() {
         </TabsContent>
 
         <TabsContent value="insights" className="mt-0 space-y-6">
+          {/* Admin status management */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <ClipboardCheck className="h-5 w-5 text-primary" />
+                Interview status
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="mb-4 text-sm text-muted-foreground">
+                Current status:{' '}
+                <AdminStatusBadge status={meta?.admin_status ?? 'Pending'} className="ml-1" />
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {ADMIN_STATUSES.map((status) => {
+                  const active = (meta?.admin_status ?? 'Pending') === status
+                  return (
+                    <button
+                      key={status}
+                      onClick={() => statusMutation.mutate(status)}
+                      disabled={statusMutation.isPending}
+                      className={`rounded-full border px-4 py-1.5 text-xs font-semibold transition-all disabled:opacity-50 ${
+                        active
+                          ? 'border-primary bg-primary/10 text-primary'
+                          : 'border-border text-muted-foreground hover:border-primary/40 hover:text-foreground'
+                      }`}
+                    >
+                      {status}
+                    </button>
+                  )
+                })}
+              </div>
+            </CardContent>
+          </Card>
+
           {/* Recommendation override */}
           <Card>
             <CardHeader>

@@ -3,7 +3,9 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 
+from app.core.config import settings
 from app.core.logging import get_logger
 from app.routers import health, auth, jobs, interviews, profile, admin
 from app.utils.exceptions import TranscriptionError
@@ -21,12 +23,18 @@ async def lifespan(app: FastAPI):
     """
     try:
         from app.core.database import AsyncSessionLocal
-        from app.services.pipeline_service import sweep_stuck_interviews
+        from app.services.pipeline_service import (
+            sweep_orphaned_media,
+            sweep_stuck_interviews,
+        )
 
         async with AsyncSessionLocal() as db:
             recovered = await sweep_stuck_interviews(db)
             if recovered:
                 logger.warning("Startup sweep recovered %s stuck interview(s)", recovered)
+            purged = await sweep_orphaned_media(db)
+            if purged:
+                logger.info("Startup media sweep purged %s orphaned file(s)", purged)
     except Exception:  # noqa: BLE001
         logger.exception("Startup stuck-interview sweep failed")
     yield
@@ -133,3 +141,16 @@ app.include_router(jobs.router)
 app.include_router(interviews.router)
 app.include_router(profile.router)
 app.include_router(admin.router)
+
+# Serve locally-stored uploads (avatars, recordings, generated PDFs) at /media.
+# Supabase Storage sync replaces this in production, but local dev must work.
+app.mount(
+    "/media",
+    StaticFiles(directory=settings.UPLOAD_DIR, check_dir=False),
+    name="media",
+)
+app.mount(
+    "/generated",
+    StaticFiles(directory=settings.GENERATED_DIR, check_dir=False),
+    name="generated",
+)

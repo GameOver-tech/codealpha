@@ -3,7 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { Camera, Save, Building2, GraduationCap, Wrench, DollarSign, Link as LinkIcon } from 'lucide-react'
+import { Camera, Save, Building2, GraduationCap, Wrench, DollarSign } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { Button, Card, CardContent, Input, Label, Skeleton, Textarea } from '@/components/ui'
 import { Avatar, AvatarFallback, AvatarImage, PageHeader, CardSection } from '@/components/shared'
@@ -202,27 +202,6 @@ export function CandidateProfile() {
               </div>
             </div>
           </div>
-        </CardSection>
-
-        <CardSection title="Links" description="Connect your professional profiles.">
-          <div className="grid gap-5 sm:grid-cols-3">
-            {[
-              { label: 'Portfolio', placeholder: 'https://your-site.com', icon: LinkIcon },
-              { label: 'GitHub', placeholder: 'https://github.com/you', icon: LinkIcon },
-              { label: 'LinkedIn', placeholder: 'https://linkedin.com/in/you', icon: LinkIcon },
-            ].map((field) => (
-              <div key={field.label} className="space-y-2">
-                <Label>{field.label}</Label>
-                <div className="relative">
-                  <field.icon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input className="pl-9" placeholder={field.placeholder} />
-                </div>
-              </div>
-            ))}
-          </div>
-          <p className="mt-3 text-xs text-muted-foreground">
-            These fields will be part of your interview report.
-          </p>
         </CardSection>
 
         <div className="flex justify-end gap-3">

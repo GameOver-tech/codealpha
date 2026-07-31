@@ -85,7 +85,9 @@ export function CandidateProcessing() {
             <p className="max-w-md text-sm text-muted-foreground">
               {status.failure_reason || status.error_message || 'The interview could not be processed.'}
             </p>
-            <Button onClick={() => navigate('/upload')}>Upload again</Button>
+            <p className="text-xs text-muted-foreground">
+              Contact your recruiter to re-upload the recording.
+            </p>
           </CardContent>
         </Card>
       </div>

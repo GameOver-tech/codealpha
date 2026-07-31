@@ -34,11 +34,15 @@ def _status_out(interview) -> InterviewStatusOut:
         id=str(interview.id),
         title=interview.title,
         status=interview.status.value,
+        admin_status=interview.admin_status,
         job_title=interview.job_title,
         created_at=interview.created_at,
         updated_at=interview.updated_at,
         duration_seconds=interview.duration_seconds,
         error_message=interview.error_message,
+        failure_reason=interview.failure_reason,
+        failure_stage=interview.failure_stage,
+        processing_finished_at=interview.processing_finished_at,
         recommendation=rec.verdict.value if rec else None,
     )
 

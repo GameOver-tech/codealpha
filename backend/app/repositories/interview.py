@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from app.models.interview import Interview, InterviewStatus
+from app.models.user import User
 from app.repositories.base import BaseRepository, _coerce_uuid
 
 
@@ -14,7 +15,7 @@ class InterviewRepository(BaseRepository[Interview]):
 
     def _with_relations(self, stmt):
         return stmt.options(
-            selectinload(Interview.candidate),
+            selectinload(Interview.candidate).selectinload(User.profile),
             selectinload(Interview.files),
             selectinload(Interview.transcript),
             selectinload(Interview.speech_analysis),

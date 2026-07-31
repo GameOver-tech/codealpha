@@ -11,6 +11,7 @@ import {
   Menu,
   X,
   ScanEye,
+  Loader2,
 } from 'lucide-react'
 import { Avatar, AvatarFallback, AvatarImage, Button } from '@/components/ui'
 import { ThemeToggle } from '@/components/shared'
@@ -21,6 +22,7 @@ const NAV_ITEMS = [
   { to: '/admin', label: 'Dashboard', icon: LayoutDashboard, end: true },
   { to: '/admin/candidates', label: 'Candidates', icon: Users },
   { to: '/admin/upload', label: 'Upload Interview', icon: Upload },
+  { to: '/admin/processing', label: 'Processing', icon: Loader2 },
   { to: '/admin/reports', label: 'Reports', icon: FileText },
   { to: '/admin/settings', label: 'Settings', icon: Settings },
 ]

@@ -52,7 +52,18 @@ export function AdminCandidates() {
     const q = search.trim().toLowerCase()
     return interviews
       .filter((i) => {
-        if (q && !`${i.candidate_name} ${i.candidate_email} ${i.job_title}`.toLowerCase().includes(q)) return false
+        if (q) {
+          const haystack = [
+            i.candidate_name,
+            i.candidate_email,
+            i.job_title,
+            i.recommendation ?? '',
+            i.status.replace(/_/g, ' '),
+          ]
+            .join(' ')
+            .toLowerCase()
+          if (!haystack.includes(q)) return false
+        }
         if (statusFilter !== 'all' && i.status !== (statusFilter as InterviewStatusValue)) return false
         if (recommendationFilter !== 'all' && i.recommendation !== (recommendationFilter as RecommendationVerdict)) return false
         return true

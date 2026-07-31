@@ -48,6 +48,11 @@ class Interview(UUIDMixin, TimestampMixin, Base):
     failure_traceback: Mapped[str] = mapped_column(String(4000), default="", nullable=False)
     processing_progress: Mapped[int] = mapped_column(default=0, nullable=False)  # 0-100
     current_stage: Mapped[str] = mapped_column(String(100), default="", nullable=False)
+    # Admin review status — a human-set label the recruiter controls
+    # (Pending, Processing, Completed, Recommended, Not Recommended,
+    # Need Further Review, Rejected, Selected). Independent of the pipeline
+    # `status` field so pipeline transitions never clobber it.
+    admin_status: Mapped[str] = mapped_column(String(50), default="Pending", nullable=False)
 
     files: Mapped[list["InterviewFile"]] = relationship(
         back_populates="interview", cascade="all, delete-orphan"

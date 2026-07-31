@@ -8,15 +8,16 @@ import traceback
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.database import get_db
 from app.core.logging import get_logger
 from app.dependencies.auth import require_role
 from app.models.interview import Interview, InterviewStatus
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.repositories.analysis import (
     InterviewReportRepository,
     InterviewScoresRepository,
@@ -68,6 +69,7 @@ async def _submit_pipeline(interview_id, background_tasks: BackgroundTasks) -> N
 @router.post("/upload", status_code=201)
 async def upload_interview(
     file: UploadFile = File(...),
+    candidate_email: str = Form(...),
     job_title: str = Form(default="Interview"),
     job_description: str = Form(default=""),
     background_tasks: BackgroundTasks = BackgroundTasks(),
@@ -76,13 +78,34 @@ async def upload_interview(
 ):
     """Upload an interview recording (video/audio). Processing starts automatically.
 
+    The interview is ALWAYS linked to the candidate whose email is provided.
+    Only registered candidate accounts can receive interviews — an unknown
+    email is rejected with a 404 and no interview row is created.
+
     Supported formats: MP4, MOV, AVI, MKV, MP3, WAV, M4A, FLAC, AAC (max 200MB).
     """
     validate_upload(file)
 
+    # Resolve the candidate the interview belongs to. Never anonymous.
+    candidate_email = candidate_email.strip().lower()
+    if not candidate_email:
+        raise BadRequestError("candidate_email is required to upload an interview")
+    users = UserRepository(db)
+    candidate = await users.get_by_email(candidate_email)
+    if candidate is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No candidate found with email '{candidate_email}'. "
+            "The candidate must register before an interview can be uploaded for them.",
+        )
+    if candidate.role != UserRole.CANDIDATE:
+        raise BadRequestError(
+            f"'{candidate_email}' is not a candidate account — only candidates can be evaluated."
+        )
+
     interviews = InterviewRepository(db)
     interview = await interviews.create(
-        candidate_id=current_user.id,
+        candidate_id=candidate.id,
         job_title=job_title,
         job_description=job_description,
     )
@@ -103,7 +126,7 @@ async def upload_interview(
 
     await ActivityLogRepository(db).log(
         current_user.id, "interview_uploaded", "interview", str(interview.id),
-        {"filename": file.filename, "size_bytes": size_bytes},
+        {"filename": file.filename, "size_bytes": size_bytes, "candidate_id": str(candidate.id)},
     )
     await db.commit()
 
@@ -115,6 +138,8 @@ async def upload_interview(
     return {
         "interview_id": str(interview.id),
         "file_id": str(file_id),
+        "candidate_id": str(candidate.id),
+        "candidate_email": candidate.email,
         "status": "processing",
         "message": "Upload successful. Processing will start automatically.",
     }
@@ -339,19 +364,55 @@ async def get_report_pdf(
     current_user: User = Depends(require_role("admin")),
     db: AsyncSession = Depends(get_db),
 ):
-    """Download the generated PDF report for an interview."""
-    from app.services.pdf_download import download_pdf_for_interview
+    """Download the PDF report for an interview.
 
-    interview = await _get_interview_full(db, interview_id)
-    pdf = interview.pdfs[-1] if interview.pdfs else None
-    if pdf is None:
-        raise NotFoundError("PDF report not generated yet.")
+    The PDF is generated ON DEMAND from the stored interview results
+    (transcript, scores, recommendation, report). It never re-runs
+    Deepgram or the LLM, and nothing is written to disk or the database —
+    the PDF is returned directly to the client.
+    """
+    from app.services.pdf_service import generate_pdf_ondemand
 
-    data, content_type = await download_pdf_for_interview(pdf.storage_path, pdf.filename)
+    pdf_bytes, filename = await generate_pdf_ondemand(db, interview_id)
+
+    await ActivityLogRepository(db).log(
+        current_user.id, "pdf_generated", "interview", interview_id,
+        {"filename": filename, "on_demand": True},
+    )
+    await db.commit()
+
     return Response(
-        content=data,
-        media_type=content_type,
-        headers={"Content-Disposition": f'attachment; filename="{pdf.filename}"'},
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/report/pdf/regenerate")
+async def regenerate_report_pdf(
+    interview_id: str,
+    current_user: User = Depends(require_role("admin")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Regenerate the PDF from stored results.
+
+    Identical to the on-demand generator — this is an explicit admin action
+    that rebuilds the PDF in seconds without reprocessing the interview.
+    """
+    from app.services.pdf_service import generate_pdf_ondemand
+
+    pdf_bytes, filename = await generate_pdf_ondemand(db, interview_id)
+
+    await ActivityLogRepository(db).log(
+        current_user.id, "pdf_regenerated", "interview", interview_id,
+        {"filename": filename, "on_demand": True},
+    )
+    await db.commit()
+
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 
@@ -360,19 +421,33 @@ async def list_interviews(
     current_user: User = Depends(require_role("admin")),
     db: AsyncSession = Depends(get_db),
 ):
-    """List all interviews with candidate name/email and status."""
+    """List all interviews with candidate name/email and status.
+
+    Candidate details come from the eager-loaded relationship — no N+1.
+    """
     repo = InterviewRepository(db)
     interviews = await repo.list_all_full()
     result = []
     for interview in interviews:
-        candidate = await UserRepository(db).get(interview.candidate_id)
+        candidate = interview.candidate
         rec = interview.recommendation
+        profile = None
+        if candidate is not None and candidate.profile is not None:
+            profile = {
+                "skills": candidate.profile.skills,
+                "education": candidate.profile.education,
+                "experience": candidate.profile.experience,
+                "current_company": candidate.profile.current_company,
+                "profile_picture_url": candidate.profile.profile_picture_url,
+            }
         result.append(
             {
                 "id": str(interview.id),
                 "candidate_id": str(interview.candidate_id),
                 "candidate_name": candidate.full_name if candidate else "—",
                 "candidate_email": candidate.email if candidate else "—",
+                "candidate_profile": profile,
+                "admin_status": interview.admin_status,
                 "job_title": interview.job_title,
                 "status": interview.status.value,
                 "progress": interview.processing_progress,
@@ -424,6 +499,52 @@ async def regenerate_result(
         "interview_id": str(interview.id),
         "status": "processing",
         "message": "Regeneration started. Evaluation will be rebuilt from the existing transcript.",
+    }
+
+
+VALID_ADMIN_STATUSES = {
+    "Pending", "Processing", "Completed", "Recommended",
+    "Not Recommended", "Need Further Review", "Rejected", "Selected",
+}
+
+
+@router.put("/interview/{interview_id}/status")
+async def update_interview_status(
+    interview_id: str,
+    status: str,
+    current_user: User = Depends(require_role("admin")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Update the admin review status of an interview.
+
+    Allowed values: Pending, Processing, Completed, Recommended,
+    Not Recommended, Need Further Review, Rejected, Selected.
+    Saved immediately; the candidate sees it on their next refresh.
+    """
+    status = status.strip()
+    if status not in VALID_ADMIN_STATUSES:
+        raise BadRequestError(
+            f"Invalid status '{status}'. Use one of: {', '.join(sorted(VALID_ADMIN_STATUSES))}."
+        )
+
+    repo = InterviewRepository(db)
+    interview = await repo.get(str(interview_id))
+    if interview is None:
+        raise NotFoundError("Interview not found")
+
+    previous = interview.admin_status
+    await repo.update(interview_id, admin_status=status)
+
+    await ActivityLogRepository(db).log(
+        current_user.id, "status_updated", "interview", interview_id,
+        {"from": previous, "to": status},
+    )
+    await db.commit()
+
+    return {
+        "interview_id": str(interview.id),
+        "admin_status": status,
+        "message": f"Interview status updated to '{status}'.",
     }
 
 
@@ -479,10 +600,25 @@ async def delete_interview(
     if interview is None:
         raise NotFoundError("Interview not found")
 
-    # Best-effort cleanup of stored files.
+    # Best-effort cleanup of stored files (local + Supabase Storage).
     storage = LocalStorage()
     for file in interview.files:
-        storage.delete(file.storage_path)
+        if file.storage_path:
+            storage.delete(file.storage_path)
+    if settings.SUPABASE_URL:
+        try:
+            from app.storage.service import SupabaseStorage
+
+            remote = SupabaseStorage()
+            for file in interview.files:
+                if file.storage_path:
+                    remote.delete(file.storage_path)
+            # Also clean up the PDF report copy in storage if it was synced.
+            for pdf in interview.pdfs:
+                if pdf.storage_path:
+                    remote.delete(pdf.storage_path)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Remote file cleanup failed for %s: %s", interview_id, exc)
 
     await repo.delete(str(interview_id))
     await db.commit()
