@@ -35,6 +35,7 @@ from reportlab.platypus import (
 
 from app.core.config import settings
 from app.core.logging import get_logger
+from app.services.transcript_format import build_interview_summary, format_qa_transcript
 from app.storage import copy_local_to_supabase, cleanup_local_file
 from app.utils.exceptions import BadRequestError
 
@@ -219,7 +220,9 @@ def _build_story(payload: dict[str, Any]) -> list[Any]:
     verdict = _safe(payload.get("recommendation")) or "—"
     overall = scores.get("overall_score", 0)
     report = payload.get("report") or {}
-    transcript = payload.get("transcript") or ""
+    transcript = payload.get("transcript") or {}
+    if isinstance(transcript, str):
+        transcript = {"full_text": transcript, "segments": []}
     strengths = payload.get("strengths") or []
     weaknesses = payload.get("weaknesses") or []
 
@@ -278,32 +281,65 @@ def _build_story(payload: dict[str, Any]) -> list[Any]:
     story.append(Paragraph("2. Candidate Overview", styles.h1))
     story.append(Paragraph(_safe(report.get("candidate_overview")) or "No candidate overview available.", styles.body))
 
-    # ---- Section 3: Transcript Summary ----
-    story.append(Paragraph("3. Transcript Summary", styles.h1))
+    # ---- Section 3: Interview Summary ----
+    story.append(Paragraph("3. Interview Summary", styles.h1))
+    story.append(Paragraph(_safe(build_interview_summary(report)), styles.body))
+
+    # ---- Section 4: Question & Answer Transcript ----
+    story.append(Paragraph("4. Question & Answer Transcript", styles.h1))
     if transcript:
-        summary_text = transcript if len(transcript) <= 1200 else transcript[:1200] + "…"
-        story.append(Paragraph(_safe(summary_text), styles.body))
+        # Prefer the structured Q&A layout built from speaker segments; fall
+        # back to the raw text only when no speaker structure exists.
+        if transcript.get("segments"):
+            qa_text = format_qa_transcript(transcript["segments"])
+            if qa_text:
+                for block in qa_text.split("\n\n"):
+                    lines = block.split("\n")
+                    qa_label = ParagraphStyle(
+                        "QALabel", parent=styles.body, fontName=BOLD_FONT,
+                        textColor=BRAND_COLOR, spaceBefore=6, spaceAfter=2,
+                    )
+                    qa_body = ParagraphStyle(
+                        "QABody", parent=styles.body, leftIndent=10,
+                    )
+                    for line in lines:
+                        if line.startswith("Question "):
+                            story.append(Paragraph(_safe(line), qa_label))
+                        elif line.startswith("Interviewer:") or line.startswith("Candidate:"):
+                            label, _, text = line.partition(":")
+                            story.append(
+                                Paragraph(
+                                    f"<b>{_safe(label)}:</b>&nbsp;{_safe(text)}",
+                                    qa_body,
+                                )
+                            )
+                        elif line.strip():
+                            story.append(Paragraph(_safe(line), qa_body))
+            else:
+                story.append(Paragraph(_safe(transcript.get("full_text") or ""), styles.body))
+        else:
+            story.append(Paragraph(_safe(transcript.get("full_text") or ""), styles.body))
     else:
         story.append(Paragraph("No transcript available.", styles.body))
 
-    # ---- Sections 4-8: Evaluations ----
+    # ---- Sections 5-9: Evaluations ----
     section_map = [
-        ("4. Technical Evaluation", "technical_assessment"),
-        ("5. Communication Evaluation", "communication_assessment"),
-        ("6. Confidence Analysis", "confidence_assessment"),
-        ("7. Problem Solving Evaluation", "problem_solving_assessment"),
-        ("8. Relevant Experience", "experience_assessment"),
+        ("5. Technical Evaluation", "technical_assessment"),
+        ("6. Communication Evaluation", "communication_assessment"),
+        ("7. Confidence Analysis", "confidence_assessment"),
+        ("8. Problem Solving Evaluation", "problem_solving_assessment"),
+        ("9. Relevant Experience", "experience_assessment"),
     ]
     for title, key in section_map:
         story.append(Paragraph(title, styles.h1))
         story.append(Paragraph(_safe(report.get(key)) or "Not assessed.", styles.body))
 
-    # ---- Sections 9-10: Strengths / Weaknesses ----
-    story.extend(_build_strengths_weaknesses_section(strengths, "9. Strengths"))
-    story.extend(_build_strengths_weaknesses_section(weaknesses, "10. Weaknesses"))
+    # ---- Sections 10-11: Strengths / Weaknesses ----
+    story.extend(_build_strengths_weaknesses_section(strengths, "10. Strengths"))
+    story.extend(_build_strengths_weaknesses_section(weaknesses, "11. Weaknesses"))
 
-    # ---- Section 11: Improvement Suggestions ----
-    story.append(Paragraph("11. Improvement Suggestions", styles.h1))
+    # ---- Section 12: Improvement Suggestions ----
+    story.append(Paragraph("12. Improvement Suggestions", styles.h1))
     suggestions = _parse_lines(report.get("improvement_suggestions"))
     if suggestions:
         for line in suggestions:
@@ -311,9 +347,9 @@ def _build_story(payload: dict[str, Any]) -> list[Any]:
     else:
         story.append(Paragraph("No suggestions recorded.", styles.body))
 
-    # ---- Section 12: Final Score Table ----
+    # ---- Section 13: Final Score Table ----
     story.append(PageBreak())
-    story.append(Paragraph("12. Final Score Table", styles.h1))
+    story.append(Paragraph("13. Final Score Table", styles.h1))
 
     score_labels = [
         ("Technical", "technical_skills"),
@@ -358,9 +394,9 @@ def _build_story(payload: dict[str, Any]) -> list[Any]:
     ]))
     story.append(overall_row)
 
-    # ---- Section 12: Hiring Recommendation ----
+    # ---- Section 14: Hiring Recommendation ----
     story.append(Spacer(1, 0.2 * inch))
-    story.append(Paragraph("12. Hiring Recommendation", styles.h1))
+    story.append(Paragraph("14. Hiring Recommendation", styles.h1))
     rec_color = VERDICT_COLORS.get(verdict, MUTED_COLOR)
     rec_text = f"<b>{_safe(verdict)}</b>"
     rec_table = Table([[Paragraph(rec_text, ParagraphStyle(
@@ -412,6 +448,27 @@ def _build_payload(interview, *, transcript_text: str = "") -> dict[str, Any]:
     verdict = interview.recommendation.verdict if interview.recommendation else "—"
     reason = interview.recommendation.reason if interview.recommendation else ""
 
+    # Structured transcript — segments drive the Q&A layout, full_text is
+    # the fallback when speaker diarization is unavailable.
+    transcript = interview.transcript
+    transcript_payload: dict[str, Any] = {
+        "full_text": transcript_text or (transcript.full_text if transcript else ""),
+        "segments": transcript.segments if transcript else [],
+    }
+
+    report_payload = {
+        "executive_summary": report.executive_summary if report else "",
+        "interview_overview": report.interview_overview if report else "",
+        "candidate_overview": report.candidate_overview if report else "",
+        "performance_analysis": report.performance_analysis if report else "",
+        "technical_assessment": report.technical_assessment if report else "",
+        "communication_assessment": report.communication_assessment if report else "",
+        "confidence_assessment": report.confidence_assessment if report else "",
+        "problem_solving_assessment": report.problem_solving_assessment if report else "",
+        "experience_assessment": report.experience_assessment if report else "",
+        "improvement_suggestions": report.improvement_suggestions if report else "",
+    }
+
     return {
         "candidate_name": user.full_name if user else "Candidate",
         "candidate_email": user.email if user else "—",
@@ -421,20 +478,9 @@ def _build_payload(interview, *, transcript_text: str = "") -> dict[str, Any]:
         "overall_score": scores.overall_score if scores else 0,
         "recommendation": verdict,
         "recommendation_reason": reason,
-        "transcript": transcript_text or (interview.transcript.full_text if interview.transcript else ""),
+        "transcript": transcript_payload,
         "scores": scores.score_map if scores else {},
-        "report": {
-            "executive_summary": report.executive_summary if report else "",
-            "interview_overview": report.interview_overview if report else "",
-            "candidate_overview": report.candidate_overview if report else "",
-            "performance_analysis": report.performance_analysis if report else "",
-            "technical_assessment": report.technical_assessment if report else "",
-            "communication_assessment": report.communication_assessment if report else "",
-            "confidence_assessment": report.confidence_assessment if report else "",
-            "problem_solving_assessment": report.problem_solving_assessment if report else "",
-            "experience_assessment": report.experience_assessment if report else "",
-            "improvement_suggestions": report.improvement_suggestions if report else "",
-        },
+        "report": report_payload,
         "strengths": strengths,
         "weaknesses": weaknesses,
     }
@@ -451,7 +497,7 @@ async def generate_pdf_ondemand(db, interview_id) -> tuple[bytes, str]:
     from app.repositories.interview import InterviewRepository
 
     interviews = InterviewRepository(db)
-    interview = await interviews.get_full(interview_id)
+    interview = await interviews.get_for_pdf(interview_id)
     if interview is None:
         raise BadRequestError(f"Interview {interview_id} not found")
 
@@ -461,16 +507,18 @@ async def generate_pdf_ondemand(db, interview_id) -> tuple[bytes, str]:
     return pdf_bytes, filename
 
 
-async def generate_interview_pdf(db, interview_id) -> dict[str, Any]:
+async def generate_interview_pdf(db, interview_id, *, generated_by: str = "") -> dict[str, Any]:
     """Generate, store and persist metadata for an interview's PDF report.
 
     Returns {"filename", "storage_path", "file_size_bytes"}.
     """
+    import asyncio
+
     from app.repositories.interview import InterviewRepository
     from app.repositories.interview_file import ActivityLogRepository
 
     interviews = InterviewRepository(db)
-    interview = await interviews.get_full(interview_id)
+    interview = await interviews.get_for_pdf(interview_id)
     if interview is None:
         raise BadRequestError(f"Interview {interview_id} not found")
 
@@ -480,16 +528,25 @@ async def generate_interview_pdf(db, interview_id) -> dict[str, Any]:
     filename = f"interview_report_{str(interview_id)[:8]}.pdf"
     storage_path = f"reports/{interview_id}/{filename}"
 
-    # Save locally first, then sync to Supabase Storage if configured.
+    # Save locally first, then sync to Supabase Storage if configured. The
+    # disk write + network upload are offloaded to a worker thread so the
+    # event loop never blocks during PDF generation.
     local_dir = Path(settings.GENERATED_DIR) / "reports" / str(interview_id)
-    local_dir.mkdir(parents=True, exist_ok=True)
-    local_path = local_dir / filename
-    local_path.write_bytes(pdf_bytes)
+
+    def _persist_local() -> tuple[Path, Path]:
+        local_dir.mkdir(parents=True, exist_ok=True)
+        local_path = local_dir / filename
+        local_path.write_bytes(pdf_bytes)
+        return local_dir, local_path
+
+    _, local_path = await asyncio.to_thread(_persist_local)
 
     remote_path = storage_path
     synced = False
     try:
-        remote_path = copy_local_to_supabase(str(local_path), storage_path)
+        remote_path = await asyncio.to_thread(
+            copy_local_to_supabase, str(local_path), storage_path
+        )
         synced = True
     except Exception as exc:  # noqa: BLE001
         logger.warning("Supabase storage sync failed for %s: %s", filename, exc)
@@ -502,6 +559,8 @@ async def generate_interview_pdf(db, interview_id) -> dict[str, Any]:
         filename=filename,
         storage_path=remote_path,
         file_size_bytes=len(pdf_bytes),
+        generated_at=datetime.now(timezone.utc),
+        generated_by=generated_by or "system",
     )
     db.add(pdf_record)
     await db.commit()
@@ -509,7 +568,7 @@ async def generate_interview_pdf(db, interview_id) -> dict[str, Any]:
     # Only remove the local copy when the remote sync succeeded; otherwise
     # keep the local file so the PDF remains downloadable.
     if synced:
-        cleanup_local_file(str(local_path))
+        await asyncio.to_thread(cleanup_local_file, str(local_path))
 
     return {
         "filename": filename,
