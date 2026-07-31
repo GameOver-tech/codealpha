@@ -1,11 +1,15 @@
-"""Repositories for interview files, jobs + activity logs (small entities)."""
+"""Repositories for interview files and jobs.
+
+ActivityLogRepository moved to app.repositories.activity_log — it is
+re-exported here for backwards compatibility with existing imports.
+"""
 import uuid
 
 from sqlalchemy import select
 
-from app.models.activity_log import ActivityLog
 from app.models.interview_file import InterviewFile
 from app.models.job import Job
+from app.repositories.activity_log import ActivityLogRepository  # noqa: F401 (re-export)
 from app.repositories.base import BaseRepository, _coerce_uuid
 
 
@@ -51,25 +55,3 @@ class JobRepository(BaseRepository[Job]):
         stmt = select(Job).where(Job.is_active.is_(True)).order_by(Job.created_at.desc())
         result = await self.db.execute(stmt)
         return list(result.scalars().all())
-
-
-class ActivityLogRepository(BaseRepository[ActivityLog]):
-    model = ActivityLog
-
-    async def log(
-        self,
-        user_id: uuid.UUID | None,
-        action: str,
-        entity_type: str = "",
-        entity_id: str = "",
-        details: dict | None = None,
-    ) -> ActivityLog:
-        return await self.add(
-            ActivityLog(
-                user_id=user_id,
-                action=action,
-                entity_type=entity_type,
-                entity_id=entity_id,
-                details=details or {},
-            )
-        )

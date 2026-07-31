@@ -13,6 +13,7 @@ import {
 } from 'lucide-react'
 import { Avatar, AvatarFallback, AvatarImage, Button, Badge } from '@/components/ui'
 import { ThemeToggle, RecommendationBadge, StatusBadge } from '@/components/shared'
+import { ChatSidebar } from '@/components/chat'
 import { useAuth } from '@/context'
 import { useProfile, useInterviewStatus } from '@/hooks'
 import { mediaUrl } from '@/services/api'
@@ -190,6 +191,8 @@ export function CandidateLayout() {
           <Outlet />
         </main>
       </div>
+
+      <ChatSidebar role="candidate" />
     </div>
   )
 }

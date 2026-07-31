@@ -48,6 +48,21 @@ def get_llm_provider():
     )
 
 
+def get_chat_provider():
+    """Return the multi-provider chat client used by the AI assistant.
+
+    Primary provider is Gemini (dedicated chatbot key) with automatic
+    fallback to Groq/OpenRouter. Requires at least one configured key.
+    """
+    from app.ai.chat.groq_client import GroqChatProvider
+
+    if not GroqChatProvider.has_credentials():
+        raise BadRequestError(
+            "No chat provider key configured — set GEMINI_CHAT_API_KEY or GROQ_API_KEY."
+        )
+    return GroqChatProvider()
+
+
 # Re-export analysis entry points (lazy imports keep import-time light).
 def transcribe_audio(file_path: str):
     from app.ai.deepgram import transcribe_audio as _impl

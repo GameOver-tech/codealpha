@@ -42,6 +42,9 @@ class Settings(BaseSettings):
     # --- App ---
     APP_ENV: str = "development"
     DEBUG: bool = True
+    # Log every SQL statement (off by default — echoing huge transcripts/JSON
+    # rows over a remote DB makes every request noticeably slower).
+    SQL_ECHO: bool = False
     API_V1_PREFIX: str = "/api/v1"
     SECRET_KEY: str = "dev-secret-key-change-me"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
@@ -67,8 +70,23 @@ class Settings(BaseSettings):
     GEMINI_MODEL: str = "gemini-2.0-flash"
     GROQ_API_KEY: str = ""
     GROQ_MODEL: str = "llama-3.1-8b-instant"
+    # llama-3.1-8b-instant does not support function calling — the chat
+    # assistant uses its own model capable of tool calls.
+    GROQ_CHAT_MODEL: str = "llama-3.3-70b-versatile"
     LLM_MAX_TOKENS: int = 8192
     LLM_TEMPERATURE: float = 0.3
+
+    # --- Chat assistant ---
+    CHAT_ENABLED: bool = True
+    CHAT_MAX_TURNS: int = 6
+    CHAT_MAX_MESSAGES: int = 40
+    CHAT_CONTEXT_TTL_DAYS: int = 30
+    CHAT_ACTIVITY_LOGGING: bool = True
+    # Gemini is the PREFERRED assistant provider — fast responses + great
+    # tool calling. Falls back to GROQ_API_KEY / OPENROUTER_API_KEY when
+    # Gemini is unavailable or rate-limited.
+    GEMINI_CHAT_API_KEY: str = ""
+    GEMINI_CHAT_MODEL: str = "gemini-2.0-flash"
 
     # --- Redis ---
     REDIS_URL: str = "redis://localhost:6379/0"

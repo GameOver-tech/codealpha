@@ -2,8 +2,8 @@ from app.repositories.base import BaseRepository
 from app.repositories.user import UserRepository
 from app.repositories.candidate_profile import CandidateProfileRepository
 from app.repositories.interview import InterviewRepository
+from app.repositories.activity_log import ActivityLogRepository
 from app.repositories.interview_file import (
-    ActivityLogRepository,
     InterviewFileRepository,
     JobRepository,
 )

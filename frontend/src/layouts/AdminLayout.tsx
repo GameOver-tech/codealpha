@@ -15,6 +15,7 @@ import {
 } from 'lucide-react'
 import { Avatar, AvatarFallback, AvatarImage, Button } from '@/components/ui'
 import { ThemeToggle } from '@/components/shared'
+import { ChatSidebar } from '@/components/chat'
 import { useAuth } from '@/context'
 import { initials } from '@/lib/utils'
 
@@ -145,6 +146,8 @@ export function AdminLayout() {
           <Outlet />
         </main>
       </div>
+
+      <ChatSidebar role="admin" />
     </div>
   )
 }

@@ -7,6 +7,7 @@ inherited from the legacy ``profiles`` table used by seed_admin.py).
 """
 from __future__ import annotations
 
+import time
 import uuid
 
 from fastapi import Depends, HTTPException, status
@@ -23,6 +24,18 @@ from app.repositories.user import UserRepository
 logger = get_logger(__name__)
 
 bearer_scheme = HTTPBearer(auto_error=False)
+
+# Short-lived cache: JWT subject -> (fetched_at, User). Avoids a remote DB
+# round-trip on every single request (the DB is a hosted Supabase instance).
+# Role/active-flag changes propagate within the TTL. Call
+# invalidate_user_cache() after writes that change those fields.
+_user_cache: dict[str, tuple[float, User]] = {}
+USER_CACHE_TTL_SECONDS = 30.0
+
+
+def invalidate_user_cache(auth_uid: str | None) -> None:
+    if auth_uid:
+        _user_cache.pop(auth_uid, None)
 
 
 async def get_current_user(
@@ -45,6 +58,14 @@ async def get_current_user(
             detail="Invalid token payload",
         )
 
+    now = time.monotonic()
+    cached = _user_cache.get(auth_uid)
+    if cached is not None and now - cached[0] < USER_CACHE_TTL_SECONDS:
+        user = cached[1]
+        if user.is_active:
+            return user
+        _user_cache.pop(auth_uid, None)
+
     repo = UserRepository(db)
     user = await repo.get_by_auth_uid(auth_uid)
 
@@ -56,6 +77,8 @@ async def get_current_user(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Account is disabled",
         )
+
+    _user_cache[auth_uid] = (now, user)
     return user
 
 
