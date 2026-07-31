@@ -3,11 +3,24 @@ import uuid
 from datetime import datetime, timezone
 
 from sqlalchemy import select
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import joinedload, selectinload
 
 from app.models.interview import Interview, InterviewStatus
 from app.models.user import User
 from app.repositories.base import BaseRepository, _coerce_uuid
+
+# To-one relationships: joinedload folds them into the main query, so a
+# full interview loads in ONE round trip instead of N+1.
+_TO_ONE = (
+    joinedload(Interview.candidate).joinedload(User.profile),
+    joinedload(Interview.transcript),
+    joinedload(Interview.speech_analysis),
+    joinedload(Interview.sentiment_analysis),
+    joinedload(Interview.technical_evaluation),
+    joinedload(Interview.scores),
+    joinedload(Interview.recommendation),
+    joinedload(Interview.report),
+)
 
 
 class InterviewRepository(BaseRepository[Interview]):
@@ -15,17 +28,10 @@ class InterviewRepository(BaseRepository[Interview]):
 
     def _with_relations(self, stmt):
         return stmt.options(
-            selectinload(Interview.candidate).selectinload(User.profile),
+            *_TO_ONE,
             selectinload(Interview.files),
-            selectinload(Interview.transcript),
-            selectinload(Interview.speech_analysis),
-            selectinload(Interview.sentiment_analysis),
-            selectinload(Interview.technical_evaluation),
-            selectinload(Interview.scores),
             selectinload(Interview.strengths),
             selectinload(Interview.weaknesses),
-            selectinload(Interview.recommendation),
-            selectinload(Interview.report),
             selectinload(Interview.pdfs),
         )
 
@@ -35,23 +41,19 @@ class InterviewRepository(BaseRepository[Interview]):
         return result.scalar_one_or_none()
 
     async def list_by_candidate(self, candidate_id: uuid.UUID | str) -> list[Interview]:
+        """List a candidate's interviews for status/lifecycle views.
+
+        Loads only what the candidate-facing status/result flows need:
+        pipeline status, timestamps, and the recommendation verdict.
+        """
         stmt = (
             select(Interview)
             .where(Interview.candidate_id == _coerce_uuid(candidate_id))
             .order_by(Interview.created_at.desc())
             .options(
-                selectinload(Interview.candidate).selectinload(User.profile),
-                selectinload(Interview.files),
-                selectinload(Interview.transcript),
-                selectinload(Interview.speech_analysis),
-                selectinload(Interview.sentiment_analysis),
-                selectinload(Interview.technical_evaluation),
-                selectinload(Interview.scores),
-                selectinload(Interview.strengths),
-                selectinload(Interview.weaknesses),
-                selectinload(Interview.recommendation),
-                selectinload(Interview.report),
-                selectinload(Interview.pdfs),
+                joinedload(Interview.candidate).joinedload(User.profile),
+                joinedload(Interview.scores),
+                joinedload(Interview.recommendation),
             )
         )
         result = await self.db.execute(stmt)
@@ -60,17 +62,21 @@ class InterviewRepository(BaseRepository[Interview]):
     async def latest_for_candidate(self, candidate_id: uuid.UUID | str) -> Interview | None:
         """Fetch the candidate's most recent interview with relations loaded.
 
-        Avoids the list-then-refetch pattern (two queries, one of which
-        loads every historical interview). Returns None when the candidate
-        has no interviews.
+        Loads only what the candidate-facing status/result flows need
+        (status, timestamps, recommendation verdict) — avoids the heavy
+        transcript / report payloads. Returns None when the candidate has
+        no interviews.
         """
         stmt = (
-            self._with_relations(
-                select(Interview)
-                .where(Interview.candidate_id == _coerce_uuid(candidate_id))
-                .order_by(Interview.created_at.desc())
-            )
+            select(Interview)
+            .where(Interview.candidate_id == _coerce_uuid(candidate_id))
+            .order_by(Interview.created_at.desc())
             .limit(1)
+            .options(
+                joinedload(Interview.candidate),
+                joinedload(Interview.scores),
+                joinedload(Interview.recommendation),
+            )
         )
         result = await self.db.execute(stmt)
         return result.scalars().first()
@@ -98,9 +104,55 @@ class InterviewRepository(BaseRepository[Interview]):
             select(Interview)
             .order_by(Interview.created_at.desc())
             .options(
-                selectinload(Interview.candidate).selectinload(User.profile),
-                selectinload(Interview.scores),
-                selectinload(Interview.recommendation),
+                joinedload(Interview.candidate).joinedload(User.profile),
+                joinedload(Interview.scores),
+                joinedload(Interview.recommendation),
+            )
+        )
+        result = await self.db.execute(stmt)
+        return list(result.scalars().all())
+
+    async def list_for_chat(self, limit: int = 100, offset: int = 0) -> list[Interview]:
+        """List interviews for the AI assistant (chat tool).
+
+        Includes what ``_serialize_interview`` renders (scores, strengths,
+        weaknesses, recommendation, technical evaluation) but deliberately
+        SKIPS the giant transcript text / raw Deepgram JSON and the report's
+        eleven text columns — those are only needed by the detail views.
+        """
+        stmt = (
+            select(Interview)
+            .order_by(Interview.created_at.desc())
+            .limit(limit)
+            .offset(offset)
+            .options(
+                joinedload(Interview.candidate).joinedload(User.profile),
+                joinedload(Interview.scores),
+                joinedload(Interview.technical_evaluation),
+                joinedload(Interview.recommendation),
+                selectinload(Interview.strengths),
+                selectinload(Interview.weaknesses),
+            )
+        )
+        result = await self.db.execute(stmt)
+        return list(result.scalars().all())
+
+    async def list_for_chat_by_candidate(
+        self, candidate_id: uuid.UUID | str, limit: int = 100
+    ) -> list[Interview]:
+        """Like ``list_for_chat`` but scoped to one candidate's interviews."""
+        stmt = (
+            select(Interview)
+            .where(Interview.candidate_id == _coerce_uuid(candidate_id))
+            .order_by(Interview.created_at.desc())
+            .limit(limit)
+            .options(
+                joinedload(Interview.candidate).joinedload(User.profile),
+                joinedload(Interview.scores),
+                joinedload(Interview.technical_evaluation),
+                joinedload(Interview.recommendation),
+                selectinload(Interview.strengths),
+                selectinload(Interview.weaknesses),
             )
         )
         result = await self.db.execute(stmt)

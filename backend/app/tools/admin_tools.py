@@ -289,11 +289,9 @@ async def list_interviews(db: AsyncSession, actor: User, **args) -> dict:
     offset = int(args.get("offset") or 0)
 
     repo = InterviewRepository(db)
-    interviews = await repo.list_all_full()
+    interviews = await repo.list_for_chat(limit=limit, offset=offset)
     if status:
         interviews = [i for i in interviews if i.status.value == status]
-    if limit:
-        interviews = interviews[offset : offset + limit]
     return {"total": len(interviews), "items": [_serialize_interview(i) for i in interviews]}
 
 
@@ -310,7 +308,7 @@ async def get_candidate_results(db: AsyncSession, actor: User, **args) -> dict:
         raise NotFoundError(f"No candidate found with email '{email}'")
 
     interviews = InterviewRepository(db)
-    items = [_serialize_interview(i) for i in await interviews.list_all_full() if i.candidate_id == candidate.id]
+    items = [_serialize_interview(i) for i in await interviews.list_for_chat_by_candidate(candidate.id)]
     return {
         "candidate_email": candidate.email,
         "candidate_name": candidate.full_name,
@@ -418,9 +416,11 @@ async def update_interview_status(db: AsyncSession, actor: User, **args) -> dict
 async def get_analytics(db: AsyncSession, actor: User, **args) -> dict:
     _require_admin(actor)
     months = min(int(args.get("months") or 6), 24)
+    funnel = await analytics.hiring_funnel(db)
     return {
-        "funnel": await analytics.hiring_funnel(db),
-        "success_rate": await analytics.success_rate(db),
+        "funnel": funnel,
+        # Derived from the funnel counts — no duplicate DB round trips.
+        "success_rate": funnel["success_rate"],
         "avg_duration_seconds": await analytics.avg_duration_seconds(db),
         "monthly_trends": await analytics.monthly_trends(db, months=months),
     }

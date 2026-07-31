@@ -42,6 +42,9 @@ class Settings(BaseSettings):
     # --- App ---
     APP_ENV: str = "development"
     DEBUG: bool = True
+    # Log every SQL statement (off by default — echoing huge transcripts/JSON
+    # rows over a remote DB makes every request noticeably slower).
+    SQL_ECHO: bool = False
     API_V1_PREFIX: str = "/api/v1"
     SECRET_KEY: str = "dev-secret-key-change-me"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60

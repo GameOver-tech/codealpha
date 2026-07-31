@@ -80,7 +80,7 @@ async def get_my_result(db: AsyncSession, actor: User, **args) -> dict:
     if not interviews:
         return {"has_result": False, "message": "You don't have any interview results yet."}
 
-    interview = await repo.get_full(interviews[0].id)
+    interview = interviews[0]
     rec = interview.recommendation
     if interview.status.value != InterviewStatus.COMPLETED.value and not rec:
         return {

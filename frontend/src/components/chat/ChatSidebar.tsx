@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import { Bot, Loader2, MessageCircle, RotateCcw, Send, Sparkles, Wrench, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
@@ -18,6 +18,57 @@ interface DisplayMessage {
 interface ChatSidebarProps {
   role: 'admin' | 'candidate'
 }
+
+// Memoized so streaming deltas only re-render the message being updated.
+const MessageBubble = memo(function MessageBubble({ message }: { message: DisplayMessage }) {
+  return (
+    <div key={message.id} className={cn('flex gap-2.5', message.role === 'user' && 'flex-row-reverse')}>
+      {message.role === 'assistant' && (
+        <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-primary to-primary-dark">
+          <Bot className="h-3.5 w-3.5 text-white" />
+        </span>
+      )}
+      <div
+        className={cn(
+          'min-w-0 max-w-[85%] rounded-2xl px-3.5 py-2 text-[13px] leading-relaxed',
+          message.role === 'user'
+            ? 'rounded-br-md bg-primary text-primary-foreground'
+            : 'rounded-bl-md border border-border/60 bg-muted/40 text-foreground',
+        )}
+      >
+        {message.role === 'assistant' ? (
+          <div
+            className="chat-markdown [&_a]:break-all [&_table]:my-1 [&_code]:rounded [&_code]:bg-muted [&_code]:px-1 [&_code]:py-0.5 [&_code]:font-mono [&_code]:text-[0.85em]"
+            dangerouslySetInnerHTML={{ __html: renderMarkdown(message.content) }}
+          />
+        ) : (
+          <p className="whitespace-pre-wrap">{message.content}</p>
+        )}
+
+        {message.role === 'assistant' && message.toolEvents.length > 0 && (
+          <div className="mt-2 space-y-1 border-t border-border/40 pt-2">
+            {message.toolEvents.map((t, i) => (
+              <div key={i} className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                <Wrench className="h-3 w-3" />
+                <span className="font-mono">{t.name}</span>
+                <span className="text-primary">
+                  {t.status === 'started' ? '…' : t.status === 'done' ? '✓' : '✗'}
+                </span>
+                {t.error && <span className="truncate text-destructive">({t.error})</span>}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {message.streaming && (
+          <span className="mt-1.5 inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
+            <Loader2 className="h-3 w-3 animate-spin" /> HireLens is thinking…
+          </span>
+        )}
+      </div>
+    </div>
+  )
+})
 
 const ADMIN_SUGGESTIONS = [
   'Show dashboard stats',
@@ -182,53 +233,7 @@ export function ChatSidebar({ role }: ChatSidebarProps) {
             </div>
           </div>
         ) : (
-          messages.map((m) => (
-            <div key={m.id} className={cn('flex gap-2.5', m.role === 'user' && 'flex-row-reverse')}>
-              {m.role === 'assistant' && (
-                <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-primary to-primary-dark">
-                  <Bot className="h-3.5 w-3.5 text-white" />
-                </span>
-              )}
-              <div
-                className={cn(
-                  'min-w-0 max-w-[85%] rounded-2xl px-3.5 py-2 text-[13px] leading-relaxed',
-                  m.role === 'user'
-                    ? 'rounded-br-md bg-primary text-primary-foreground'
-                    : 'rounded-bl-md border border-border/60 bg-muted/40 text-foreground',
-                )}
-              >
-                {m.role === 'assistant' ? (
-                  <div
-                    className="chat-markdown [&_a]:break-all [&_table]:my-1 [&_code]:rounded [&_code]:bg-muted [&_code]:px-1 [&_code]:py-0.5 [&_code]:font-mono [&_code]:text-[0.85em]"
-                    dangerouslySetInnerHTML={{ __html: renderMarkdown(m.content) }}
-                  />
-                ) : (
-                  <p className="whitespace-pre-wrap">{m.content}</p>
-                )}
-
-                {m.role === 'assistant' && m.toolEvents.length > 0 && (
-                  <div className="mt-2 space-y-1 border-t border-border/40 pt-2">
-                    {m.toolEvents.map((t, i) => (
-                      <div key={i} className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
-                        <Wrench className="h-3 w-3" />
-                        <span className="font-mono">{t.name}</span>
-                        <span className="text-primary">
-                          {t.status === 'started' ? '…' : t.status === 'done' ? '✓' : '✗'}
-                        </span>
-                        {t.error && <span className="truncate text-destructive">({t.error})</span>}
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {m.streaming && (
-                  <span className="mt-1.5 inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                    <Loader2 className="h-3 w-3 animate-spin" /> HireLens is thinking…
-                  </span>
-                )}
-              </div>
-            </div>
-          ))
+          messages.map((m) => <MessageBubble key={m.id} message={m} />)
         )}
       </div>
 
