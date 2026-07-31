@@ -49,15 +49,17 @@ def get_llm_provider():
 
 
 def get_chat_provider():
-    """Return the Groq chat provider used by the AI assistant.
+    """Return the multi-provider chat client used by the AI assistant.
 
-    The assistant requires Groq credentials (function calling + streaming);
-    other providers are not used for chat.
+    Primary provider is Gemini (dedicated chatbot key) with automatic
+    fallback to Groq/OpenRouter. Requires at least one configured key.
     """
     from app.ai.chat.groq_client import GroqChatProvider
 
     if not GroqChatProvider.has_credentials():
-        raise BadRequestError("GROQ_API_KEY is missing — the AI assistant requires it.")
+        raise BadRequestError(
+            "No chat provider key configured — set GEMINI_CHAT_API_KEY or GROQ_API_KEY."
+        )
     return GroqChatProvider()
 
 

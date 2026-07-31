@@ -82,6 +82,11 @@ class Settings(BaseSettings):
     CHAT_MAX_MESSAGES: int = 40
     CHAT_CONTEXT_TTL_DAYS: int = 30
     CHAT_ACTIVITY_LOGGING: bool = True
+    # Gemini is the PREFERRED assistant provider — fast responses + great
+    # tool calling. Falls back to GROQ_API_KEY / OPENROUTER_API_KEY when
+    # Gemini is unavailable or rate-limited.
+    GEMINI_CHAT_API_KEY: str = ""
+    GEMINI_CHAT_MODEL: str = "gemini-2.0-flash"
 
     # --- Redis ---
     REDIS_URL: str = "redis://localhost:6379/0"

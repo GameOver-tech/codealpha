@@ -63,10 +63,15 @@ class InterviewRepository(BaseRepository[Interview]):
         """Fetch the candidate's most recent interview with relations loaded.
 
         Loads only what the candidate-facing status/result flows need
-        (status, timestamps, recommendation verdict) — avoids the heavy
-        transcript / report payloads. Returns None when the candidate has
-        no interviews.
+        (status, timestamps, recommendation verdict, and transcript
+        segments for real-duration display) — avoids the heavy transcript
+        text / raw payload. Returns None when the candidate has no
+        interviews.
         """
+        from sqlalchemy.orm import load_only
+
+        from app.models.transcript import Transcript
+
         stmt = (
             select(Interview)
             .where(Interview.candidate_id == _coerce_uuid(candidate_id))
@@ -76,6 +81,13 @@ class InterviewRepository(BaseRepository[Interview]):
                 joinedload(Interview.candidate),
                 joinedload(Interview.scores),
                 joinedload(Interview.recommendation),
+                # Only the timestamped segments are needed for real-duration
+                # display — skip the giant full_text/raw_response payloads.
+                joinedload(Interview.transcript).load_only(
+                    Transcript.id,
+                    Transcript.interview_id,
+                    Transcript.segments,
+                ),
             )
         )
         result = await self.db.execute(stmt)

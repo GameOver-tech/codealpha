@@ -1,9 +1,10 @@
 """Multi-provider chat client — streaming chat completions with tool calls.
 
-Primary provider is Groq; when it rate-limits (429) or fails transiently,
-the client transparently falls back to OpenRouter (also OpenAI-compatible,
-with tool-calling support). This keeps the assistant answering even when
-one provider's quota is exhausted.
+Primary provider is Gemini (dedicated chatbot key — fastest responses and
+best tool calling for the assistant). When it rate-limits (429) or fails
+transiently, the client falls back to Groq, then OpenRouter (all
+OpenAI-compatible, with tool-calling support). This keeps the assistant
+answering even when one provider's quota is exhausted.
 """
 from __future__ import annotations
 
@@ -18,6 +19,7 @@ from app.core.logging import get_logger
 
 logger = get_logger(__name__)
 
+GEMINI_CHAT_URL = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
 GROQ_CHAT_URL = "https://api.groq.com/openai/v1/chat/completions"
 OPENROUTER_CHAT_URL = "https://openrouter.ai/api/v1/chat/completions"
 DEFAULT_TIMEOUT = 120.0
@@ -43,8 +45,9 @@ def _retryable(status_code: int) -> bool:
 class GroqChatProvider:
     """OpenAI-compatible chat client with tool calling + streaming.
 
-    Uses Groq first; falls back to OpenRouter on 429/5xx so the assistant
-    keeps answering when Groq's free-tier rate limit is hit.
+    Provider order: Gemini (primary, dedicated chatbot key) → Groq →
+    OpenRouter. Falls back automatically on 429/5xx/network errors so the
+    assistant keeps answering when the primary provider is rate-limited.
     """
 
     name = "groq-chat"
@@ -55,7 +58,7 @@ class GroqChatProvider:
 
     @classmethod
     def has_credentials(cls) -> bool:
-        return bool(settings.GROQ_API_KEY)
+        return bool(settings.GEMINI_CHAT_API_KEY or settings.GROQ_API_KEY)
 
     async def aclose(self) -> None:
         """Close the shared client (used by tests / shutdown hooks)."""
@@ -67,16 +70,31 @@ class GroqChatProvider:
     # --- Provider list -------------------------------------------------------
 
     def _providers(self) -> list[dict[str, str]]:
-        """Ordered (url, api_key, model) provider list. Groq first, then any
-        configured OpenAI-compatible fallback."""
-        providers = [
-            {
-                "url": GROQ_CHAT_URL,
-                "api_key": self.api_key,
-                "model": self.model,
-                "name": "groq",
-            }
-        ]
+        """Ordered (url, api_key, model) provider list.
+
+        Gemini is first when its dedicated chatbot key is set — it answers
+        faster and handles user questions better than Groq. Then Groq, then
+        OpenRouter (any configured OpenAI-compatible fallback).
+        """
+        providers: list[dict[str, str]] = []
+        if settings.GEMINI_CHAT_API_KEY:
+            providers.append(
+                {
+                    "url": GEMINI_CHAT_URL,
+                    "api_key": settings.GEMINI_CHAT_API_KEY,
+                    "model": settings.GEMINI_CHAT_MODEL,
+                    "name": "gemini",
+                }
+            )
+        if self.api_key:
+            providers.append(
+                {
+                    "url": GROQ_CHAT_URL,
+                    "api_key": self.api_key,
+                    "model": self.model,
+                    "name": "groq",
+                }
+            )
         if settings.OPENROUTER_API_KEY:
             providers.append(
                 {
