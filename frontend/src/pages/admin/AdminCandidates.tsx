@@ -16,7 +16,7 @@ import {
 import toast from 'react-hot-toast'
 import { Button, Card, CardContent, Input, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Skeleton, Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui'
 import { Avatar, AvatarFallback, AvatarImage, EmptyState, PageHeader, RecommendationBadge, StatusBadge } from '@/components/shared'
-import { useAdminInterviews, queryKeys } from '@/hooks'
+import { useAdminInterviews, queryKeys, prefetchAdminAnalysis } from '@/hooks'
 import { adminApi, mediaUrl, getErrorMessage } from '@/services/api'
 import { formatDuration, initials } from '@/lib/utils'
 import type { InterviewStatusValue, RecommendationVerdict } from '@/types'
@@ -230,6 +230,8 @@ export function AdminCandidates() {
                       animate={{ opacity: 1 }}
                       className="cursor-pointer transition-colors hover:bg-accent/40"
                       onClick={() => navigate(`/admin/candidates/${interview.id}`)}
+                      onMouseEnter={() => void prefetchAdminAnalysis(queryClient, interview.id)}
+                      onFocus={() => void prefetchAdminAnalysis(queryClient, interview.id)}
                     >
                       <td className="px-5 py-4">
                         <div className="flex items-center gap-3">

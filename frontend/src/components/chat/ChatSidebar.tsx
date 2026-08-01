@@ -407,6 +407,27 @@ export function ChatSidebar({ role }: ChatSidebarProps) {
         .filter((m) => m.content)
         .map((m) => ({ role: m.role, content: m.content }))
 
+      // Track which tools ran this turn so we can refresh the admin views
+      // after the chat performs a mutation. Read-only tools skip the refresh.
+      const readTools = new Set([
+        'get_dashboard_stats',
+        'list_candidates',
+        'get_candidate',
+        'list_interviews',
+        'get_candidate_results',
+        'get_interview_details',
+        'get_recent_activity',
+        'get_analytics',
+        'list_users',
+        'get_system_logs',
+      ])
+      let ranMutation = false
+      const handleTool = (tool: { name: string; status: string }) => {
+        if (tool.status === 'done' && !readTools.has(tool.name)) {
+          ranMutation = true
+        }
+      }
+
       try {
         await streamChat(
           { message, history },
@@ -416,6 +437,7 @@ export function ChatSidebar({ role }: ChatSidebarProps) {
                 prev.map((m) => (m.id === assistantMsg.id ? { ...m, content: m.content + delta } : m)),
               )
             },
+            onTool: handleTool,
             onDone: (content) => {
               const finalContent = content || ''
               setMessages((prev) =>
@@ -425,6 +447,15 @@ export function ChatSidebar({ role }: ChatSidebarProps) {
                     : m,
                 ),
               )
+              // A write tool ran (update/delete/create/email/role change) —
+              // refresh the admin views so the change is visible immediately,
+              // just like a manual action in the UI.
+              if (ranMutation && role === 'admin') {
+                queryClient.invalidateQueries({ queryKey: queryKeys.adminInterviews })
+                queryClient.invalidateQueries({ queryKey: queryKeys.adminDashboard })
+                queryClient.invalidateQueries({ queryKey: queryKeys.adminInterviewMeta('') })
+                queryClient.invalidateQueries({ queryKey: queryKeys.profile })
+              }
               // No auto-speak — text is generated silently. The user clicks
               // the small speaker icon under a message to hear it.
             },
@@ -454,7 +485,7 @@ export function ChatSidebar({ role }: ChatSidebarProps) {
         setStreaming(false)
       }
     },
-    [input, messages, streaming, voice],
+    [input, messages, streaming, voice, queryClient, role],
   )
 
   const panel = (

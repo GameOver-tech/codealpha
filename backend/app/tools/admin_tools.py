@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import joinedload
 
 from app.core.logging import get_logger
 from app.core.supabase_client import get_supabase_service
@@ -93,7 +94,13 @@ async def list_candidates(db: AsyncSession, actor: User, **args) -> dict:
     offset = int(args.get("offset") or 0)
 
     repo = UserRepository(db)
-    stmt = select(User).where(User.role == UserRole.CANDIDATE)
+    # Eager-load profile — accessing user.profile in an async session without
+    # it raises MissingGreenlet (lazy-load is impossible across await).
+    stmt = (
+        select(User)
+        .where(User.role == UserRole.CANDIDATE)
+        .options(joinedload(User.profile))
+    )
     if search:
         like = f"%{search}%"
         stmt = stmt.where(
@@ -134,7 +141,14 @@ async def get_candidate(db: AsyncSession, actor: User, **args) -> dict:
     if not email:
         raise BadRequestError("email is required")
     repo = UserRepository(db)
-    user = await repo.get_by_email(email)
+    # Eager-load profile — async sessions cannot lazy-load across await.
+    stmt = (
+        select(User)
+        .where(User.email == email)
+        .options(joinedload(User.profile))
+    )
+    result = await db.execute(stmt)
+    user = result.scalar_one_or_none()
     if user is None or user.role != UserRole.CANDIDATE:
         raise NotFoundError(f"No candidate found with email '{email}'")
     profile = user.profile
@@ -219,6 +233,11 @@ async def delete_candidate(db: AsyncSession, actor: User, **args) -> dict:
         {"email": user.email},
     )
     await db.commit()
+    # Chat mutations must invalidate the admin caches too — the dashboard /
+    # candidates list / analysis bundles are served from TTL caches.
+    from app.routers.admin import invalidate_dashboard_cache
+
+    invalidate_dashboard_cache()
     return {"message": f"Candidate '{email}' deleted."}
 
 
@@ -276,6 +295,9 @@ async def create_candidate(db: AsyncSession, actor: User, **args) -> dict:
         {"email": email},
     )
     await db.commit()
+    from app.routers.admin import invalidate_dashboard_cache
+
+    invalidate_dashboard_cache()
     return {
         "id": str(user.id),
         "email": user.email,
@@ -404,6 +426,25 @@ async def update_interview_status(db: AsyncSession, actor: User, **args) -> dict
 
     previous = interview.admin_status
     await repo.update(interview_id, admin_status=status)
+
+    # Statuses that are also hiring verdicts must update the recommendation
+    # row too — the candidate-facing dashboard/result reads the verdict from
+    # the recommendations table, so "Recommended" / "Not Recommended" /
+    # "Need Further Review" set here must be visible on the candidate side.
+    from app.models.recommendation import RecommendationVerdict
+
+    verdict_statuses = {
+        "Recommended": RecommendationVerdict.RECOMMENDED,
+        "Not Recommended": RecommendationVerdict.NOT_RECOMMENDED,
+        "Need Further Review": RecommendationVerdict.NEED_FURTHER_REVIEW,
+    }
+    if status in verdict_statuses:
+        from app.repositories.analysis import RecommendationRepository
+
+        await RecommendationRepository(db).upsert(
+            interview_id, verdict_statuses[status], f"Set via status update to '{status}'."
+        )
+
     await ActivityLogRepository(db).log(
         actor.id,
         "status_updated",
@@ -412,6 +453,9 @@ async def update_interview_status(db: AsyncSession, actor: User, **args) -> dict
         {"from": previous, "to": status},
     )
     await db.commit()
+    from app.routers.admin import invalidate_dashboard_cache
+
+    invalidate_dashboard_cache()
     return {"interview_id": str(interview.id), "admin_status": status}
 
 
@@ -549,6 +593,9 @@ async def change_role(db: AsyncSession, actor: User, **args) -> dict:
     from app.dependencies.auth import invalidate_user_cache
 
     invalidate_user_cache(str(user.auth_uid) if user.auth_uid else None)
+    from app.routers.admin import invalidate_dashboard_cache
+
+    invalidate_dashboard_cache()
     return {"email": user.email, "role": role}
 
 
