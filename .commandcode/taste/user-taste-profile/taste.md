@@ -85,6 +85,7 @@
 
 ## UI/UX design standards (from user experience improvement specs)
 
+- Prefers footer bottom-bar content (copyright line + branding tagline such as "Product by Code Alpha") centered in the middle of the bar, stacked vertically, rather than split left/right with `justify-between` — explicitly requested "ya mid mai ho na k right side main" (it should be in the middle, not on the right). Confidence: 0.7
 - Wants analytics charts chosen by data semantics: line charts for trends, bar charts for comparisons, pie/donut charts only for percentage distribution — every chart must have a clear title, axis labels, a legend, values on hover, a date range, and tooltips explaining each metric, so it is understandable even to non-technical users. Confidence: 0.9
 - Wants every statistic card to include an icon, title, main value, a small description underneath, a growth indicator (↑/↓), and a "last updated" line. Confidence: 0.9
 - Wants status badges to always pair color with readable text labels (e.g., "Completed", "Processing", "Failed") — never a colored badge alone. Confidence: 0.9

@@ -72,18 +72,13 @@ export function Footer() {
           </div>
         </div>
 
-        <div className="mt-12 flex flex-col items-center justify-between gap-4 border-t border-border/60 pt-6 sm:flex-row">
+        <div className="mt-12 grid grid-cols-1 items-center gap-2 border-t border-border/60 pt-6 text-center sm:grid-cols-3 sm:text-left">
           <p className="text-xs text-muted-foreground">
             © {new Date().getFullYear()} HireLens AI. All rights reserved.
           </p>
-          <p className="text-xs font-semibold uppercase tracking-wider text-foreground">
+          <p className="text-xs font-semibold uppercase tracking-wider text-foreground sm:col-start-2 sm:text-center">
             Product by Code Alpha
           </p>
-          <div className="flex gap-6 text-xs text-muted-foreground">
-            <Link to="/register" className="hover:text-foreground">Privacy</Link>
-            <Link to="/login" className="hover:text-foreground">Terms</Link>
-            <Link to="/login" className="hover:text-foreground">Security</Link>
-          </div>
         </div>
       </div>
     </footer>
