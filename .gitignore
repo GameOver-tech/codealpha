@@ -32,3 +32,6 @@ backend/uploads/
 backend/generated/
 uploads/
 generated/
+# Frontend
+frontend/node_modules/
+frontend/.vite/
