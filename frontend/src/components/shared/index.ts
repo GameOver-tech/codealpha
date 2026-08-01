@@ -10,6 +10,6 @@ export { StatusBadge, RecommendationBadge, AdminStatusBadge, statusLabel, status
 export { FullScreenLoader } from './full-screen-loader'
 export { NotificationsMenu } from './notifications-menu'
 export { SpeakButton } from './SpeakButton'
-export { VoicePlayer } from './VoicePlayer'
-export { SpeakingAnimation } from './SpeakingAnimation'
+export { VoiceIndicator } from './VoiceIndicator'
+export * from './reading'
 export { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar'

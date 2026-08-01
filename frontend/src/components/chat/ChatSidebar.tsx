@@ -6,7 +6,8 @@ import { chatApi, streamChat } from '@/services/api'
 import type { ChatHistoryItem } from '@/types'
 import { renderMarkdown } from '@/lib/markdown'
 import { cn } from '@/lib/utils'
-import { SpeakButton, VoicePlayer } from '@/components/shared'
+import { VoiceIndicator } from '@/components/shared'
+import { useVoice } from '@/hooks/useVoice'
 
 interface DisplayMessage {
   id: string
@@ -23,12 +24,23 @@ interface ChatSidebarProps {
 const ACCEPTED_ATTACHMENTS = 'video/*,audio/*,image/*,.mp4,.mov,.avi,.mkv,.mp3,.wav,.m4a,.flac,.aac'
 
 // Memoized so streaming deltas only re-render the message being updated.
-const MessageBubble = memo(function MessageBubble({ message }: { message: DisplayMessage }) {
+const MessageBubble = memo(function MessageBubble({
+  message,
+  speaking,
+  paused,
+}: {
+  message: DisplayMessage
+  speaking: boolean
+  paused: boolean
+}) {
   return (
     <div key={message.id} className={cn('flex gap-2.5', message.role === 'user' && 'flex-row-reverse')}>
       {message.role === 'assistant' && (
-        <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-primary to-primary-dark">
+        <span className="relative mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-primary to-primary-dark">
           <Bot className="h-3.5 w-3.5 text-white" />
+          <span className="absolute -bottom-1 -right-1 flex items-center justify-center">
+            <VoiceIndicator active={speaking} paused={paused} className="bg-card text-primary" />
+          </span>
         </span>
       )}
       <div
@@ -40,18 +52,10 @@ const MessageBubble = memo(function MessageBubble({ message }: { message: Displa
         )}
       >
         {message.role === 'assistant' ? (
-          <div>
-            <div
-              className="chat-markdown [&_a]:break-all [&_table]:my-1 [&_code]:rounded [&_code]:bg-muted [&_code]:px-1 [&_code]:py-0.5 [&_code]:font-mono [&_code]:text-[0.85em]"
-              dangerouslySetInnerHTML={{ __html: renderMarkdown(message.content) }}
-            />
-            {!message.streaming && message.content && (
-              <div className="mt-2 flex flex-col items-end gap-1.5">
-                <VoicePlayer text={message.content} compact autoPlay />
-                <SpeakButton text={message.content} />
-              </div>
-            )}
-          </div>
+          <div
+            className="chat-markdown [&_a]:break-all [&_table]:my-1 [&_code]:rounded [&_code]:bg-muted [&_code]:px-1 [&_code]:py-0.5 [&_code]:font-mono [&_code]:text-[0.85em]"
+            dangerouslySetInnerHTML={{ __html: renderMarkdown(message.content) }}
+          />
         ) : (
           <div>
             {message.attachment && (
@@ -95,6 +99,7 @@ export function ChatSidebar({ role }: ChatSidebarProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const abortRef = useRef<AbortController | null>(null)
   const scrollRef = useRef<HTMLDivElement | null>(null)
+  const voice = useVoice()
 
   const suggestions = role === 'admin' ? ADMIN_SUGGESTIONS : CANDIDATE_SUGGESTIONS
 
@@ -113,11 +118,12 @@ export function ChatSidebar({ role }: ChatSidebarProps) {
   // Fresh session per mount — no memory is stored between refreshes.
   const reset = useCallback(() => {
     abortRef.current?.abort()
+    voice.stop()
     setMessages([])
     setInput('')
     setStreaming(false)
     setUploading(false)
-  }, [])
+  }, [voice])
 
   const handleFileSelected = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -209,11 +215,18 @@ export function ChatSidebar({ role }: ChatSidebarProps) {
               )
             },
             onDone: (content) => {
+              const finalContent = content || ''
               setMessages((prev) =>
                 prev.map((m) =>
-                  m.id === assistantMsg.id ? { ...m, content: content || m.content, streaming: false } : m,
+                  m.id === assistantMsg.id
+                    ? { ...m, content: finalContent || m.content, streaming: false }
+                    : m,
                 ),
               )
+              // ChatGPT-style: speak the finished response automatically.
+              if (voice.settings.autoPlay && finalContent.trim()) {
+                voice.speak(finalContent)
+              }
             },
             onError: (errorMessage) => {
               setMessages((prev) =>
@@ -241,7 +254,7 @@ export function ChatSidebar({ role }: ChatSidebarProps) {
         setStreaming(false)
       }
     },
-    [input, messages, streaming],
+    [input, messages, streaming, voice],
   )
 
   const panel = (
@@ -291,7 +304,14 @@ export function ChatSidebar({ role }: ChatSidebarProps) {
             </div>
           </div>
         ) : (
-          messages.map((m) => <MessageBubble key={m.id} message={m} />)
+          messages.map((m) => (
+            <MessageBubble
+              key={m.id}
+              message={m}
+              speaking={voice.state === 'playing' && voice.text === m.content}
+              paused={voice.state === 'paused' && voice.text === m.content}
+            />
+          ))
         )}
       </div>
 

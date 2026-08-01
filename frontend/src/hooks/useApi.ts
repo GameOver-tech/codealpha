@@ -68,6 +68,9 @@ export function useAdminInterviews() {
     queryKey: queryKeys.adminInterviews,
     queryFn: async () => (await adminApi.interviews()).data,
     refetchInterval: 30 * 1000,
+    // Keep list pages snappy: data is refreshed every 30s anyway, so a
+    // repeat visit within that window renders instantly from cache.
+    staleTime: 30 * 1000,
   })
 }
 
@@ -88,6 +91,10 @@ export function useAdminAnalysis(interviewId: string | undefined) {
     queryKey: queryKeys.adminAnalysis(interviewId ?? ''),
     queryFn: async () => (await adminApi.analysis(interviewId!)).data,
     enabled: Boolean(interviewId),
+    // The analysis bundle is heavy (fetches all artifacts). Cache it for
+    // several minutes — navigating back to a candidate is then instant.
+    // Regenerate/override mutations invalidate this key explicitly.
+    staleTime: 5 * 60 * 1000,
   })
 }
 

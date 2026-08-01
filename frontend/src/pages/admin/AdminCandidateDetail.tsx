@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import {
@@ -42,10 +42,22 @@ import {
   TabsTrigger,
   Badge,
 } from '@/components/ui'
-import { CircularProgress, EmptyState, PageHeader, RecommendationBadge, StatusBadge, AdminStatusBadge, Avatar, AvatarImage, AvatarFallback, SpeakButton, VoicePlayer } from '@/components/shared'
+import {
+  CircularProgress,
+  EmptyState,
+  PageHeader,
+  RecommendationBadge,
+  StatusBadge,
+  AdminStatusBadge,
+  ReadingHighlighter,
+  SoundWaveButton,
+} from '@/components/shared'
 import { useAdminAnalysis, useAdminInterviews, useAdminProgress, queryKeys } from '@/hooks'
-import { adminApi, mediaUrl, getErrorMessage, getToken } from '@/services/api'
-import { formatDuration, initials } from '@/lib/utils'
+import { useAutoScroll } from '@/hooks'
+import { useVoice } from '@/hooks/useVoice'
+import { buildReadingDocument } from '@/services/readingEngine'
+import { adminApi, getErrorMessage, getToken } from '@/services/api'
+import { cn, formatDuration } from '@/lib/utils'
 
 const ADMIN_STATUSES = [
   'Pending',
@@ -79,16 +91,33 @@ function scoreColor(score: number): string {
   return '#EF4444'
 }
 
-function SectionCard({ title, text }: { title: string; text?: string }) {
+function SectionCard({
+  title,
+  text,
+  activeWord,
+  highlighted,
+}: {
+  title: string
+  text?: string
+  /** Index of the word currently being spoken within this section. */
+  activeWord?: number
+  /** Whether this section is the one being read right now. */
+  highlighted?: boolean
+}) {
   if (!text) return null
   return (
-    <Card>
+    <Card
+      className={highlighted ? 'border-primary/40 ring-1 ring-primary/15' : undefined}
+    >
       <CardContent className="p-6">
-        <div className="flex items-start justify-between gap-2">
-          <h4 className="font-display text-base font-bold text-foreground">{title}</h4>
-          <VoicePlayer text={text} compact />
-        </div>
-        <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{text}</p>
+        <h4 className="font-display text-base font-bold text-foreground">{title}</h4>
+        <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+          {activeWord !== undefined && activeWord >= 0 ? (
+            <ReadingHighlighter text={text} activeWordIndex={activeWord} />
+          ) : (
+            text
+          )}
+        </p>
       </CardContent>
     </Card>
   )
@@ -104,6 +133,114 @@ export function AdminCandidateDetail() {
   const meta = interviews?.find((i) => i.id === interviewId)
   const { data: progress } = useAdminProgress(interviewId)
   const { data: bundle, isLoading, isError } = useAdminAnalysis(interviewId)
+
+  // ---------------------------------------------------------------------------
+  // ALL hooks must run unconditionally — the loading/error returns below are
+  // conditional, so no hook may appear after them (React Rules of Hooks).
+  // ---------------------------------------------------------------------------
+  const report = bundle?.report
+  const transcript = bundle?.transcript
+  const scores = bundle?.scores
+
+  const radarData = SCORE_LABELS.filter((s) => scores && scores[s.key as keyof typeof scores] !== undefined).map((s) => ({
+    axis: s.label,
+    score: Math.round((scores?.[s.key as keyof typeof scores] as number) ?? 0),
+  }))
+
+  // Structured reading document — sections + words for synchronized reading.
+  const readingDoc = useMemo(
+    () =>
+      buildReadingDocument({
+        executiveSummary: report?.executive_summary,
+        strengths: bundle?.strengths ?? [],
+        weaknesses: bundle?.weaknesses ?? [],
+        interviewOverview: report?.interview_overview,
+        candidateOverview: report?.candidate_overview,
+        technicalAssessment: report?.technical_assessment,
+        communicationAssessment: report?.communication_assessment,
+        confidenceAssessment: report?.confidence_assessment,
+        problemSolvingAssessment: report?.problem_solving_assessment,
+        experienceAssessment: report?.experience_assessment,
+        performanceAnalysis: report?.performance_analysis,
+        improvementSuggestions: report?.improvement_suggestions,
+        transcriptText: transcript?.full_text.slice(0, 4000),
+      }),
+    [report, bundle?.strengths, bundle?.weaknesses, transcript],
+  )
+
+  // Tab state — reading stays on the current tab, no auto-switching.
+  const [activeTab, setActiveTab] = useState('overview')
+
+  // Text to speak — ONLY the sections on the currently active tab, so the
+  // reader stays on the page the user is viewing.
+  const tabText = useMemo(() => {
+    const sections = readingDoc.sections.filter((s) => s.tab === activeTab)
+    return sections.map((s) => s.text).join(' ')
+  }, [readingDoc, activeTab])
+  const reportText = tabText
+
+  const voice = useVoice()
+  const listeningToReport =
+    voice.text === reportText && (voice.state === 'playing' || voice.state === 'paused')
+  const currentSentence = voice.currentSentence || ''
+
+  // Current section (for indicator label + highlight).
+  const activeSection = useMemo(() => {
+    if (!currentSentence) return null
+    return readingDoc.sections.find((s) => s.text.includes(currentSentence)) ?? null
+  }, [currentSentence, readingDoc])
+
+  // Word index within the current section for highlighting.
+  const activeWordInSection = useMemo(() => {
+    if (!activeSection || voice.wordIndex < 0) return -1
+    return voice.wordIndex
+  }, [activeSection, voice.wordIndex])
+
+  // If the user switches tabs mid-reading, restart speech for the new tab.
+  useEffect(() => {
+    if (!listeningToReport) return
+    voice.stop()
+    if (tabText.trim()) void voice.speak(tabText)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab])
+
+  // Auto-scroll is always on: keep the active section centered while reading.
+  const activeSectionRef = useRef<HTMLDivElement | null>(null)
+  useAutoScroll(
+    activeSectionRef.current,
+    Boolean(activeSection) && voice.state === 'playing',
+  )
+
+  const sectionEls = useRef(new Map<string, HTMLDivElement>())
+  const setSectionEl = useCallback((id: string, el: HTMLDivElement | null) => {
+    if (el) sectionEls.current.set(id, el)
+    else sectionEls.current.delete(id)
+  }, [])
+
+  // Build reading props for a section card: active word + highlight state.
+  const readingProps = useCallback(
+    (tab: string, label: string, text: string | undefined) => {
+      if (!text) return { activeWord: undefined as number | undefined, highlighted: false }
+      const section = readingDoc.sections.find(
+        (s) => s.tab === tab && s.label === label && s.text === text,
+      )
+      const isActive = activeSection?.id === section?.id && listeningToReport
+      return {
+        activeWord: isActive ? activeWordInSection : -1,
+        highlighted: isActive,
+      }
+    },
+    [readingDoc, activeSection, listeningToReport, activeWordInSection],
+  )
+
+  // Auto-scroll target element for the active section.
+  useEffect(() => {
+    if (!activeSection) return
+    const el = sectionEls.current.get(activeSection.id)
+    if (el) {
+      activeSectionRef.current = el
+    }
+  }, [activeSection])
 
   // POST-based download — download managers (IDM) only hijack GET requests,
   // so the PDF always reaches the browser as a normal blob download.
@@ -196,15 +333,6 @@ export function AdminCandidateDetail() {
     )
   }
 
-  const scores = bundle.scores
-  const radarData = SCORE_LABELS.filter((s) => scores && scores[s.key as keyof typeof scores] !== undefined).map((s) => ({
-    axis: s.label,
-    score: Math.round((scores?.[s.key as keyof typeof scores] as number) ?? 0),
-  }))
-
-  const report = bundle.report
-  const transcript = bundle.transcript
-
   return (
     <div className="space-y-6">
       <PageHeader
@@ -220,6 +348,20 @@ export function AdminCandidateDetail() {
               <RefreshCw />
               Regenerate PDF
             </Button>
+            {/* Sound-wave read button — no floating player, just clean word
+                highlighting while the report is spoken. */}
+            <SoundWaveButton
+              speaking={listeningToReport && voice.state === 'playing'}
+              paused={listeningToReport && voice.state === 'paused'}
+              ready={voice.state === 'loading' && voice.text === reportText}
+              onClick={() => {
+                if (listeningToReport) {
+                  voice.state === 'playing' ? voice.pause() : voice.resume()
+                } else {
+                  void voice.speak(reportText)
+                }
+              }}
+            />
             <Button
               onClick={() => downloadPdf.mutate({ id: interviewId!, url: adminApi.reportPdfUrl(interviewId!) })}
               loading={downloadPdf.isPending}
@@ -248,50 +390,7 @@ export function AdminCandidateDetail() {
         ) : null}
       </div>
 
-      {/* Candidate profile card */}
-      {meta?.candidate_profile && (
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <Avatar className="h-11 w-11">
-                  <AvatarImage
-                    src={mediaUrl(meta.candidate_profile.profile_picture_url)}
-                    alt={meta.candidate_name}
-                  />
-                  <AvatarFallback>{initials(meta.candidate_name)}</AvatarFallback>
-                </Avatar>
-                <h3 className="font-display text-base font-bold text-foreground">Candidate profile</h3>
-              </div>
-              {meta.candidate_profile.current_company && (
-                <Badge variant="secondary">{meta.candidate_profile.current_company}</Badge>
-              )}
-            </div>
-            <div className="mt-4 grid gap-4 md:grid-cols-2">
-              <div>
-                <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Skills</p>
-                <p className="mt-1 text-sm text-foreground">
-                  {meta.candidate_profile.skills || 'Not provided'}
-                </p>
-              </div>
-              <div>
-                <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Education</p>
-                <p className="mt-1 text-sm text-foreground">
-                  {meta.candidate_profile.education || 'Not provided'}
-                </p>
-              </div>
-              <div className="md:col-span-2">
-                <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Experience</p>
-                <p className="mt-1 text-sm text-foreground">
-                  {meta.candidate_profile.experience || 'Not provided'}
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      <Tabs defaultValue="overview" className="space-y-6">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
         <TabsList className="flex-wrap">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="evaluation">Evaluation</TabsTrigger>
@@ -374,19 +473,27 @@ export function AdminCandidateDetail() {
 
           {/* Strengths & weaknesses */}
           <div className="grid gap-6 lg:grid-cols-2">
-            <Card>
+            <Card
+              ref={(el) => setSectionEl('overview-strengths', el)}
+              className={readingProps('overview', 'Strengths', bundle.strengths.join('. ')).highlighted ? 'border-primary/40 ring-1 ring-primary/15' : undefined}
+            >
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <CheckCircle2 className="h-5 w-5 text-success" />
                   Strengths
-                  <SpeakButton className="ml-auto" text={bundle.strengths.join('. ')} />
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 {bundle.strengths.length > 0 ? (
                   <ul className="space-y-3">
                     {bundle.strengths.map((strength, i) => (
-                      <li key={i} className="flex items-start gap-3 rounded-xl bg-success/5 p-3 text-sm text-muted-foreground">
+                      <li
+                        key={i}
+                        className={cn(
+                          'flex items-start gap-3 rounded-xl bg-success/5 p-3 text-sm text-muted-foreground transition-colors',
+                          currentSentence && strength.includes(currentSentence) && 'bg-success/15 ring-1 ring-success/40',
+                        )}
+                      >
                         <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-success" />
                         {strength}
                       </li>
@@ -397,19 +504,27 @@ export function AdminCandidateDetail() {
                 )}
               </CardContent>
             </Card>
-            <Card>
+            <Card
+              ref={(el) => setSectionEl('overview-areas-for-improvement', el)}
+              className={readingProps('overview', 'Areas for Improvement', bundle.weaknesses.join('. ')).highlighted ? 'border-primary/40 ring-1 ring-primary/15' : undefined}
+            >
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <XCircle className="h-5 w-5 text-destructive" />
                   Areas for improvement
-                  <SpeakButton className="ml-auto" text={bundle.weaknesses.join('. ')} />
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 {bundle.weaknesses.length > 0 ? (
                   <ul className="space-y-3">
                     {bundle.weaknesses.map((weakness, i) => (
-                      <li key={i} className="flex items-start gap-3 rounded-xl bg-destructive/5 p-3 text-sm text-muted-foreground">
+                      <li
+                        key={i}
+                        className={cn(
+                          'flex items-start gap-3 rounded-xl bg-destructive/5 p-3 text-sm text-muted-foreground transition-colors',
+                          currentSentence && weakness.includes(currentSentence) && 'bg-destructive/15 ring-1 ring-destructive/40',
+                        )}
+                      >
                         <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
                         {weakness}
                       </li>
@@ -423,32 +538,41 @@ export function AdminCandidateDetail() {
           </div>
 
           {/* Executive summary */}
-          {report && (
-            <Card>
-              <CardContent className="space-y-4 p-6">
-                <div className="flex items-center justify-between">
+          {report && (() => {
+            const props = readingProps('overview', 'Executive Summary', report.executive_summary)
+            return (
+              <Card
+                ref={(el) => setSectionEl('overview-executive-summary', el)}
+                className={props.highlighted ? 'border-primary/50 ring-1 ring-primary/20' : undefined}
+              >
+                <CardContent className="space-y-4 p-6">
                   <h3 className="font-display text-lg font-bold text-foreground">Executive summary</h3>
-                  <SpeakButton text={report.executive_summary} />
-                </div>
-                <p className="leading-relaxed text-muted-foreground">{report.executive_summary}</p>
-              </CardContent>
-            </Card>
-          )}
+                  <p className="leading-relaxed text-muted-foreground">
+                    {props.activeWord !== undefined && props.activeWord >= 0 ? (
+                      <ReadingHighlighter text={report.executive_summary} activeWordIndex={props.activeWord} />
+                    ) : (
+                      report.executive_summary
+                    )}
+                  </p>
+                </CardContent>
+              </Card>
+            )
+          })()}
         </TabsContent>
 
         <TabsContent value="evaluation" className="mt-0 space-y-6">
           {report ? (
             <div className="grid gap-6 lg:grid-cols-2">
-              <SectionCard title="Interview overview" text={report.interview_overview} />
-              <SectionCard title="Candidate overview" text={report.candidate_overview} />
-              <SectionCard title="Technical assessment" text={report.technical_assessment} />
-              <SectionCard title="Communication assessment" text={report.communication_assessment} />
-              <SectionCard title="Confidence assessment" text={report.confidence_assessment} />
-              <SectionCard title="Problem solving assessment" text={report.problem_solving_assessment} />
-              <SectionCard title="Experience assessment" text={report.experience_assessment} />
-              <SectionCard title="Performance analysis" text={report.performance_analysis} />
+              <SectionCard title="Interview overview" text={report.interview_overview} {...readingProps('evaluation', 'Interview Overview', report.interview_overview)} />
+              <SectionCard title="Candidate overview" text={report.candidate_overview} {...readingProps('evaluation', 'Candidate Overview', report.candidate_overview)} />
+              <SectionCard title="Technical assessment" text={report.technical_assessment} {...readingProps('evaluation', 'Technical Assessment', report.technical_assessment)} />
+              <SectionCard title="Communication assessment" text={report.communication_assessment} {...readingProps('evaluation', 'Communication Assessment', report.communication_assessment)} />
+              <SectionCard title="Confidence assessment" text={report.confidence_assessment} {...readingProps('evaluation', 'Confidence Assessment', report.confidence_assessment)} />
+              <SectionCard title="Problem solving assessment" text={report.problem_solving_assessment} {...readingProps('evaluation', 'Problem Solving Assessment', report.problem_solving_assessment)} />
+              <SectionCard title="Experience assessment" text={report.experience_assessment} {...readingProps('evaluation', 'Experience Assessment', report.experience_assessment)} />
+              <SectionCard title="Performance analysis" text={report.performance_analysis} {...readingProps('evaluation', 'Performance Analysis', report.performance_analysis)} />
               <div className="lg:col-span-2">
-                <SectionCard title="Improvement suggestions" text={report.improvement_suggestions} />
+                <SectionCard title="Improvement suggestions" text={report.improvement_suggestions} {...readingProps('evaluation', 'Improvement Suggestions', report.improvement_suggestions)} />
               </div>
             </div>
           ) : (
@@ -466,12 +590,17 @@ export function AdminCandidateDetail() {
                   {transcript.confidence > 0 && (
                     <Badge variant="secondary">Confidence: {Math.round(transcript.confidence * 100)}%</Badge>
                   )}
-                  <SpeakButton className="ml-auto" text={transcript.full_text} />
                 </div>
                 <div className="max-h-[560px] space-y-3 overflow-y-auto pr-3">
                   {transcript.segments && transcript.segments.length > 0 ? (
                     transcript.segments.map((segment, i) => (
-                      <div key={i} className="rounded-xl bg-muted/50 p-3.5">
+                      <div
+                        key={i}
+                        className={cn(
+                          'rounded-xl bg-muted/50 p-3.5 transition-colors',
+                          currentSentence && segment.text.includes(currentSentence) && 'bg-primary/10 ring-1 ring-primary/40',
+                        )}
+                      >
                         <div className="mb-1 flex items-center gap-2 text-[11px] font-semibold text-primary">
                           {segment.speaker && <span>{segment.speaker}</span>}
                           <span className="text-muted-foreground">

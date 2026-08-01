@@ -1,5 +1,5 @@
 import { memo, useRef } from 'react'
-import { useSpeech } from '@/context'
+import { useVoice } from '@/hooks/useVoice'
 import { cn } from '@/lib/utils'
 
 interface SpeakButtonProps {
@@ -7,16 +7,16 @@ interface SpeakButtonProps {
   text: string
   /** Optional accessible label override. */
   label?: string
-  /** Small inline variant for dense contexts (chat bubbles, tables). */
+  /** Small inline variant for dense contexts (tables, cards). */
   variant?: 'icon' | 'inline'
   className?: string
 }
 
 /**
- * Minimal ChatGPT-style speaker button. Clicking reads ONLY the associated
- * text. While speaking the icon shows a subtle sound-wave animation; clicking
- * again pauses, and clicking once more resumes. Starting any other speech
- * automatically stops this one (global single-instance rule).
+ * Minimal speaker button backed by the global ElevenLabs voice engine.
+ * Clicking reads ONLY the associated text (single-instance — any other
+ * speech stops first). Icon animates while playing; click pauses, click
+ * again resumes.
  */
 export const SpeakButton = memo(function SpeakButton({
   text,
@@ -24,24 +24,22 @@ export const SpeakButton = memo(function SpeakButton({
   variant = 'icon',
   className,
 }: SpeakButtonProps) {
-  const { supported, status, isSpeaking, speak, pause, resume } = useSpeech()
+  const voice = useVoice()
   const lastTapRef = useRef(0)
-
-  if (!supported) return null
 
   const cleaned = (text || '').trim()
   if (!cleaned) return null
 
-  const speakingThis = isSpeaking(cleaned)
-  const playing = speakingThis && status === 'playing'
-  const paused = speakingThis && status === 'paused'
+  const speakingThis = voice.text === cleaned
+  const playing = speakingThis && voice.state === 'playing'
+  const paused = speakingThis && voice.state === 'paused'
 
   const handleClick = () => {
     if (speakingThis) {
       if (playing) {
-        pause()
+        voice.pause()
       } else if (paused) {
-        resume()
+        voice.resume()
       }
       return
     }
@@ -49,12 +47,12 @@ export const SpeakButton = memo(function SpeakButton({
     // Double-click restarts from the beginning; single click starts speaking.
     const now = Date.now()
     if (now - lastTapRef.current < 350) {
-      speak(cleaned)
       lastTapRef.current = 0
+      void voice.speak(cleaned)
       return
     }
     lastTapRef.current = now
-    speak(cleaned)
+    void voice.speak(cleaned)
   }
 
   const ariaLabel =
@@ -101,22 +99,22 @@ export const SpeakButton = memo(function SpeakButton({
 
 /** Animated speaker icon: three bars that ripple while playing. */
 function SoundWave({ playing, paused }: { playing: boolean; paused: boolean }) {
-  const active = playing
   return (
-    <span
-      className={cn('flex h-3.5 w-3.5 items-center justify-center gap-[2px]')}
-      aria-hidden="true"
-    >
+    <span className="flex h-3.5 w-3.5 items-center justify-center gap-[2px]" aria-hidden="true">
       {[0, 1, 2].map((bar) => (
         <span
           key={bar}
           className={cn(
             'w-[2px] rounded-full bg-current transition-all duration-200',
-            active ? 'tts-bar tts-bar-animate' : paused ? 'h-1.5' : 'h-[5px]',
+            active(playing) ? 'tts-bar tts-bar-animate' : paused ? 'h-1.5' : 'h-[5px]',
           )}
-          style={active ? { animationDelay: `${bar * 0.15}s` } : undefined}
+          style={playing ? { animationDelay: `${bar * 0.15}s` } : undefined}
         />
       ))}
     </span>
   )
+}
+
+function active(playing: boolean): boolean {
+  return playing
 }
