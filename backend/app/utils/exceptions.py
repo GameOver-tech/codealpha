@@ -27,6 +27,11 @@ class BadRequestError(HTTPException):
         super().__init__(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
 
 
+class ServiceUnavailableError(HTTPException):
+    def __init__(self, detail: str = "Service unavailable"):
+        super().__init__(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=detail)
+
+
 class TranscriptionError(Exception):
     """Raised when speech-to-text fails or the transcript is unusable.
 

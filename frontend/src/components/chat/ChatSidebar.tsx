@@ -6,6 +6,7 @@ import { chatApi, streamChat } from '@/services/api'
 import type { ChatHistoryItem } from '@/types'
 import { renderMarkdown } from '@/lib/markdown'
 import { cn } from '@/lib/utils'
+import { SpeakButton, VoicePlayer } from '@/components/shared'
 
 interface DisplayMessage {
   id: string
@@ -39,10 +40,18 @@ const MessageBubble = memo(function MessageBubble({ message }: { message: Displa
         )}
       >
         {message.role === 'assistant' ? (
-          <div
-            className="chat-markdown [&_a]:break-all [&_table]:my-1 [&_code]:rounded [&_code]:bg-muted [&_code]:px-1 [&_code]:py-0.5 [&_code]:font-mono [&_code]:text-[0.85em]"
-            dangerouslySetInnerHTML={{ __html: renderMarkdown(message.content) }}
-          />
+          <div>
+            <div
+              className="chat-markdown [&_a]:break-all [&_table]:my-1 [&_code]:rounded [&_code]:bg-muted [&_code]:px-1 [&_code]:py-0.5 [&_code]:font-mono [&_code]:text-[0.85em]"
+              dangerouslySetInnerHTML={{ __html: renderMarkdown(message.content) }}
+            />
+            {!message.streaming && message.content && (
+              <div className="mt-2 flex flex-col items-end gap-1.5">
+                <VoicePlayer text={message.content} compact autoPlay />
+                <SpeakButton text={message.content} />
+              </div>
+            )}
+          </div>
         ) : (
           <div>
             {message.attachment && (

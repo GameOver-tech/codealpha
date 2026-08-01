@@ -2,6 +2,7 @@ import { lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { ProtectedRoute, GuestOnlyRoute } from './guards'
 import { FullScreenLoader } from '@/components/shared'
+import { StopOnRouteChange } from '@/components/shared/StopOnRouteChange'
 import { NotFoundPage, ForbiddenPage, ServerErrorPage } from '@/pages/errors'
 import { CandidateLayout } from '@/layouts/CandidateLayout'
 import { AdminLayout } from '@/layouts/AdminLayout'
@@ -29,6 +30,7 @@ const AdminSettings = lazy(() => import('@/pages/admin/AdminSettings').then((m) 
 export default function AppRouter() {
   return (
     <BrowserRouter>
+      <StopOnRouteChange />
       <Routes>
         {/* Public */}
         <Route

@@ -10,7 +10,7 @@ import {
   Calendar,
 } from 'lucide-react'
 import { Button, Card, Skeleton } from '@/components/ui'
-import { EmptyState, PageHeader, StatusBadge, AdminStatusBadge, RecommendationBadge } from '@/components/shared'
+import { EmptyState, PageHeader, StatusBadge, AdminStatusBadge, RecommendationBadge, SpeakButton } from '@/components/shared'
 import { useInterviewResult, useInterviewStatus } from '@/hooks'
 import { formatDuration } from '@/lib/utils'
 import type { RecommendationVerdict } from '@/types'
@@ -109,9 +109,10 @@ export function CandidateResults() {
             </h2>
 
             {result.message && (
-              <p className="mt-3 max-w-lg text-sm leading-relaxed text-muted-foreground">
-                {result.message}
-              </p>
+              <div className="mt-3 flex max-w-lg items-start gap-2">
+                <p className="text-sm leading-relaxed text-muted-foreground">{result.message}</p>
+                <SpeakButton text={result.message} className="mt-0.5 shrink-0" />
+              </div>
             )}
 
             {/* Interview metadata */}

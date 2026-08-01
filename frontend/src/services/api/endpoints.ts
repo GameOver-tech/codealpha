@@ -109,6 +109,13 @@ export const adminApi = {
     return res.data
   },
 
+  // POST-based download — download managers (IDM etc.) only hijack GET
+  // requests, so POST is never intercepted.
+  reportPdfUrl: (interviewId: string) =>
+    `/api/admin/report/pdf/download?interview_id=${encodeURIComponent(interviewId)}`,
+  regenerateReportPdfUrl: (interviewId: string) =>
+    `/api/admin/report/pdf/regenerate?interview_id=${encodeURIComponent(interviewId)}`,
+
   regenerateReportPdf: async (interviewId: string) => {
     const res = await api.get<Blob>('/api/admin/report/pdf/regenerate', {
       params: { interview_id: interviewId },
