@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
-import { ArrowRight, BadgeCheck, PlayCircle, Sparkles, Upload, FileText, Brain, LineChart, Trophy, Plus } from 'lucide-react'
+import { ArrowRight, BadgeCheck, PlayCircle, Sparkles, Upload, FileText, Brain, LineChart, Trophy, Plus, Star, Zap, ShieldCheck, Activity } from 'lucide-react'
 import { CTAButton } from '@/components/shared'
 
 export function Hero() {
@@ -33,7 +33,7 @@ export function Hero() {
             transition={{ duration: 0.6, delay: 0.1 }}
             className="mt-6 font-display text-4xl font-extrabold leading-[1.1] tracking-tight text-foreground sm:text-5xl lg:text-6xl"
           >
-            Your AI-powered <span className="text-gradient">talent evaluation</span> partner
+            Your AI-powered <span className="text-gradient animate-gradient-shift">talent evaluation</span> partner
           </motion.h1>
 
           <motion.p
@@ -74,6 +74,28 @@ export function Hero() {
               <BadgeCheck className="h-4 w-4 text-success" /> Instant AI reports
             </span>
           </motion.div>
+
+          {/* Proof bar: social proof to convert in the first seconds */}
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.7 }}
+            className="mt-12 flex flex-wrap items-center gap-x-8 gap-y-4 border-t border-border/60 pt-6"
+          >
+            {[
+              { icon: Star, value: '4.9/5', label: 'Recruiter rating' },
+              { icon: Zap, value: '10×', label: 'Faster screening' },
+              { icon: ShieldCheck, value: '100%', label: 'Data secure' },
+            ].map((s) => (
+              <div key={s.label} className="flex items-center gap-2.5">
+                <s.icon className="h-5 w-5 text-primary" />
+                <div>
+                  <p className="font-display text-sm font-bold text-foreground">{s.value}</p>
+                  <p className="text-xs text-muted-foreground">{s.label}</p>
+                </div>
+              </div>
+            ))}
+          </motion.div>
         </div>
 
         {/* Hero visual: AI brain hologram */}
@@ -83,18 +105,66 @@ export function Hero() {
           transition={{ duration: 0.7, delay: 0.3 }}
           className="relative mx-auto flex w-full max-w-[620px] items-center justify-center"
         >
-          <div className="relative w-full animate-float">
-            <div className="absolute inset-0 -z-10 animate-pulse-ring rounded-full bg-blue-400/20 blur-2xl" />
-            <div className="absolute inset-0 -z-10 animate-pulse-ring rounded-full bg-blue-400/20 blur-2xl [animation-delay:1s]" />
-            <img
-              src="/ai-brain.png"
-              alt="AI brain hologram"
-              loading="lazy"
-              className="h-auto w-full max-w-[620px] object-contain"
-            />
+          {/* Hologram stage */}
+          <div className="relative w-full">
+            {/* Glow + floating chips */}
+            <div className="relative animate-float">
+              <div className="absolute inset-0 -z-10 animate-pulse-ring rounded-full bg-blue-400/20 blur-2xl" />
+              <div className="absolute inset-0 -z-10 animate-pulse-ring rounded-full bg-blue-400/20 blur-2xl [animation-delay:1s]" />
+              <img
+                src="/ai-brain.png"
+                alt="AI brain hologram"
+                loading="lazy"
+                className="h-auto w-full max-w-[620px] object-contain"
+              />
+              {/* Scanline sweeping the hologram */}
+              <div className="pointer-events-none absolute inset-x-8 h-24 animate-scanline rounded-full bg-gradient-to-b from-transparent via-blue-400/15 to-transparent blur-md" />
+            </div>
+
+            {/* Floating holographic status chips */}
+            <motion.div
+              initial={{ opacity: 0, x: -16 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.9 }}
+              className="absolute -left-4 top-8 hidden rounded-2xl glass-strong px-4 py-3 shadow-card md:block"
+            >
+              <p className="flex items-center gap-2 text-xs font-semibold text-foreground">
+                <span className="relative flex h-2 w-2">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-success opacity-75" />
+                  <span className="relative inline-flex h-2 w-2 rounded-full bg-success" />
+                </span>
+                Analyzing in real time
+              </p>
+            </motion.div>
+            <motion.div
+              initial={{ opacity: 0, x: 16 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 1.1 }}
+              className="absolute -right-4 bottom-10 hidden rounded-2xl glass-strong px-4 py-3 shadow-card md:block"
+            >
+              <p className="flex items-center gap-2 text-xs font-semibold text-foreground">
+                <Activity className="h-4 w-4 text-primary" /> Score 92/100
+              </p>
+            </motion.div>
           </div>
         </motion.div>
       </div>
+
+      {/* Scroll cue */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 1.6, duration: 1 }}
+        className="pointer-events-none absolute bottom-6 left-1/2 hidden -translate-x-1/2 md:block"
+      >
+        <div className="flex h-10 w-6 items-start justify-center rounded-full border-2 border-muted-foreground/30 p-1.5">
+          <motion.div
+            animate={{ y: [0, 8, 0] }}
+            transition={{ duration: 1.6, repeat: Infinity, ease: 'easeInOut' }}
+            className="h-2 w-1 rounded-full bg-primary"
+          />
+        </div>
+      </motion.div>
     </section>
   )
 }
@@ -123,7 +193,18 @@ export function HowItWorks() {
           </p>
         </div>
 
-        <div className="mt-14 grid gap-6 sm:grid-cols-2 lg:grid-cols-5">
+        <div className="relative mt-14 grid gap-6 sm:grid-cols-2 lg:grid-cols-5">
+          {/* Animated connector line on large screens */}
+          <div className="pointer-events-none absolute left-[10%] right-[10%] top-14 hidden h-0.5 lg:block">
+            <div className="h-full w-full origin-left bg-gradient-to-r from-primary/10 via-primary/30 to-primary/10" />
+            <motion.div
+              initial={{ scaleX: 0 }}
+              whileInView={{ scaleX: 1 }}
+              viewport={{ once: true }}
+              transition={{ duration: 1.4, ease: 'easeOut' }}
+              className="absolute inset-0 origin-left bg-gradient-to-r from-primary via-blue-400 to-primary"
+            />
+          </div>
           {STEPS.map((step, i) => (
             <motion.div
               key={step.title}
@@ -133,10 +214,12 @@ export function HowItWorks() {
               transition={{ delay: i * 0.08, duration: 0.5 }}
               className="group relative rounded-2xl border border-border/60 bg-card p-6 text-center shadow-soft transition-all duration-300 hover:-translate-y-1.5 hover:shadow-card"
             >
-              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-primary/10 to-blue-400/10 text-primary transition-colors group-hover:from-primary group-hover:to-primary-dark group-hover:text-white">
+              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-primary/10 to-blue-400/10 text-primary transition-all duration-300 group-hover:scale-110 group-hover:from-primary group-hover:to-primary-dark group-hover:text-white group-hover:shadow-glow">
                 <step.icon className="h-7 w-7" />
               </div>
-              <span className="absolute right-4 top-4 text-xs font-bold text-muted-foreground/50">0{i + 1}</span>
+              <span className="absolute right-4 top-4 bg-gradient-to-r from-primary to-blue-400 bg-clip-text text-xs font-bold text-transparent">
+                0{i + 1}
+              </span>
               <h3 className="mt-4 font-display text-base font-bold text-foreground">{step.title}</h3>
               <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">{step.description}</p>
             </motion.div>
@@ -204,9 +287,14 @@ export function Features() {
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
               transition={{ delay: i * 0.06, duration: 0.5 }}
-              className="group rounded-2xl border border-border/60 bg-card p-7 shadow-soft transition-all duration-300 hover:-translate-y-1 hover:border-primary/30 hover:shadow-glow"
+              onMouseMove={(e) => {
+                const r = e.currentTarget.getBoundingClientRect()
+                e.currentTarget.style.setProperty('--spot-x', `${e.clientX - r.left}px`)
+                e.currentTarget.style.setProperty('--spot-y', `${e.clientY - r.top}px`)
+              }}
+              className="spotlight-card group relative rounded-2xl border border-border/60 bg-card p-7 shadow-soft transition-all duration-300 hover:-translate-y-1 hover:border-primary/30 hover:shadow-glow"
             >
-              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary transition-all duration-300 group-hover:scale-110 group-hover:bg-primary group-hover:text-white">
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary transition-all duration-300 group-hover:scale-110 group-hover:bg-primary group-hover:text-white group-hover:shadow-glow">
                 <feature.icon className="h-6 w-6" />
               </div>
               <h3 className="mt-5 font-display text-lg font-bold text-foreground">{feature.title}</h3>
@@ -280,7 +368,7 @@ export function Pricing() {
               transition={{ delay: i * 0.08, duration: 0.5 }}
               className={`relative flex flex-col rounded-3xl p-8 transition-all duration-300 ${
                 plan.highlight
-                  ? 'border-2 border-primary bg-card shadow-glow lg:-translate-y-3'
+                  ? 'animate-border-spin shadow-glow lg:-translate-y-3'
                   : 'border border-border/60 bg-card shadow-soft hover:-translate-y-1 hover:shadow-card'
               }`}
             >
@@ -406,8 +494,9 @@ export function CTA() {
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-primary via-primary to-primary-dark px-8 py-16 text-center shadow-glow sm:px-16">
           <div className="pointer-events-none absolute inset-0">
-            <div className="absolute -left-20 -top-20 h-64 w-64 rounded-full bg-white/10 blur-3xl" />
-            <div className="absolute -bottom-24 -right-16 h-72 w-72 rounded-full bg-blue-300/20 blur-3xl" />
+            <div className="absolute -left-20 -top-20 h-64 w-64 animate-glow-pulse rounded-full bg-white/10 blur-3xl" />
+            <div className="absolute -bottom-24 -right-16 h-72 w-72 animate-glow-pulse rounded-full bg-blue-300/20 blur-3xl [animation-delay:2s]" />
+            <div className="absolute inset-0 bg-[linear-gradient(to_right,rgb(255_255_255/0.06)_1px,transparent_1px),linear-gradient(to_bottom,rgb(255_255_255/0.06)_1px,transparent_1px)] bg-[size:56px_56px] [mask-image:radial-gradient(ellipse_70%_70%_at_50%_50%,#000_60%,transparent_100%)]" />
           </div>
           <div className="relative">
             <h2 className="mx-auto max-w-2xl font-display text-3xl font-bold tracking-tight text-white sm:text-4xl">
@@ -419,7 +508,7 @@ export function CTA() {
             <div className="mt-8 flex flex-wrap items-center justify-center gap-4">
               <Link
                 to="/register"
-                className="group inline-flex h-12 items-center gap-2 rounded-xl bg-white px-7 text-sm font-semibold text-primary shadow-lg transition-all hover:scale-[1.03] active:scale-[0.98]"
+                className="animate-shine group inline-flex h-12 items-center gap-2 rounded-xl bg-white px-7 text-sm font-semibold text-primary shadow-lg transition-all hover:scale-[1.03] active:scale-[0.98]"
               >
                 Get started free
                 <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />

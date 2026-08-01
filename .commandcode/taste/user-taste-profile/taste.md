@@ -92,6 +92,8 @@
 - In UI patch work, expects existing containers, wrappers, and CSS classes to be reused when swapping an element (e.g., keep the existing Hero container and its animation, do not create a new section or rewrite surrounding code) rather than introducing new structure. Confidence: 0.75
 - Wants static hero/visual imagery to be "fully animated" with continuous, lightweight motion (floating, glowing pulse rings, hologram-style effects) — expects the assistant to enhance the visual with subtle ongoing animation rather than leaving it as a static image. Confidence: 0.8
 - For animation work, prefers reusing the project's existing animation utilities (tailwind keyframes like `animate-float`, `animate-pulse-ring`) and design tokens over defining new ones, keeping the animation pure-CSS and lightweight so it respects `prefers-reduced-motion` and adds no heavy dependencies. Confidence: 0.75
+- Competes in international hackathons and wants the product (especially the landing page) to be competition-grade and professional — "make it more advanced" means ambitious, premium visual polish on public-facing surfaces, not minimal or default styling. Confidence: 0.8
+- Believes the first impression decides the final outcome ("first impression ... winning audience attraction and attention in nano second") — the above-the-fold hero must win attention within the first seconds, so landing pages should lead with high-impact visuals, motion, and instant credibility signals (proof stats, ratings, live-status chips) before any secondary content. Confidence: 0.8
 
  while leaving the rest. Confidence: 0.7
 

@@ -181,3 +181,240 @@
 .animate-reading-bar {
   animation: reading-bar 0.7s ease-in-out infinite;
 }
+
+/* ============================================
+   Landing page premium motion system
+   ============================================ */
+
+/* Soft, drifting aurora blobs for hero + CTA backdrops */
+@keyframes aurora-drift {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  33% {
+    transform: translate3d(6%, -8%, 0) scale(1.08);
+  }
+  66% {
+    transform: translate3d(-6%, 6%, 0) scale(0.94);
+  }
+}
+
+.animate-aurora {
+  animation: aurora-drift 18s ease-in-out infinite;
+  will-change: transform;
+}
+
+/* Slow hue rotation for animated gradient text */
+@keyframes gradient-shift {
+  0%,
+  100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+}
+
+.animate-gradient-shift {
+  background-size: 200% 200%;
+  animation: gradient-shift 8s ease infinite;
+}
+
+/* Light sweep across buttons and cards (shine) */
+@keyframes shine-sweep {
+  0% {
+    transform: translateX(-120%) skewX(-20deg);
+  }
+  60%,
+  100% {
+    transform: translateX(220%) skewX(-20deg);
+  }
+}
+
+.animate-shine {
+  position: relative;
+  overflow: hidden;
+}
+.animate-shine::after {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 40%;
+  background: linear-gradient(
+    100deg,
+    transparent 20%,
+    rgba(255, 255, 255, 0.35) 50%,
+    transparent 80%
+  );
+  transform: translateX(-120%) skewX(-20deg);
+  pointer-events: none;
+}
+.animate-shine:hover::after {
+  animation: shine-sweep 0.9s ease;
+}
+
+/* Vertical scanline traveling over the hologram */
+@keyframes scanline {
+  0% {
+    top: -10%;
+    opacity: 0;
+  }
+  10% {
+    opacity: 0.6;
+  }
+  90% {
+    opacity: 0.6;
+  }
+  100% {
+    top: 110%;
+    opacity: 0;
+  }
+}
+
+.animate-scanline {
+  animation: scanline 4.5s ease-in-out infinite;
+}
+
+/* Faint floating particles */
+@keyframes particle-rise {
+  0% {
+    transform: translateY(0);
+    opacity: 0;
+  }
+  15% {
+    opacity: 0.7;
+  }
+  100% {
+    transform: translateY(-140px);
+    opacity: 0;
+  }
+}
+
+.animate-particle {
+  animation: particle-rise 8s linear infinite;
+}
+
+/* Soft pulsing glow for CTA orbs */
+@keyframes glow-pulse {
+  0%,
+  100% {
+    opacity: 0.5;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.85;
+    transform: scale(1.12);
+  }
+}
+
+.animate-glow-pulse {
+  animation: glow-pulse 7s ease-in-out infinite;
+}
+
+/* Gradient border rotation for highlight cards */
+@keyframes border-spin {
+  to {
+    --border-angle: 360deg;
+  }
+}
+
+@property --border-angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+
+.animate-border-spin {
+  background:
+    linear-gradient(var(--card, hsl(var(--card))), var(--card, hsl(var(--card)))) padding-box,
+    conic-gradient(
+        from var(--border-angle),
+        hsl(var(--ring) / 0.15),
+        hsl(var(--ring) / 0.7),
+        hsl(var(--ring) / 0.15),
+        hsl(var(--ring) / 0.7),
+        hsl(var(--ring) / 0.15)
+      )
+      border-box;
+  border: 2px solid transparent;
+  animation: border-spin 6s linear infinite;
+}
+
+/* Animated underline for nav links */
+.nav-link {
+  position: relative;
+}
+.nav-link::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  bottom: 2px;
+  height: 2px;
+  width: 100%;
+  transform: scaleX(0);
+  transform-origin: right;
+  background: hsl(var(--ring));
+  transition: transform 0.25s ease;
+  border-radius: 9999px;
+}
+.nav-link:hover::after,
+.nav-link:focus-visible::after {
+  transform: scaleX(1);
+  transform-origin: left;
+}
+
+/* Subtle magnetic lift for primary CTAs */
+.animate-lift {
+  transition:
+    transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1),
+    box-shadow 0.3s ease;
+}
+.animate-lift:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 14px 44px -10px rgb(37 99 235 / 0.45);
+}
+
+/* Cursor spotlight overlay for feature cards */
+.spotlight-card {
+  position: relative;
+  overflow: hidden;
+}
+.spotlight-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  opacity: 0;
+  pointer-events: none;
+  background: radial-gradient(
+    420px circle at var(--spot-x, 50%) var(--spot-y, 50%),
+    rgb(37 99 235 / 0.12),
+    transparent 65%
+  );
+  transition: opacity 0.3s ease;
+}
+.spotlight-card:hover::before {
+  opacity: 1;
+}
+
+/* Respect reduced-motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  .animate-aurora,
+  .animate-gradient-shift,
+  .animate-shine::after,
+  .animate-scanline,
+  .animate-particle,
+  .animate-glow-pulse,
+  .animate-border-spin,
+  .animate-float,
+  .animate-pulse-ring {
+    animation: none !important;
+  }
+  .nav-link::after {
+    transition: none;
+  }
+  html {
+    scroll-behavior: auto;
+  }
+}
