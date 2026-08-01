@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useRef, useState } from 'react'
-import { Bot, Loader2, MessageCircle, Paperclip, RotateCcw, Send, Sparkles, X } from 'lucide-react'
+import { Bot, Loader2, MessageCircle, Paperclip, Pause, Play, RotateCcw, Send, Sparkles, Volume2, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { chatApi, streamChat } from '@/services/api'
@@ -28,10 +28,12 @@ const MessageBubble = memo(function MessageBubble({
   message,
   speaking,
   paused,
+  onSpeak,
 }: {
   message: DisplayMessage
   speaking: boolean
   paused: boolean
+  onSpeak: (text: string) => void
 }) {
   return (
     <div key={message.id} className={cn('flex gap-2.5', message.role === 'user' && 'flex-row-reverse')}>
@@ -52,10 +54,36 @@ const MessageBubble = memo(function MessageBubble({
         )}
       >
         {message.role === 'assistant' ? (
-          <div
-            className="chat-markdown [&_a]:break-all [&_table]:my-1 [&_code]:rounded [&_code]:bg-muted [&_code]:px-1 [&_code]:py-0.5 [&_code]:font-mono [&_code]:text-[0.85em]"
-            dangerouslySetInnerHTML={{ __html: renderMarkdown(message.content) }}
-          />
+          <div>
+            <div
+              className="chat-markdown [&_a]:break-all [&_table]:my-1 [&_code]:rounded [&_code]:bg-muted [&_code]:px-1 [&_code]:py-0.5 [&_code]:font-mono [&_code]:text-[0.85em]"
+              dangerouslySetInnerHTML={{ __html: renderMarkdown(message.content) }}
+            />
+            {!message.streaming && message.content && (
+              <button
+                type="button"
+                onClick={() => onSpeak(message.content)}
+                className={cn(
+                  'mt-1.5 inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded-full transition-colors',
+                  speaking
+                    ? 'bg-primary/10 text-primary'
+                    : paused
+                      ? 'bg-amber-500/10 text-amber-500'
+                      : 'text-muted-foreground/60 hover:bg-accent hover:text-primary',
+                )}
+                aria-label={speaking ? 'Pause' : paused ? 'Resume' : 'Listen to this message'}
+                title={speaking ? 'Pause' : paused ? 'Resume' : 'Listen'}
+              >
+                {speaking ? (
+                  <Pause className="h-3 w-3" />
+                ) : paused ? (
+                  <Play className="ml-0.5 h-3 w-3" />
+                ) : (
+                  <Volume2 className="h-3 w-3" />
+                )}
+              </button>
+            )}
+          </div>
         ) : (
           <div>
             {message.attachment && (
@@ -223,10 +251,8 @@ export function ChatSidebar({ role }: ChatSidebarProps) {
                     : m,
                 ),
               )
-              // ChatGPT-style: speak the finished response automatically.
-              if (voice.settings.autoPlay && finalContent.trim()) {
-                voice.speak(finalContent)
-              }
+              // No auto-speak — text is generated silently. The user clicks
+              // the small speaker icon under a message to hear it.
             },
             onError: (errorMessage) => {
               setMessages((prev) =>
@@ -310,6 +336,15 @@ export function ChatSidebar({ role }: ChatSidebarProps) {
               message={m}
               speaking={voice.state === 'playing' && voice.text === m.content}
               paused={voice.state === 'paused' && voice.text === m.content}
+              onSpeak={(text) => {
+                // Play/pause/resume the exact message when its icon is clicked.
+                const isThis = voice.text === text
+                if (isThis && (voice.state === 'playing' || voice.state === 'paused')) {
+                  voice.state === 'playing' ? voice.pause() : voice.resume()
+                } else {
+                  void voice.speak(text)
+                }
+              }}
             />
           ))
         )}
