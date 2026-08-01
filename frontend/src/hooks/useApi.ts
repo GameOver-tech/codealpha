@@ -85,11 +85,8 @@ export function useAdminDashboard() {
   return useQuery({
     queryKey: queryKeys.adminDashboard,
     queryFn: async () => (await adminApi.dashboard()).data,
-    staleTime: 15 * 1000,
-    refetchInterval: 30 * 1000,
-    // Keep list pages snappy: data is refreshed every 30s anyway, so a
-    // repeat visit within that window renders instantly from cache.
     staleTime: 30 * 1000,
+    refetchInterval: 30 * 1000,
   })
 }
 

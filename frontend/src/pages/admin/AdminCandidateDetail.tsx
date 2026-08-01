@@ -53,18 +53,14 @@ import {
   AdminStatusBadge,
   ReadingHighlighter,
   SoundWaveButton,
-  Avatar,
-  AvatarImage,
-  AvatarFallback,
   SpeakButton,
-  VoicePlayer,
 } from '@/components/shared'
-import { useAdminAnalysis, useAdminInterviews, useAdminProgress, queryKeys } from '@/hooks'
+import { useAdminAnalysis, useAdminInterviewMeta, useAdminProgress, queryKeys } from '@/hooks'
 import { useAutoScroll } from '@/hooks'
 import { useVoice } from '@/hooks/useVoice'
 import { buildReadingDocument } from '@/services/readingEngine'
-import { adminApi, mediaUrl, getErrorMessage, getToken } from '@/services/api'
-import { cn, formatDuration, initials } from '@/lib/utils'
+import { adminApi, getErrorMessage, getToken } from '@/services/api'
+import { cn, formatDuration } from '@/lib/utils'
 
 const ADMIN_STATUSES = [
   'Pending',
