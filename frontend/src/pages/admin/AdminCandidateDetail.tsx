@@ -26,7 +26,6 @@ import {
   Loader2,
   ShieldCheck,
   AlertTriangle,
-  ClipboardCheck,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import {
@@ -58,17 +57,6 @@ import { useVoice } from '@/hooks/useVoice'
 import { buildReadingDocument } from '@/services/readingEngine'
 import { adminApi, getErrorMessage, getToken } from '@/services/api'
 import { cn, formatDuration } from '@/lib/utils'
-
-const ADMIN_STATUSES = [
-  'Pending',
-  'Processing',
-  'Completed',
-  'Recommended',
-  'Not Recommended',
-  'Need Further Review',
-  'Rejected',
-  'Selected',
-]
 
 const SCORE_LABELS: { key: string; label: string }[] = [
   { key: 'technical_skills', label: 'Technical' },
@@ -322,15 +310,6 @@ export function AdminCandidateDetail() {
     onSuccess: () => {
       toast.success('Regeneration started — the evaluation will be rebuilt.')
       queryClient.invalidateQueries({ queryKey: queryKeys.adminProgress(interviewId ?? '') })
-    },
-    onError: (error) => toast.error(getErrorMessage(error)),
-  })
-
-  const statusMutation = useMutation({
-    mutationFn: (status: string) => adminApi.updateStatus(interviewId!, status),
-    onSuccess: (res) => {
-      toast.success(res.data.message)
-      queryClient.invalidateQueries({ queryKey: queryKeys.adminInterviews })
     },
     onError: (error) => toast.error(getErrorMessage(error)),
   })
@@ -687,41 +666,6 @@ export function AdminCandidateDetail() {
         </TabsContent>
 
         <TabsContent value="insights" className="mt-0 space-y-6">
-          {/* Admin status management */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <ClipboardCheck className="h-5 w-5 text-primary" />
-                Interview status
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="mb-4 text-sm text-muted-foreground">
-                Current status:{' '}
-                <AdminStatusBadge status={meta?.admin_status ?? 'Pending'} className="ml-1" />
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {ADMIN_STATUSES.map((status) => {
-                  const active = (meta?.admin_status ?? 'Pending') === status
-                  return (
-                    <button
-                      key={status}
-                      onClick={() => statusMutation.mutate(status)}
-                      disabled={statusMutation.isPending}
-                      className={`rounded-full border px-4 py-1.5 text-xs font-semibold transition-all disabled:opacity-50 ${
-                        active
-                          ? 'border-primary bg-primary/10 text-primary'
-                          : 'border-border text-muted-foreground hover:border-primary/40 hover:text-foreground'
-                      }`}
-                    >
-                      {status}
-                    </button>
-                  )
-                })}
-              </div>
-            </CardContent>
-          </Card>
-
           {/* Recommendation override */}
           <Card>
             <CardHeader>
