@@ -52,6 +52,8 @@
 
   html {
     scroll-behavior: smooth;
+    /* Offset in-page anchors so the fixed navbar doesn't cover section headings */
+    scroll-padding-top: 5rem;
   }
 
   body {

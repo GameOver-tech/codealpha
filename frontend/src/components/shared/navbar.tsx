@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Menu, X, ArrowRight } from 'lucide-react'
 import { Logo } from './logo'
@@ -8,11 +8,54 @@ import { Button } from '@/components/ui'
 import { useAuth } from '@/context'
 
 const NAV_LINKS = [
-  { label: 'Features', href: '/#features' },
-  { label: 'How it works', href: '/#how-it-works' },
-  { label: 'Pricing', href: '/#pricing' },
-  { label: 'FAQ', href: '/#faq' },
+  { label: 'Features', to: '/#features' },
+  { label: 'How it works', to: '/#how-it-works' },
+  { label: 'Pricing', to: '/#pricing' },
+  { label: 'FAQ', to: '/#faq' },
 ]
+
+/** SPA-aware anchor navigation: scrolls to a section on the landing page,
+ *  and navigates to the landing page first when coming from another route. */
+function scrollToSection(id: string) {
+  const el = document.getElementById(id)
+  el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+
+function useSectionNavigation() {
+  const location = useLocation()
+  const navigate = useNavigate()
+
+  return (to: string) => {
+    if (to.startsWith('/#')) {
+      const id = to.slice(2)
+      if (location.pathname === '/') {
+        scrollToSection(id)
+      } else {
+        navigate('/', { state: { scrollTo: id } })
+      }
+    } else {
+      navigate(to)
+    }
+  }
+}
+
+/** Scrolls to the section requested via router state (cross-page anchor). */
+function useScrollToSectionFromState() {
+  const location = useLocation()
+  const navigate = useNavigate()
+  const state = location.state as { scrollTo?: string } | null
+
+  useEffect(() => {
+    if (!state?.scrollTo) return
+    const id = state.scrollTo
+    // Scroll on next frame so the landing page has rendered its sections.
+    const raf = requestAnimationFrame(() => {
+      scrollToSection(id)
+      navigate(location.pathname, { replace: true, state: null })
+    })
+    return () => cancelAnimationFrame(raf)
+  }, [state?.scrollTo, location.pathname, navigate])
+}
 
 export function Navbar() {
   const [open, setOpen] = useState(false)
@@ -20,6 +63,8 @@ export function Navbar() {
   const [progress, setProgress] = useState(0)
   const { isAuthenticated, user } = useAuth()
   const navigate = useNavigate()
+  const goTo = useSectionNavigation()
+  useScrollToSectionFromState()
 
   const handleScroll = () => {
     const current = window.scrollY > 12
@@ -46,13 +91,13 @@ export function Navbar() {
 
         <div className="hidden items-center gap-1 md:flex">
           {NAV_LINKS.map((link) => (
-            <a
+            <button
               key={link.label}
-              href={link.href}
+              onClick={() => goTo(link.to)}
               className="nav-link rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
             >
               {link.label}
-            </a>
+            </button>
           ))}
         </div>
 
@@ -100,14 +145,16 @@ export function Navbar() {
           >
             <div className="space-y-1 px-4 py-4">
               {NAV_LINKS.map((link) => (
-                <a
+                <button
                   key={link.label}
-                  href={link.href}
-                  onClick={() => setOpen(false)}
-                  className="block rounded-lg px-3 py-2.5 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-foreground"
+                  onClick={() => {
+                    goTo(link.to)
+                    setOpen(false)
+                  }}
+                  className="block w-full rounded-lg px-3 py-2.5 text-left text-sm font-medium text-muted-foreground hover:bg-accent hover:text-foreground"
                 >
                   {link.label}
-                </a>
+                </button>
               ))}
               <div className="flex flex-col gap-2 pt-2">
                 {isAuthenticated ? (
