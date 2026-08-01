@@ -43,7 +43,8 @@
 - Approves installing system-level dependencies (e.g., ffmpeg via winget) and wiring provided API keys so the pipeline runs against real services — expects the assistant to unblock real end-to-end results (real transcript from the actual upload) rather than stopping at fail-fast behavior or reporting missing tooling as a limitation. Confidence: 0.7
 - Pastes API keys directly into chat (Gemini, Groq, etc.) and expects the assistant to set them in the `.env` file under the correct variable names (e.g., `GEMINI_CHAT_API_KEY`, `GROQ_API_KEY`) and verify they load correctly — the user is comfortable sharing secret values in chat for the assistant to wire up. Confidence: 0.7
 - Reports dev-server/npm startup errors (backend or frontend) by pasting the full terminal output (the exact command run plus the error log) with a terse "fix."/"fix it" request, and expects a root-cause diagnosis and fix rather than a workaround. Confidence: 0.6
-- Runs the frontend dev server locally with `npm run dev` (Vite) from the `frontend` directory, while the backend runs separately — treats backend and frontend as separate npm/python projects in the same repo rather than one combined dev command. Confidence: 0.6
+- Reports frontend runtime bugs (e.g., a blank page in the admin upload section) by pasting the exact browser console error stack trace (the React error message plus component stack, e.g., "Cannot read properties of null (reading 'useMemo')" from `useDropzone` in `AdminUpload`) alongside a terse Roman Urdu symptom description ("admin main uplaod k section main blank page ata hai aur ya console error hai" / "ya interview ka section abe b blank page show kr raha hai, ya console error hai"), and expects the assistant to diagnose the root cause (e.g., a React hooks violation, a Vite dep-cache corruption) and fix it directly rather than work around it; if the first fix attempt doesn't resolve the reported error, the user reports back with the same error and expects deeper root-cause investigation. Confidence: 0.8
+- Runs the frontend dev server locally with `npm run dev` (Vite) from the `frontend` directory, while the backend runs separately — treats backend and frontend as separate npm/python projects in the same repo rather than one combined dev command; the user's own dev server may be left running (e.g., on port 5173) and can serve stale in-memory Vite dep-cache modules even after on-disk cache fixes, so the assistant must verify what the running server actually serves (fetch served chunks) and confirm the user's server picks up the fix, not just fix files on disk. Confidence: 0.7
 - Relies on the browser-based API documentation pages (`/docs` and `/redoc`) actually rendering, not just returning 200 — reports a blank page as broken and expects the assistant to find the root cause (e.g., a dead `redoc@next` CDN tag) and make the page render (e.g., pin working CDN builds) rather than declaring the endpoint healthy. Confidence: 0.5
 - Prefers single-source-of-truth UI: when the same data is displayed in two sections (e.g., a Reports page duplicating the Results page), the redundant section should be deleted entirely (not hidden), removing it from navigation, routes, and page files so no leftover references remain. Confidence: 0.75
 - Prefers the user's own profile/account section not to appear as a sidebar navigation button — it should instead open when the user clicks their avatar/profile card at the bottom of the sidebar, keeping the sidebar limited to functional sections; all existing profile functionality must keep working, just with changed navigation. Confidence: 0.75
@@ -70,7 +71,7 @@
 - Wants optimization to eliminate the source of excess client-side work: pages should not download large datasets (e.g., the full interview list) just to compute a few counts or look up one record — heavy aggregation should move server-side (single aggregate SQL queries) and per-record lookups should use lightweight dedicated endpoints instead of full-list downloads. Confidence: 0.8
 - Prefers caching hot data server-side with explicit TTLs and explicit invalidation wired into every mutation endpoint (upload/delete/status/recommendation changes) — auth user lookups should be cached too (raising the cache TTL to reduce remote DB round-trips), with `invalidate_user_cache` actually called on role/active-flag changes so security-relevant changes take effect immediately. Confidence: 0.75
 - Includes code-quality cleanup in performance work: remove dead code, duplicate code, unused imports, unused state, and unreachable logic — but only where it does not affect existing functionality; heavy work must never block the API (transcription/AI/PDF run in the background, frontend polls for status without blocking), and any added code must be production-ready, maintainable, and well-commented. Confidence: 0.75
-- When merging a collaborator's branch, executes the merge selectively via `git checkout <remote> -- <files>` (cherry-picking only the good files) rather than a raw `git merge` that would create conflicts and risk losing the user's better implementations — and validates the selective merge with backend tests, frontend typecheck, and a production build. Confidence: 0.8
+- When merging a collaborator's branch, executes the merge selectively via `git checkout <remote> -- <files>` (cherry-picking only the good files) rather than a raw `git merge` that would create conflicts and risk losing the user's better implementations — and validates the selective merge with backend tests, frontend typecheck, and a production build. Confidence: 0.85
 - Prefers adopting a trusted collaborator's coherent new feature files wholesale (e.g., their entire new voice/TTS system: `useVoice`, `audioManager`, `readingEngine`, `reading/` components, updated consumers) over hand-porting piecemeal — while still swapping in the user's own better hook/endpoint (e.g., `useAdminInterviewMeta`) inside the adopted file rather than regressing to the collaborator's heavier approach. Confidence: 0.75
 - Prefers fetch-and-analyze-before-merging: on a collaborator merge request, first `git fetch`, inspect the remote's new commits (`git log HEAD..origin/branch`), check the working tree is clean, and diff each file (backend + frontend) to judge per-file quality before deciding what to adopt — not just blindly pulling. Confidence: 0.75
 - Communicates in Roman Urdu (Hinglish) mixed with English, using colloquial phrasing for feature/copy-change requests ("us ki achi chzain... add karo", ""Your AI-powered talent evaluation partner" is ko replace karo is say ...", "blurness ko khatam kr do mokamil tor per... aur enhance karo"); expects the assistant to interpret the intent and act on it directly. Confidence: 0.8
@@ -110,6 +111,20 @@
 - Believes the first impression decides the final outcome ("first impression ... winning audience attraction and attention in nano second") — the above-the-fold hero must win attention within the first seconds, so landing pages should lead with high-impact visuals, motion, and instant credibility signals (proof stats, ratings, live-status chips) before any secondary content. Confidence: 0.8
 
  while leaving the rest. Confidence: 0.7
+
+re any secondary content. Confidence: 0.8
+
+ while leaving the rest. Confidence: 0.7
+
+ls, motion, and instant credibility signals (proof stats, ratings, live-status chips) before any secondary content. Confidence: 0.8
+
+ while leaving the rest. Confidence: 0.7
+
+re any secondary content. Confidence: 0.8
+
+ while leaving the rest. Confidence: 0.7
+
+dence: 0.7
 
 re any secondary content. Confidence: 0.8
 
