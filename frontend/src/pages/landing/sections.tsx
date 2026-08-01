@@ -27,50 +27,6 @@ function Word({ children, gradient }: { children: React.ReactNode; gradient?: bo
   )
 }
 
-/* 3D holographic data panel with readable text and real depth */
-function HoloPanel({
-  icon: Icon,
-  iconClass,
-  title,
-  desc,
-  className = '',
-  delay = 0.9,
-  tilt,
-  success = false,
-}: {
-  icon: React.ComponentType<{ className?: string }>
-  iconClass?: string
-  title: string
-  desc: string
-  className?: string
-  delay?: number
-  tilt: { rotateY: number; rotateX: number; z: number }
-  success?: boolean
-}) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 16, scale: 0.85 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      transition={{ delay, duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
-      style={{
-        transformStyle: 'preserve-3d',
-        transform: `rotateY(${tilt.rotateY}deg) rotateX(${tilt.rotateX}deg) translateZ(${tilt.z}px)`,
-      }}
-      className={`absolute hidden rounded-2xl border border-white/50 bg-white/75 p-3 shadow-card backdrop-blur-xl dark:border-white/10 dark:bg-slate-900/80 md:block ${className}`}
-    >
-      <div className="flex items-center gap-2.5">
-        <span className={`flex h-8 w-8 items-center justify-center rounded-lg ${iconClass ?? 'bg-primary/10 text-primary'}`}>
-          <Icon className="h-4 w-4" />
-        </span>
-        <div>
-          <p className={`text-xs font-bold leading-tight ${success ? 'text-success' : 'text-foreground'}`}>{title}</p>
-          <p className="text-[10px] leading-tight text-muted-foreground">{desc}</p>
-        </div>
-      </div>
-    </motion.div>
-  )
-}
-
 export function Hero() {
   return (
     <section className="relative overflow-hidden pb-20 pt-24 md:pb-28 md:pt-28">
@@ -172,46 +128,51 @@ export function Hero() {
           </motion.div>
         </div>
 
-        {/* Hero visual: AI brain hologram with real 3D data panels */}
+        {/* Hero visual: AI holographic brain — fully animated stage around the exact image */}
         <motion.div
-          initial={{ opacity: 0, scale: 0.92 }}
+          initial={{ opacity: 0, scale: 0.96 }}
           animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.7, delay: 0.3 }}
-          className="relative mx-auto flex w-full max-w-[620px] items-center justify-center"
+          transition={{ duration: 0.7, delay: 0.3, ease: [0.22, 1, 0.36, 1] }}
+          className="relative mx-auto flex w-full max-w-[640px] items-center justify-center"
         >
-          {/* Hologram stage */}
-          <div className="relative w-full" style={{ perspective: '1400px' }}>
-            {/* Rotating conic light rays */}
+          <div className="relative w-full">
+            {/* Rotating conic light rays behind the image */}
             <div
               aria-hidden
               className="absolute inset-0 -z-10 animate-spin-slow rounded-full"
               style={{
                 background:
-                  'conic-gradient(from 0deg, transparent 0deg, rgba(59,130,246,0.08) 30deg, transparent 60deg, transparent 120deg, rgba(59,130,246,0.08) 150deg, transparent 180deg, transparent 240deg, rgba(59,130,246,0.08) 270deg, transparent 300deg)',
-                maskImage: 'radial-gradient(circle, black 0%, transparent 70%)',
-                WebkitMaskImage: 'radial-gradient(circle, black 0%, transparent 70%)',
+                  'conic-gradient(from 0deg, transparent 0deg, rgba(59,130,246,0.1) 30deg, transparent 60deg, transparent 120deg, rgba(59,130,246,0.1) 150deg, transparent 180deg, transparent 240deg, rgba(59,130,246,0.1) 270deg, transparent 300deg)',
+                maskImage: 'radial-gradient(circle, black 0%, transparent 72%)',
+                WebkitMaskImage: 'radial-gradient(circle, black 0%, transparent 72%)',
               }}
             />
-            {/* Brain core — masked to the center so the image's baked-in text edges fade out */}
-            <div className="relative animate-float">
-              <div className="absolute inset-0 -z-10 animate-pulse-ring rounded-full bg-blue-400/15 blur-xl" />
-              <div className="absolute inset-0 -z-10 animate-pulse-ring rounded-full bg-blue-400/15 blur-xl [animation-delay:1s]" />
+            {/* Expanding pulse rings */}
+            <div className="pointer-events-none absolute inset-6 -z-10 animate-pulse-ring rounded-full bg-blue-500/10 blur-xl" />
+            <div className="pointer-events-none absolute inset-6 -z-10 animate-pulse-ring rounded-full bg-blue-500/10 blur-xl [animation-delay:1s]" />
+
+            {/* Rotating dashed orbit ring */}
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-4 -z-10 animate-spin-slow rounded-full border-2 border-dashed border-blue-400/20"
+              style={{ animationDuration: '30s' }}
+            />
+
+            {/* Floating + breathing image */}
+            <div className="animate-float">
               <div className="animate-breathe">
                 <img
-                  src="/ai-brain-opt.png"
-                  srcSet="/ai-brain-opt.png 1280w, /ai-brain.png 10240w"
-                  sizes="(min-width: 1024px) 620px, (min-width: 640px) 50vw, 100vw"
-                  alt="AI brain hologram"
-                  loading="lazy"
+                  src="/ai-brain.jpg"
+                  alt="AI holographic brain"
+                  width={1200}
+                  height={939}
+                  loading="eager"
+                  fetchPriority="high"
                   decoding="async"
-                  className="mx-auto h-auto w-[78%] max-w-[500px] object-contain"
-                  style={{
-                    maskImage: 'radial-gradient(ellipse 62% 62% at center, black 55%, transparent 100%)',
-                    WebkitMaskImage: 'radial-gradient(ellipse 62% 62% at center, black 55%, transparent 100%)',
-                  }}
+                  className="h-auto w-full object-contain"
                 />
-                {/* Scanline sweeping the hologram */}
-                <div className="pointer-events-none absolute inset-x-8 h-24 animate-scanline rounded-full bg-gradient-to-b from-transparent via-blue-400/10 to-transparent" />
+                {/* Scanline sweeping over the image */}
+                <div className="pointer-events-none absolute inset-x-10 h-28 animate-scanline rounded-full bg-gradient-to-b from-transparent via-blue-400/15 to-transparent" />
               </div>
             </div>
 
@@ -219,57 +180,18 @@ export function Hero() {
             <div
               aria-hidden
               className="pointer-events-none absolute left-1/2 top-1/2 h-0 w-0"
-              style={{ ['--orbit-r' as string]: 'min(42%, 140px)' }}
+              style={{ ['--orbit-r' as string]: 'min(48%, 160px)' }}
             >
-              <span className="absolute h-2 w-2 -translate-x-1/2 -translate-y-1/2 animate-orbit rounded-full bg-blue-400/80" />
+              <span className="absolute h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 animate-orbit rounded-full bg-blue-400/80 shadow-[0_0_12px_rgba(59,130,246,0.8)]" />
               <span
-                className="absolute h-1.5 w-1.5 -translate-x-1/2 -translate-y-1/2 animate-orbit rounded-full bg-primary/70"
-                style={{ animationDelay: '3s' }}
+                className="absolute h-2 w-2 -translate-x-1/2 -translate-y-1/2 animate-orbit rounded-full bg-cyan-300/80 shadow-[0_0_10px_rgba(103,232,249,0.8)]"
+                style={{ animationDelay: '3.5s' }}
               />
               <span
-                className="absolute h-1 w-1 -translate-x-1/2 -translate-y-1/2 animate-orbit rounded-full bg-cyan-300/80"
-                style={{ animationDelay: '6s' }}
+                className="absolute h-1.5 w-1.5 -translate-x-1/2 -translate-y-1/2 animate-orbit rounded-full bg-indigo-300/80 shadow-[0_0_8px_rgba(165,180,252,0.8)]"
+                style={{ animationDelay: '7s' }}
               />
             </div>
-
-            {/* Real 3D holographic data panels — readable logic in one second */}
-            <HoloPanel
-              delay={0.85}
-              className="-left-2 top-8 md:-left-6"
-              tilt={{ rotateY: 18, rotateX: -6, z: 60 }}
-              icon={Upload}
-              iconClass="bg-primary/15 text-primary"
-              title="Upload"
-              desc="Drop interview video"
-            />
-            <HoloPanel
-              delay={1.0}
-              className="-right-2 top-16 md:-right-6"
-              tilt={{ rotateY: -18, rotateX: -6, z: 80 }}
-              icon={Brain}
-              iconClass="bg-blue-500/15 text-blue-500"
-              title="AI Analysis"
-              desc="Speech + sentiment"
-            />
-            <HoloPanel
-              delay={1.15}
-              className="bottom-10 left-2 md:left-0"
-              tilt={{ rotateY: 14, rotateX: 8, z: 40 }}
-              icon={LineChart}
-              iconClass="bg-primary/15 text-primary"
-              title="Skill Score"
-              desc="92 / 100"
-            />
-            <HoloPanel
-              delay={1.3}
-              className="bottom-4 right-2 md:right-2"
-              tilt={{ rotateY: -14, rotateX: 8, z: 50 }}
-              icon={Trophy}
-              iconClass="bg-success/15 text-success"
-              title="Verdict"
-              desc="Recommended"
-              success
-            />
           </div>
         </motion.div>
       </div>
