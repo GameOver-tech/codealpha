@@ -11,7 +11,6 @@ import {
   X,
   ScanEye,
   Loader2,
-  Briefcase,
   LogOut,
 } from 'lucide-react'
 import { Avatar, AvatarFallback, AvatarImage, Button } from '@/components/ui'
@@ -37,7 +36,6 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
   {
     label: 'Hiring',
     items: [
-      { to: '/admin/jobs', label: 'Jobs', icon: Briefcase },
       { to: '/admin/candidates', label: 'Candidates', icon: Users },
       { to: '/admin/upload', label: 'Interviews', icon: Upload },
       { to: '/admin/processing', label: 'Processing', icon: Loader2 },

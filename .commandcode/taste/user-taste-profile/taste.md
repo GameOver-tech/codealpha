@@ -12,7 +12,8 @@
 - Prefers comprehensive documentation including setup instructions, environment variable guidance, and example curl requests for all endpoints. Confidence: 0.8
 - Prefers testing authenticated endpoints through the interactive Swagger UI (`/docs`) using an HTTP bearer token from a seeded admin account, rather than only curl. Confidence: 0.7
 - Prefers the backend API to expose its own login/authentication endpoint (e.g., `POST /api/auth/login`) that issues bearer tokens, so tokens can be generated directly from the API/Swagger instead of fetched manually from an external auth service. Confidence: 0.8
-- Communicates UI/API issues by attaching screenshots (e.g., of the Swagger docs page or the candidate-facing page) alongside a brief description of the problem and the desired behavior. Confidence: 0.6
+- When removing a feature/section (e.g., a sidebar nav item), expects the now-unused imports and references to be cleaned up in the same change, and the result verified with a typecheck/build. Confidence: 0.7
+- Communicates UI/API issues AND feature/change requests by attaching screenshots alongside a brief, terse description of the desired behavior (e.g., "delete the jobs section from the sidebar" with a screenshot of the admin dashboard) — the assistant is expected to interpret and act on the request directly. Confidence: 0.8
 - Reports API test failures by pasting the full Swagger request/response output (generated curl, request URL, response body and headers) for the failing endpoint. Confidence: 0.5
 - When an endpoint fails in Swagger, expects a root-cause explanation that distinguishes expected behavior (e.g., role-based 403s) from real bugs, plus concrete instructions for how to test — including test accounts for each required role (e.g., admin AND candidate). Confidence: 0.7
 - When reporting an error, expects the assistant to audit the full API surface first ("check all APIs"), fix every related issue uncovered during the investigation (not just the reported symptom), and verify the fixes end-to-end against a live running server — not just via import checks or unit tests. Confidence: 0.95
@@ -64,6 +65,16 @@
 - Includes code-quality cleanup in performance work: remove dead code, duplicate code, unused imports, unused state, and unreachable logic — but only where it does not affect existing functionality; heavy work must never block the API (transcription/AI/PDF run in the background, frontend polls for status without blocking), and any added code must be production-ready, maintainable, and well-commented. Confidence: 0.75
 - Communicates in Roman Urdu (Hinglish) mixed with English, using colloquial phrasing for feature requests ("us ki achi chzain... add karo"); expects the assistant to interpret the intent and act on it. Confidence: 0.6
 - Prefers reusing proven, working code from trusted sources (e.g., a friend's integration branch) over reimplementing features from scratch — instructs the assistant to run `git pull`/merge directly and cherry-pick only the good, working functionality (e.g., chatbot, fast loading) into the current codebase while leaving the rest. Confidence: 0.7
+
+## UI/UX design standards (from user experience improvement specs)
+
+- Wants analytics charts chosen by data semantics: line charts for trends, bar charts for comparisons, pie/donut charts only for percentage distribution — every chart must have a clear title, axis labels, a legend, values on hover, a date range, and tooltips explaining each metric, so it is understandable even to non-technical users. Confidence: 0.9
+- Wants every statistic card to include an icon, title, main value, a small description underneath, a growth indicator (↑/↓), and a "last updated" line. Confidence: 0.9
+- Wants status badges to always pair color with readable text labels (e.g., "Completed", "Processing", "Failed") — never a colored badge alone. Confidence: 0.9
+- Wants icon-based data displays (upload cards, transcript sections, status chips) to always show visible text labels beside or below the icon; labels must never be conveyed by icons or colors alone, so each section is instantly identifiable. Confidence: 0.85
+- Wants professional empty states with an illustration, a friendly message, and an action button — never blank sections. Confidence: 0.85
+- Wants a clear information hierarchy on every page: important information first, secondary information smaller, so a user understands a page within ~3 seconds without reading everything. Confidence: 0.85
+- Wants dashboard readability: increased spacing, improved typography, clearly separated sections, better card grouping, reduced visual clutter, and intuitive layouts. Confidence: 0.85
 
  while leaving the rest. Confidence: 0.7
 
