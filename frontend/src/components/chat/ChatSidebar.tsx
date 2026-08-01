@@ -2,8 +2,8 @@ import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import { Bot, Loader2, MessageCircle, Paperclip, Pause, Play, RotateCcw, Send, Sparkles, Volume2, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
-import { chatApi, streamChat } from '@/services/api'
-import type { ChatHistoryItem } from '@/types'
+import { chatApi, adminApi, streamChat } from '@/services/api'
+import type { ChatHistoryItem, RegisteredCandidate } from '@/types'
 import { renderMarkdown } from '@/lib/markdown'
 import { cn } from '@/lib/utils'
 import { VoiceIndicator } from '@/components/shared'
@@ -15,6 +15,11 @@ interface DisplayMessage {
   content: string
   attachment?: { name: string; size: number }
   streaming?: boolean
+}
+
+/** Pending upload awaiting details — rendered as an in-chat form card. */
+interface PendingUpload {
+  file: File
 }
 
 interface ChatSidebarProps {
@@ -118,12 +123,171 @@ const ADMIN_SUGGESTIONS = [
 ]
 const CANDIDATE_SUGGESTIONS = ['My interview status', 'What is my result?', 'I need help']
 
+/**
+ * In-chat upload details form — replaces the old native browser prompt with
+ * a professional card inside the assistant panel.
+ */
+function UploadDetailsForm({
+  fileName,
+  fileSize,
+  uploading,
+  onSubmit,
+  onCancel,
+}: {
+  fileName: string
+  fileSize: number
+  uploading: boolean
+  onSubmit: (email: string, jobTitle: string) => void
+  onCancel: () => void
+}) {
+  const [email, setEmail] = useState('')
+  const [jobTitle, setJobTitle] = useState('')
+  const [error, setError] = useState('')
+  const [candidates, setCandidates] = useState<RegisteredCandidate[]>([])
+  const [candidatesLoading, setCandidatesLoading] = useState(false)
+  const [showDropdown, setShowDropdown] = useState(false)
+
+  // Load registered candidates once so the admin can pick an email from the
+  // dropdown instead of typing it from memory.
+  useEffect(() => {
+    let cancelled = false
+    setCandidatesLoading(true)
+    adminApi
+      .registeredCandidates()
+      .then((res) => {
+        if (!cancelled) setCandidates(res.data)
+      })
+      .catch(() => {
+        /* dropdown is optional — manual entry still works */
+      })
+      .finally(() => {
+        if (!cancelled) setCandidatesLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const filtered = email.trim()
+    ? candidates.filter(
+        (c) =>
+          c.email.toLowerCase().includes(email.trim().toLowerCase()) ||
+          c.full_name.toLowerCase().includes(email.trim().toLowerCase()),
+      )
+    : candidates
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    const value = email.trim()
+    if (!value) {
+      setError('Candidate email is required.')
+      return
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
+      setError('Enter a valid email address.')
+      return
+    }
+    setError('')
+    onSubmit(value, jobTitle.trim() || 'Interview')
+  }
+
+  return (
+    <div className="flex justify-start">
+      <div className="w-full max-w-[85%] rounded-2xl rounded-bl-md border border-primary/30 bg-muted/40 p-3.5">
+        <div className="flex items-center gap-2">
+          <Paperclip className="h-3.5 w-3.5 shrink-0 text-primary" />
+          <p className="truncate text-xs font-semibold text-foreground">{fileName}</p>
+          <span className="shrink-0 text-[10px] text-muted-foreground">
+            {(fileSize / (1024 * 1024)).toFixed(1)} MB
+          </span>
+        </div>
+
+        <form onSubmit={handleSubmit} className="mt-2.5 space-y-2" noValidate>
+          <div className="relative">
+            <input
+              type="text"
+              value={email}
+              onChange={(e) => {
+                setEmail(e.target.value)
+                setError('')
+                setShowDropdown(true)
+              }}
+              onFocus={() => setShowDropdown(true)}
+              placeholder={candidatesLoading ? 'Loading candidates…' : 'Candidate email (required)'}
+              disabled={uploading || candidatesLoading}
+              className="h-9 w-full rounded-lg border border-border/60 bg-background px-3 text-xs text-foreground placeholder:text-muted-foreground/60 focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/10 disabled:opacity-60"
+              aria-label="Candidate email"
+              aria-expanded={showDropdown}
+            />
+            {/* Candidate email dropdown — pick from registered candidates */}
+            {showDropdown && candidates.length > 0 && (
+              <>
+                <div className="fixed inset-0 z-[60]" onClick={() => setShowDropdown(false)} />
+                <div className="absolute left-0 right-0 top-full z-[61] mt-1 max-h-44 overflow-y-auto rounded-lg border border-border/60 bg-popover py-1 shadow-2xl">
+                  {filtered.length === 0 ? (
+                    <p className="px-3 py-2 text-[11px] text-muted-foreground">No matching candidates</p>
+                  ) : (
+                    filtered.slice(0, 20).map((c) => (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => {
+                          setEmail(c.email)
+                          setShowDropdown(false)
+                          setError('')
+                        }}
+                        className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[11px] transition-colors hover:bg-accent"
+                      >
+                        <span className="truncate font-medium text-foreground">{c.full_name}</span>
+                        <span className="ml-auto truncate text-muted-foreground">{c.email}</span>
+                      </button>
+                    ))
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+          <div>
+            <input
+              type="text"
+              value={jobTitle}
+              onChange={(e) => setJobTitle(e.target.value)}
+              placeholder="Job title (optional)"
+              disabled={uploading}
+              className="h-9 w-full rounded-lg border border-border/60 bg-background px-3 text-xs text-foreground placeholder:text-muted-foreground/60 focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/10 disabled:opacity-60"
+              aria-label="Job title"
+            />
+          </div>
+          {error && <p className="text-[11px] font-medium text-destructive">{error}</p>}
+          <div className="flex items-center gap-2">
+            <Button type="submit" size="sm" loading={uploading} className="h-8 px-3 text-xs">
+              <Paperclip />
+              Upload & process
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={onCancel}
+              disabled={uploading}
+              className="h-8 px-3 text-xs"
+            >
+              Cancel
+            </Button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
 export function ChatSidebar({ role }: ChatSidebarProps) {
   const [open, setOpen] = useState(false)
   const [messages, setMessages] = useState<DisplayMessage[]>([])
   const [input, setInput] = useState('')
   const [streaming, setStreaming] = useState(false)
   const [uploading, setUploading] = useState(false)
+  const [pendingUpload, setPendingUpload] = useState<PendingUpload | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const abortRef = useRef<AbortController | null>(null)
   const scrollRef = useRef<HTMLDivElement | null>(null)
@@ -151,15 +315,15 @@ export function ChatSidebar({ role }: ChatSidebarProps) {
     setInput('')
     setStreaming(false)
     setUploading(false)
+    setPendingUpload(null)
   }, [voice])
 
   const handleFileSelected = useCallback(
-    async (e: React.ChangeEvent<HTMLInputElement>) => {
+    (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0]
       e.target.value = ''
-      if (!file || role !== 'admin' || streaming || uploading) return
+      if (!file || role !== 'admin' || streaming || uploading || pendingUpload) return
 
-      setUploading(true)
       const userMsg: DisplayMessage = {
         id: `u-${Date.now()}`,
         role: 'user',
@@ -167,19 +331,15 @@ export function ChatSidebar({ role }: ChatSidebarProps) {
         attachment: { name: file.name, size: file.size },
       }
       setMessages((prev) => [...prev, userMsg])
+      setPendingUpload({ file })
+    },
+    [role, streaming, uploading, pendingUpload],
+  )
 
-      const candidateEmail = window.prompt('Candidate email (the interview belongs to):')
-      if (!candidateEmail?.trim()) {
-        setMessages((prev) => [
-          ...prev,
-          { id: `a-${Date.now()}`, role: 'assistant', content: 'Upload cancelled — no candidate email provided.', streaming: false },
-        ])
-        setUploading(false)
-        return
-      }
-
-      const jobTitle = window.prompt('Job title (optional):')?.trim() || 'Interview'
-
+  /** Executed from the in-chat upload form — no native browser prompts. */
+  const uploadFile = useCallback(
+    async (file: File, candidateEmail: string, jobTitle: string) => {
+      setUploading(true)
       try {
         const res = await chatApi.uploadInterview(file, candidateEmail.trim(), jobTitle)
         setMessages((prev) => [
@@ -204,9 +364,10 @@ export function ChatSidebar({ role }: ChatSidebarProps) {
         ])
       } finally {
         setUploading(false)
+        setPendingUpload(null)
       }
     },
-    [role, streaming, uploading],
+    [],
   )
 
   const send = useCallback(
@@ -330,23 +491,34 @@ export function ChatSidebar({ role }: ChatSidebarProps) {
             </div>
           </div>
         ) : (
-          messages.map((m) => (
-            <MessageBubble
-              key={m.id}
-              message={m}
-              speaking={voice.state === 'playing' && voice.text === m.content}
-              paused={voice.state === 'paused' && voice.text === m.content}
-              onSpeak={(text) => {
-                // Play/pause/resume the exact message when its icon is clicked.
-                const isThis = voice.text === text
-                if (isThis && (voice.state === 'playing' || voice.state === 'paused')) {
-                  voice.state === 'playing' ? voice.pause() : voice.resume()
-                } else {
-                  void voice.speak(text)
-                }
-              }}
-            />
-          ))
+          <>
+            {messages.map((m) => (
+              <MessageBubble
+                key={m.id}
+                message={m}
+                speaking={voice.state === 'playing' && voice.text === m.content}
+                paused={voice.state === 'paused' && voice.text === m.content}
+                onSpeak={(text) => {
+                  // Play/pause/resume the exact message when its icon is clicked.
+                  const isThis = voice.text === text
+                  if (isThis && (voice.state === 'playing' || voice.state === 'paused')) {
+                    voice.state === 'playing' ? voice.pause() : voice.resume()
+                  } else {
+                    void voice.speak(text)
+                  }
+                }}
+              />
+            ))}
+            {pendingUpload && (
+              <UploadDetailsForm
+                fileName={pendingUpload.file.name}
+                fileSize={pendingUpload.file.size}
+                uploading={uploading}
+                onSubmit={(email, jobTitle) => void uploadFile(pendingUpload.file, email, jobTitle)}
+                onCancel={() => setPendingUpload(null)}
+              />
+            )}
+          </>
         )}
       </div>
 
