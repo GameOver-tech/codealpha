@@ -37,6 +37,11 @@ export function buildReadingDocument(input: {
   performanceAnalysis?: string
   improvementSuggestions?: string
   transcriptText?: string
+  speechNotes?: string
+  sentimentSummary?: string
+  recommendationReason?: string
+  /** Key-value pairs from the technical evaluation (AI Insights). */
+  technicalEvaluation?: Record<string, string>
 }): ReadingDocument {
   const sections: ReadingSection[] = []
 
@@ -70,6 +75,19 @@ export function buildReadingDocument(input: {
 
   // Transcript tab
   push('transcript', 'Transcript', input.transcriptText)
+
+  // AI Insights tab
+  push('insights', 'Speech Analysis', input.speechNotes)
+  push('insights', 'Sentiment Analysis', input.sentimentSummary)
+  push('insights', 'Recommendation', input.recommendationReason)
+  // Each technical evaluation dimension becomes its own section so the
+  // reader highlights the exact cell being spoken.
+  if (input.technicalEvaluation) {
+    for (const [key, value] of Object.entries(input.technicalEvaluation)) {
+      const label = key.replace(/_/g, ' ')
+      push('insights', `Technical: ${label}`, String(value))
+    }
+  }
 
   const text = sections.map((s) => s.text).join(' ')
   return { text, sections }

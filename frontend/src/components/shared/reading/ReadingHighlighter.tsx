@@ -5,6 +5,8 @@ interface ReadingHighlighterProps {
   text: string
   /** Index of the word currently being spoken (-1 = none). */
   activeWordIndex: number
+  /** Callback fired when the active word mounts (for auto-scroll). */
+  onActiveWordRef?: (el: HTMLElement | null) => void
 }
 
 /**
@@ -19,6 +21,7 @@ interface ReadingHighlighterProps {
 export const ReadingHighlighter = memo(function ReadingHighlighter({
   text,
   activeWordIndex,
+  onActiveWordRef,
 }: ReadingHighlighterProps) {
   const words = useMemo(() => text.match(/\S+/g) ?? [], [text])
 
@@ -27,6 +30,7 @@ export const ReadingHighlighter = memo(function ReadingHighlighter({
       {words.map((word, i) => (
         <span key={`${i}-${word}`}>
           <SpokenWord
+            ref={i === activeWordIndex ? onActiveWordRef : undefined}
             word={word}
             active={i === activeWordIndex}
             spoken={activeWordIndex >= 0 && i < activeWordIndex}
