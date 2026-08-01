@@ -1,4 +1,6 @@
 import { memo, useCallback, useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { useQueryClient } from '@tanstack/react-query'
 import { Bot, Loader2, MessageCircle, Paperclip, Pause, Play, RotateCcw, Send, Sparkles, Volume2, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
@@ -8,6 +10,7 @@ import { renderMarkdown } from '@/lib/markdown'
 import { cn } from '@/lib/utils'
 import { VoiceIndicator } from '@/components/shared'
 import { useVoice } from '@/hooks/useVoice'
+import { queryKeys } from '@/hooks/useApi'
 
 interface DisplayMessage {
   id: string
@@ -282,6 +285,8 @@ function UploadDetailsForm({
 }
 
 export function ChatSidebar({ role }: ChatSidebarProps) {
+  const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const [open, setOpen] = useState(false)
   const [messages, setMessages] = useState<DisplayMessage[]>([])
   const [input, setInput] = useState('')
@@ -349,11 +354,19 @@ export function ChatSidebar({ role }: ChatSidebarProps) {
             role: 'assistant',
             content:
               `✅ Interview **${file.name}** uploaded for **${res.candidate_email}** (` +
-              `${res.status}). Processing has started automatically — I'll track it and ` +
-              `can email the result once it's ready. Just ask!`,
+              `${res.status}). Processing has started automatically.`,
             streaming: false,
           },
         ])
+        // Keep the admin views fresh so the new interview appears in the
+        // candidates list / dashboard immediately, just like a manual upload.
+        queryClient.invalidateQueries({ queryKey: queryKeys.adminInterviews })
+        queryClient.invalidateQueries({ queryKey: queryKeys.adminDashboard })
+        // Open the processing tracker so the admin can watch the pipeline
+        // (same experience as the manual upload page).
+        if (res.interview_id && role === 'admin') {
+          navigate(`/admin/processing/${res.interview_id}`)
+        }
       } catch (error) {
         const message =
           (error as { response?: { data?: { detail?: string } } })?.response?.data?.detail ??
@@ -367,7 +380,7 @@ export function ChatSidebar({ role }: ChatSidebarProps) {
         setPendingUpload(null)
       }
     },
-    [],
+    [navigate, queryClient, role],
   )
 
   const send = useCallback(
