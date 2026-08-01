@@ -52,6 +52,8 @@ export interface UseVoiceResult {
   sentenceIndex: number
   /** Index of the current word within the sentence (-1 when unknown). */
   wordIndex: number
+  /** Absolute word index across the entire spoken text. */
+  globalWordIndex: number
   settings: VoiceSettings
   voices: TTSVoice[]
   /** Speak the given text (ElevenLabs with browser fallback). */
@@ -83,7 +85,20 @@ const browserEngine = {
   chunks: [] as string[],
   index: 0,
   wordIndex: -1,
+  /** Absolute word position across ALL chunks (for cross-section sync). */
+  globalWordIndex: -1,
+  /** Cumulative word count before each chunk. */
+  chunkWordOffsets: [] as number[],
   status: 'idle' as 'idle' | 'playing' | 'paused',
+  /** Active word-advance timers (cleared on pause/stop). */
+  timers: [] as number[],
+  /** Calibration factor (actual vs estimated pace) — corrects drift. */
+  paceFactor: 1,
+}
+
+function clearEngineTimers() {
+  browserEngine.timers.forEach((id) => window.clearTimeout(id))
+  browserEngine.timers.length = 0
 }
 
 /**
@@ -105,6 +120,7 @@ export function useVoice(): UseVoiceResult {
   const [currentSentence, setCurrentSentence] = useState('')
   const [sentenceIndex, setSentenceIndex] = useState(-1)
   const [wordIndex, setWordIndex] = useState(-1)
+  const [globalWordIndex, setGlobalWordIndex] = useState(-1)
   const [settings, setSettings] = useState<VoiceSettings>(readSettings)
   const [voices, setVoices] = useState<TTSVoice[]>([])
 
@@ -156,6 +172,14 @@ export function useVoice(): UseVoiceResult {
       browserEngine.chunks = chunks
       browserEngine.index = 0
       browserEngine.wordIndex = -1
+      browserEngine.globalWordIndex = -1
+      // Cumulative word offset before each chunk.
+      browserEngine.chunkWordOffsets = chunks.reduce<number[]>((acc, _chunk) => {
+        acc.push(
+          acc.length ? acc[acc.length - 1]! + (chunks[acc.length - 1]!.match(/\S+/g)?.length ?? 0) : 0,
+        )
+        return acc
+      }, [])
       browserEngine.status = 'playing'
 
       setText(speechText)
@@ -163,6 +187,39 @@ export function useVoice(): UseVoiceResult {
       setState('playing')
       setSentenceIndex(0)
       setCurrentSentence(chunks[0] ?? '')
+
+      // Chrome/Edge do NOT fire word boundary events, so we drive the word
+      // highlight with a timer. Timing is WORD-LENGTH WEIGHTED: longer words
+      // take proportionally longer to say, which keeps the highlight in sync
+      // with the actual speech instead of drifting. `onboundary` (where
+      // supported) still corrects the position precisely.
+      clearEngineTimers()
+
+      const advanceWord = (wi: number, chunkIdx: number) => {
+        browserEngine.wordIndex = wi
+        browserEngine.globalWordIndex = (browserEngine.chunkWordOffsets[chunkIdx] ?? 0) + wi
+        setWordIndex(wi)
+        setGlobalWordIndex(browserEngine.globalWordIndex)
+      }
+
+      /** Per-word duration in ms, proportional to length + punctuation pause. */
+      const wordDuration = (word: string): number => {
+        const base = 110 / (settings.speed || 1)
+        const units = Math.max(2, word.length)
+        const pause = /[.,!?;:]$/.test(word) ? 320 / (settings.speed || 1) : 0
+        return Math.round((base * units + pause) * browserEngine.paceFactor)
+      }
+
+      const startWordTimer = (idx: number) => {
+        const sentence = browserEngine.chunks[idx] ?? ''
+        const words = sentence.match(/\S+/g) ?? []
+        let elapsed = 0
+        words.forEach((word, wi) => {
+          const id = window.setTimeout(() => advanceWord(wi, idx), elapsed)
+          browserEngine.timers.push(id)
+          elapsed += wordDuration(word)
+        })
+      }
 
       const speakNext = (idx: number) => {
         if (idx >= browserEngine.chunks.length) {
@@ -181,19 +238,39 @@ export function useVoice(): UseVoiceResult {
         browserEngine.index = idx
         setSentenceIndex(idx)
         setCurrentSentence(browserEngine.chunks[idx]!)
-        // Word-level sync: onboundary fires per word with a char offset.
+        // Word-level sync: onboundary fires per word (Firefox/Safari).
         utterance.onboundary = (event) => {
           if (event.name !== 'word') return
           const sentence = browserEngine.chunks[idx] ?? ''
           const wi = wordIndexAt(sentence, event.charIndex ?? 0)
           browserEngine.wordIndex = wi
+          browserEngine.globalWordIndex = (browserEngine.chunkWordOffsets[idx] ?? 0) + wi
           setWordIndex(wi)
+          setGlobalWordIndex(browserEngine.globalWordIndex)
         }
+        let sentenceStart = 0
         utterance.onstart = () => {
-          setWordIndex(0)
+          sentenceStart = performance.now()
+          advanceWord(0, idx)
+          // Estimated total for this sentence (for calibration on end).
+          const words = browserEngine.chunks[idx]?.match(/\S+/g) ?? []
+          const estimated = words.reduce((sum, w) => sum + wordDuration(w), 0)
+          browserEngine.paceFactor = Math.max(0.5, Math.min(2, browserEngine.paceFactor))
+          ;(utterance as unknown as { __estimateMs?: number }).__estimateMs = estimated
+          startWordTimer(idx)
         }
         utterance.onend = () => {
+          clearEngineTimers()
           setWordIndex(-1)
+          setGlobalWordIndex(-1)
+          // Calibrate: actual sentence duration vs our estimate → next
+          // sentence's timers match the real speaking pace.
+          const estimateMs = (utterance as unknown as { __estimateMs?: number }).__estimateMs
+          if (estimateMs && estimateMs > 0 && sentenceStart > 0) {
+            const actual = performance.now() - sentenceStart
+            const factor = Math.max(0.6, Math.min(1.6, actual / estimateMs))
+            browserEngine.paceFactor = browserEngine.paceFactor * 0.7 + factor * 0.3
+          }
           speakNext(idx + 1)
         }
         utterance.onerror = (event) => {
@@ -203,6 +280,7 @@ export function useVoice(): UseVoiceResult {
           setCurrentSentence('')
           setSentenceIndex(-1)
           setWordIndex(-1)
+          setGlobalWordIndex(-1)
         }
         window.speechSynthesis.speak(utterance)
       }
@@ -264,20 +342,16 @@ export function useVoice(): UseVoiceResult {
   )
 
   const pause = useCallback(() => {
-    if (browserEngine.status === 'playing' || browserEngine.status === 'paused') {
-      if (browserEngine.status === 'playing') {
-        window.speechSynthesis.pause()
-        browserEngine.status = 'paused'
-        setState('paused')
-      } else {
-        window.speechSynthesis.resume()
-        browserEngine.status = 'playing'
-        setState('playing')
-      }
-      return
+    if (browserEngine.status === 'playing') {
+      window.speechSynthesis.pause()
+      browserEngine.status = 'paused'
+      setState('paused')
+    } else if (browserEngine.status === 'paused') {
+      window.speechSynthesis.resume()
+      browserEngine.status = 'playing'
+      setState('playing')
     }
-    manager.pause()
-  }, [manager])
+  }, [])
 
   const resume = useCallback(() => {
     if (browserEngine.status === 'paused') {
@@ -290,6 +364,7 @@ export function useVoice(): UseVoiceResult {
   }, [manager])
 
   const stop = useCallback(() => {
+    clearEngineTimers()
     if ('speechSynthesis' in window) {
       window.speechSynthesis.cancel()
       browserEngine.status = 'idle'
@@ -329,6 +404,7 @@ export function useVoice(): UseVoiceResult {
     currentSentence,
     sentenceIndex,
     wordIndex,
+    globalWordIndex,
     settings,
     voices,
     speak,

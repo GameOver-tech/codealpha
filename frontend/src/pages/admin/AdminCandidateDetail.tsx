@@ -26,7 +26,6 @@ import {
   Loader2,
   ShieldCheck,
   AlertTriangle,
-  ClipboardCheck,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import {
@@ -59,17 +58,6 @@ import { buildReadingDocument } from '@/services/readingEngine'
 import { adminApi, getErrorMessage, getToken } from '@/services/api'
 import { cn, formatDuration } from '@/lib/utils'
 
-const ADMIN_STATUSES = [
-  'Pending',
-  'Processing',
-  'Completed',
-  'Recommended',
-  'Not Recommended',
-  'Need Further Review',
-  'Rejected',
-  'Selected',
-]
-
 const SCORE_LABELS: { key: string; label: string }[] = [
   { key: 'technical_skills', label: 'Technical' },
   { key: 'communication', label: 'Communication' },
@@ -96,6 +84,7 @@ function SectionCard({
   text,
   activeWord,
   highlighted,
+  onActiveWordRef,
 }: {
   title: string
   text?: string
@@ -103,6 +92,8 @@ function SectionCard({
   activeWord?: number
   /** Whether this section is the one being read right now. */
   highlighted?: boolean
+  /** Ref callback for the active word (auto-scroll target). */
+  onActiveWordRef?: (el: HTMLElement | null) => void
 }) {
   if (!text) return null
   return (
@@ -113,7 +104,7 @@ function SectionCard({
         <h4 className="font-display text-base font-bold text-foreground">{title}</h4>
         <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
           {activeWord !== undefined && activeWord >= 0 ? (
-            <ReadingHighlighter text={text} activeWordIndex={activeWord} />
+            <ReadingHighlighter text={text} activeWordIndex={activeWord} onActiveWordRef={onActiveWordRef} />
           ) : (
             text
           )}
@@ -163,8 +154,16 @@ export function AdminCandidateDetail() {
         performanceAnalysis: report?.performance_analysis,
         improvementSuggestions: report?.improvement_suggestions,
         transcriptText: transcript?.full_text.slice(0, 4000),
+        speechNotes: bundle?.speech_analysis?.notes,
+        sentimentSummary: bundle?.sentiment_analysis?.summary,
+        recommendationReason: bundle?.recommendation?.reason,
+        technicalEvaluation: bundle?.technical_evaluation
+          ? Object.fromEntries(
+              Object.entries(bundle.technical_evaluation).map(([k, v]) => [k, String(v)]),
+            )
+          : undefined,
       }),
-    [report, bundle?.strengths, bundle?.weaknesses, transcript],
+    [report, bundle, transcript],
   )
 
   // Tab state — reading stays on the current tab, no auto-switching.
@@ -184,16 +183,31 @@ export function AdminCandidateDetail() {
   const currentSentence = voice.currentSentence || ''
 
   // Current section (for indicator label + highlight).
+  // Match by full-text first; fall back to first-word overlap so chunk
+  // boundaries (which may differ from the section's sentence splits) still
+  // resolve to the right section.
   const activeSection = useMemo(() => {
     if (!currentSentence) return null
-    return readingDoc.sections.find((s) => s.text.includes(currentSentence)) ?? null
+    const direct = readingDoc.sections.find((s) => s.text.includes(currentSentence))
+    if (direct) return direct
+    const firstWord = currentSentence.match(/\S+/)?.[0]
+    if (!firstWord) return null
+    return (
+      readingDoc.sections.find((s) => s.text.includes(firstWord)) ?? null
+    )
   }, [currentSentence, readingDoc])
 
   // Word index within the current section for highlighting.
+  // Uses the ABSOLUTE word index across the spoken text (globalWordIndex)
+  // minus the section's starting word offset — deterministic across chunk
+  // boundaries, so it works for every tab (Overview/Evaluation/Transcript).
   const activeWordInSection = useMemo(() => {
-    if (!activeSection || voice.wordIndex < 0) return -1
-    return voice.wordIndex
-  }, [activeSection, voice.wordIndex])
+    if (!activeSection || voice.globalWordIndex < 0) return -1
+    // Find section start by scanning: section text appears once in tabText.
+    const sectionStart = tabText.indexOf(activeSection.text)
+    const prefixWords = tabText.slice(0, sectionStart).match(/\S+/g)?.length ?? 0
+    return voice.globalWordIndex - prefixWords
+  }, [activeSection, voice.globalWordIndex, tabText])
 
   // If the user switches tabs mid-reading, restart speech for the new tab.
   useEffect(() => {
@@ -203,12 +217,10 @@ export function AdminCandidateDetail() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab])
 
-  // Auto-scroll is always on: keep the active section centered while reading.
-  const activeSectionRef = useRef<HTMLDivElement | null>(null)
-  useAutoScroll(
-    activeSectionRef.current,
-    Boolean(activeSection) && voice.state === 'playing',
-  )
+  // Auto-scroll: keep the ACTIVE WORD centered while reading (word-level
+  // tracking so the highlighted word never disappears off-screen).
+  const [activeWordEl, setActiveWordEl] = useState<HTMLElement | null>(null)
+  useAutoScroll(activeWordEl, Boolean(activeWordEl) && voice.state === 'playing')
 
   const sectionEls = useRef(new Map<string, HTMLDivElement>())
   const setSectionEl = useCallback((id: string, el: HTMLDivElement | null) => {
@@ -227,6 +239,7 @@ export function AdminCandidateDetail() {
       return {
         activeWord: isActive ? activeWordInSection : -1,
         highlighted: isActive,
+        onActiveWordRef: isActive ? setActiveWordEl : undefined,
       }
     },
     [readingDoc, activeSection, listeningToReport, activeWordInSection],
@@ -237,9 +250,26 @@ export function AdminCandidateDetail() {
     if (!activeSection) return
     const el = sectionEls.current.get(activeSection.id)
     if (el) {
-      activeSectionRef.current = el
+      setActiveWordEl(el)
     }
   }, [activeSection])
+
+  // Positional mapping for the transcript: each segment's word range inside
+  // the full transcript text. Deterministic — matches by word position, not
+  // by string comparison, so every segment highlights correctly.
+  const transcriptSegments = useMemo(() => {
+    if (!transcript?.segments?.length) return []
+    const section = readingDoc.sections.find((s) => s.tab === 'transcript')
+    if (!section) return []
+    let cursor = 0
+    return transcript.segments.map((segment) => {
+      const segWords = (segment.text || '').match(/\S+/g) ?? []
+      const start = cursor
+      const end = cursor + segWords.length
+      cursor = end
+      return { segment, start, end }
+    })
+  }, [transcript, readingDoc])
 
   // POST-based download — download managers (IDM) only hijack GET requests,
   // so the PDF always reaches the browser as a normal blob download.
@@ -280,15 +310,6 @@ export function AdminCandidateDetail() {
     onSuccess: () => {
       toast.success('Regeneration started — the evaluation will be rebuilt.')
       queryClient.invalidateQueries({ queryKey: queryKeys.adminProgress(interviewId ?? '') })
-    },
-    onError: (error) => toast.error(getErrorMessage(error)),
-  })
-
-  const statusMutation = useMutation({
-    mutationFn: (status: string) => adminApi.updateStatus(interviewId!, status),
-    onSuccess: (res) => {
-      toast.success(res.data.message)
-      queryClient.invalidateQueries({ queryKey: queryKeys.adminInterviews })
     },
     onError: (error) => toast.error(getErrorMessage(error)),
   })
@@ -548,7 +569,7 @@ export function AdminCandidateDetail() {
                   <h3 className="font-display text-lg font-bold text-foreground">Executive summary</h3>
                   <p className="leading-relaxed text-muted-foreground">
                     {props.activeWord !== undefined && props.activeWord >= 0 ? (
-                      <ReadingHighlighter text={report.executive_summary} activeWordIndex={props.activeWord} />
+                      <ReadingHighlighter text={report.executive_summary} activeWordIndex={props.activeWord} onActiveWordRef={props.onActiveWordRef} />
                     ) : (
                       report.executive_summary
                     )}
@@ -591,25 +612,48 @@ export function AdminCandidateDetail() {
                   )}
                 </div>
                 <div className="max-h-[560px] space-y-3 overflow-y-auto pr-3">
-                  {transcript.segments && transcript.segments.length > 0 ? (
-                    transcript.segments.map((segment, i) => (
-                      <div
-                        key={i}
-                        className={cn(
-                          'rounded-xl bg-muted/50 p-3.5 transition-colors',
-                          currentSentence && segment.text.includes(currentSentence) && 'bg-primary/10 ring-1 ring-primary/40',
-                        )}
-                      >
-                        <div className="mb-1 flex items-center gap-2 text-[11px] font-semibold text-primary">
-                          {segment.speaker && <span>{segment.speaker}</span>}
-                          <span className="text-muted-foreground">
-                            {Math.floor(segment.start / 60)}:{String(Math.round(segment.start % 60)).padStart(2, '0')} –{' '}
-                            {Math.floor(segment.end / 60)}:{String(Math.round(segment.end % 60)).padStart(2, '0')}
-                          </span>
+                  {transcriptSegments.length > 0 ? (
+                    transcriptSegments.map(({ segment, start, end }, i) => {
+                      // Positional matching: this segment is active when the
+                      // current word index falls inside its word range.
+                      const segActive = Boolean(
+                        activeSection &&
+                          activeSection.tab === 'transcript' &&
+                          listeningToReport &&
+                          activeWordInSection >= start &&
+                          activeWordInSection < end,
+                      )
+                      const segActiveWord = segActive ? activeWordInSection - start : -1
+
+                      return (
+                        <div
+                          key={i}
+                          className={cn(
+                            'rounded-xl bg-muted/50 p-3.5 transition-colors',
+                            segActive && 'bg-primary/10 ring-1 ring-primary/40',
+                          )}
+                        >
+                          <div className="mb-1 flex items-center gap-2 text-[11px] font-semibold text-primary">
+                            {segment.speaker && <span>{segment.speaker}</span>}
+                            <span className="text-muted-foreground">
+                              {Math.floor(segment.start / 60)}:{String(Math.round(segment.start % 60)).padStart(2, '0')} –{' '}
+                              {Math.floor(segment.end / 60)}:{String(Math.round(segment.end % 60)).padStart(2, '0')}
+                            </span>
+                          </div>
+                          <p className="text-sm leading-relaxed text-foreground">
+                            {segActive && segActiveWord >= 0 ? (
+                              <ReadingHighlighter
+                                text={segment.text}
+                                activeWordIndex={segActiveWord}
+                                onActiveWordRef={setActiveWordEl}
+                              />
+                            ) : (
+                              segment.text
+                            )}
+                          </p>
                         </div>
-                        <p className="text-sm leading-relaxed text-foreground">{segment.text}</p>
-                      </div>
-                    ))
+                      )
+                    })
                   ) : (
                     <p className="text-sm leading-relaxed text-muted-foreground">{transcript.full_text || 'Transcript is empty.'}</p>
                   )}
@@ -622,41 +666,6 @@ export function AdminCandidateDetail() {
         </TabsContent>
 
         <TabsContent value="insights" className="mt-0 space-y-6">
-          {/* Admin status management */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <ClipboardCheck className="h-5 w-5 text-primary" />
-                Interview status
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="mb-4 text-sm text-muted-foreground">
-                Current status:{' '}
-                <AdminStatusBadge status={meta?.admin_status ?? 'Pending'} className="ml-1" />
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {ADMIN_STATUSES.map((status) => {
-                  const active = (meta?.admin_status ?? 'Pending') === status
-                  return (
-                    <button
-                      key={status}
-                      onClick={() => statusMutation.mutate(status)}
-                      disabled={statusMutation.isPending}
-                      className={`rounded-full border px-4 py-1.5 text-xs font-semibold transition-all disabled:opacity-50 ${
-                        active
-                          ? 'border-primary bg-primary/10 text-primary'
-                          : 'border-border text-muted-foreground hover:border-primary/40 hover:text-foreground'
-                      }`}
-                    >
-                      {status}
-                    </button>
-                  )
-                })}
-              </div>
-            </CardContent>
-          </Card>
-
           {/* Recommendation override */}
           <Card>
             <CardHeader>
@@ -729,9 +738,22 @@ export function AdminCandidateDetail() {
                     </div>
                   ))}
                 </div>
-                {bundle.speech_analysis.notes && (
-                  <p className="mt-4 text-sm text-muted-foreground">{bundle.speech_analysis.notes}</p>
-                )}
+                {bundle.speech_analysis.notes && (() => {
+                  const props = readingProps('insights', 'Speech Analysis', bundle.speech_analysis.notes)
+                  return (
+                    <p className="mt-4 text-sm leading-relaxed text-muted-foreground">
+                      {props.activeWord !== undefined && props.activeWord >= 0 ? (
+                        <ReadingHighlighter
+                          text={bundle.speech_analysis.notes}
+                          activeWordIndex={props.activeWord}
+                          onActiveWordRef={props.onActiveWordRef}
+                        />
+                      ) : (
+                        bundle.speech_analysis.notes
+                      )}
+                    </p>
+                  )
+                })()}
               </CardContent>
             </Card>
           )}
@@ -759,9 +781,22 @@ export function AdminCandidateDetail() {
                     </p>
                   </div>
                 </div>
-                {bundle.sentiment_analysis.summary && (
-                  <p className="mt-4 text-sm text-muted-foreground">{bundle.sentiment_analysis.summary}</p>
-                )}
+                {bundle.sentiment_analysis.summary && (() => {
+                  const props = readingProps('insights', 'Sentiment Analysis', bundle.sentiment_analysis.summary)
+                  return (
+                    <p className="mt-4 text-sm leading-relaxed text-muted-foreground">
+                      {props.activeWord !== undefined && props.activeWord >= 0 ? (
+                        <ReadingHighlighter
+                          text={bundle.sentiment_analysis.summary}
+                          activeWordIndex={props.activeWord}
+                          onActiveWordRef={props.onActiveWordRef}
+                        />
+                      ) : (
+                        bundle.sentiment_analysis.summary
+                      )}
+                    </p>
+                  )
+                })()}
               </CardContent>
             </Card>
           )}
@@ -774,18 +809,70 @@ export function AdminCandidateDetail() {
               </CardHeader>
               <CardContent>
                 <div className="grid gap-3 sm:grid-cols-2">
-                  {Object.entries(bundle.technical_evaluation).map(([key, value]) => (
-                    <div key={key} className="rounded-xl bg-muted/50 p-4">
-                      <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                        {key.replace(/_/g, ' ')}
-                      </p>
-                      <p className="mt-1 text-sm font-medium capitalize text-foreground">{String(value)}</p>
-                    </div>
-                  ))}
+                  {Object.entries(bundle.technical_evaluation).map(([key, value]) => {
+                    const label = key.replace(/_/g, ' ')
+                    const text = String(value)
+                    const props = readingProps('insights', `Technical: ${label}`, text)
+                    return (
+                      <div
+                        key={key}
+                        className={cn(
+                          'rounded-xl bg-muted/50 p-4 transition-colors',
+                          props.highlighted && 'bg-primary/10 ring-1 ring-primary/40',
+                        )}
+                      >
+                        <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                          {label}
+                        </p>
+                        <p className="mt-1 text-sm font-medium capitalize text-foreground">
+                          {props.activeWord !== undefined && props.activeWord >= 0 ? (
+                            <ReadingHighlighter
+                              text={text}
+                              activeWordIndex={props.activeWord}
+                              onActiveWordRef={props.onActiveWordRef}
+                            />
+                          ) : (
+                            text
+                          )}
+                        </p>
+                      </div>
+                    )
+                  })}
                 </div>
               </CardContent>
             </Card>
           )}
+
+          {/* Recommendation reason — read aloud with word highlight */}
+          {bundle.recommendation?.reason && (() => {
+            const props = readingProps('insights', 'Recommendation', bundle.recommendation.reason)
+            return (
+              <Card className={props.highlighted ? 'border-primary/40 ring-1 ring-primary/15' : undefined}>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <ShieldCheck className="h-5 w-5 text-primary" />
+                    Recommendation
+                    {bundle.recommendation && (
+                      <RecommendationBadge verdict={bundle.recommendation.verdict} />
+                    )}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm leading-relaxed text-muted-foreground">
+                    {props.activeWord !== undefined && props.activeWord >= 0 ? (
+                      <ReadingHighlighter
+                        text={bundle.recommendation.reason}
+                        activeWordIndex={props.activeWord}
+                        onActiveWordRef={props.onActiveWordRef}
+                      />
+                    ) : (
+                      bundle.recommendation.reason
+                    )}
+                  </p>
+                </CardContent>
+              </Card>
+            )
+          })()}
 
           {/* Actions */}
           <div className="flex flex-wrap items-center gap-3">

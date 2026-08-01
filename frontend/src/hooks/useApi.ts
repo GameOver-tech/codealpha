@@ -85,7 +85,7 @@ export function useAdminDashboard() {
   return useQuery({
     queryKey: queryKeys.adminDashboard,
     queryFn: async () => (await adminApi.dashboard()).data,
-    staleTime: 15 * 1000,
+    staleTime: 30 * 1000,
     refetchInterval: 30 * 1000,
   })
 }
@@ -116,6 +116,10 @@ export function useAdminAnalysis(interviewId: string | undefined) {
     queryKey: queryKeys.adminAnalysis(interviewId ?? ''),
     queryFn: async () => (await adminApi.analysis(interviewId!)).data,
     enabled: Boolean(interviewId),
+    // The analysis bundle is heavy (fetches all artifacts). Cache it for
+    // several minutes — navigating back to a candidate is then instant.
+    // Regenerate/override mutations invalidate this key explicitly.
+    staleTime: 5 * 60 * 1000,
   })
 }
 
