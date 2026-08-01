@@ -80,7 +80,7 @@
 - Prefers fetching data lazily on demand (e.g., a notification bell fetching the full interviews list only when its dropdown is opened via an `enabled` flag) over running expensive queries + background polling from the topbar on every page — duplicate polling across components must be eliminated, with slower adaptive refetch intervals when no in-progress data exists. Confidence: 0.8
 - Wants render-blocking external resources (e.g., Google Fonts stylesheets) to load async with `media="print"` + `onload` swap + `noscript` fallback so text paints immediately with fallback fonts instead of blocking on the network. Confidence: 0.8
 
-- When a large selective merge is complete and the assistant asks whether to commit, expects to be consulted before committing and approves with a terse affirmative ("yes commit it.") — the commit is made only after that explicit approval. Confidence: 0.5
+- When a large selective merge is complete and the assistant asks whether to commit, expects to be consulted before committing and approves with a terse affirmative ("yes commit it." / "yes") — the commit is made only after that explicit approval. Confidence: 0.7
 - After committing, expects the changes to also be pushed to the user's own branch on the remote (e.g., "also push on my own branch.") — committing and pushing to the user's branch are part of the same workflow, so the assistant should push (e.g., `git push <remote> <branch>`) as the natural next step. Confidence: 0.6
 
 ## UI/UX design standards (from user experience improvement specs)
