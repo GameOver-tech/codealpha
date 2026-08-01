@@ -75,22 +75,6 @@ async def transcription_error_handler(request: Request, exc: TranscriptionError)
 # no longer served (404), leaving the docs page blank. Pin a known-good release
 # instead so /redoc and /docs render reliably.
 
-_REDOC_HTML = """<!DOCTYPE html>
-<html>
-<head>
-<title>HireLens AI Backend - ReDoc</title>
-<meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<style>body { margin: 0; padding: 0; }</style>
-</head>
-<body>
-<noscript>ReDoc requires Javascript to function. Please enable it to browse the documentation.</noscript>
-<redoc spec-url="/openapi.json"></redoc>
-<script src="https://cdn.jsdelivr.net/npm/redoc@2.1.5/bundles/redoc.standalone.js"></script>
-</body>
-</html>
-"""
-
 _SWAGGER_HTML = """<!DOCTYPE html>
 <html>
 <head>
@@ -98,6 +82,7 @@ _SWAGGER_HTML = """<!DOCTYPE html>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>body { margin: 0; padding: 0; }</style>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.17.14/swagger-ui.css">
 </head>
 <body>
 <div id="swagger-ui"></div>
