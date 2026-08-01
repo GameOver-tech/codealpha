@@ -73,7 +73,7 @@ function HoloPanel({
 
 export function Hero() {
   return (
-    <section className="relative overflow-hidden pb-24 pt-32 md:pb-32 md:pt-40">
+    <section className="relative overflow-hidden pb-20 pt-24 md:pb-28 md:pt-28">
       {/* Background decorations */}
       <div className="pointer-events-none absolute inset-0 -z-10">
         <div className="absolute -top-40 left-1/2 h-[560px] w-[900px] -translate-x-1/2 rounded-full bg-gradient-to-br from-primary/20 via-blue-400/10 to-transparent blur-3xl" />
@@ -98,7 +98,7 @@ export function Hero() {
             initial="hidden"
             animate="show"
             variants={{ hidden: {}, show: { transition: { staggerChildren: 0.09, delayChildren: 0.15 } } }}
-            className="mt-6 font-display text-4xl font-extrabold leading-[1.1] tracking-tight text-foreground sm:text-5xl lg:text-6xl"
+            className="mt-4 font-display text-4xl font-extrabold leading-[1.1] tracking-tight text-foreground sm:text-5xl lg:text-6xl"
           >
             <span className="block">
               <Word>AI-powered</Word>{' '}
@@ -114,7 +114,7 @@ export function Hero() {
             initial={{ opacity: 0, y: 24 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.2 }}
-            className="mt-6 max-w-xl text-lg leading-relaxed text-pretty text-muted-foreground"
+            className="mt-5 max-w-xl text-lg leading-relaxed text-pretty text-muted-foreground"
           >
             Upload interview recordings and get deep, data-driven insights — speech analysis,
             sentiment detection, skill scoring, and hiring recommendations in minutes.
@@ -124,7 +124,7 @@ export function Hero() {
             initial={{ opacity: 0, y: 24 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.3 }}
-            className="mt-8 flex flex-wrap items-center gap-4"
+            className="mt-7 flex flex-wrap items-center gap-4"
           >
             <CTAButton to="/register">Start Interview</CTAButton>
             <CTAButton to="/login" variant="outline">
@@ -136,7 +136,7 @@ export function Hero() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ duration: 0.8, delay: 0.5 }}
-            className="mt-10 flex flex-wrap items-center gap-x-8 gap-y-3 text-sm text-muted-foreground"
+            className="mt-8 flex flex-wrap items-center gap-x-8 gap-y-3 text-sm text-muted-foreground"
           >
             <span className="inline-flex items-center gap-2">
               <BadgeCheck className="h-4 w-4 text-success" /> Free to get started
@@ -154,7 +154,7 @@ export function Hero() {
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.7 }}
-            className="mt-12 flex flex-wrap items-center gap-x-8 gap-y-4 border-t border-border/60 pt-6"
+            className="mt-10 flex flex-wrap items-center gap-x-8 gap-y-4 border-t border-border/60 pt-6"
           >
             {[
               { icon: Star, value: '4.9/5', label: 'Recruiter rating' },
@@ -192,7 +192,7 @@ export function Hero() {
                 WebkitMaskImage: 'radial-gradient(circle, black 0%, transparent 70%)',
               }}
             />
-            {/* Brain core */}
+            {/* Brain core — masked to the center so the image's baked-in text edges fade out */}
             <div className="relative animate-float">
               <div className="absolute inset-0 -z-10 animate-pulse-ring rounded-full bg-blue-400/15 blur-xl" />
               <div className="absolute inset-0 -z-10 animate-pulse-ring rounded-full bg-blue-400/15 blur-xl [animation-delay:1s]" />
@@ -205,6 +205,10 @@ export function Hero() {
                   loading="lazy"
                   decoding="async"
                   className="mx-auto h-auto w-[78%] max-w-[500px] object-contain"
+                  style={{
+                    maskImage: 'radial-gradient(ellipse 62% 62% at center, black 55%, transparent 100%)',
+                    WebkitMaskImage: 'radial-gradient(ellipse 62% 62% at center, black 55%, transparent 100%)',
+                  }}
                 />
                 {/* Scanline sweeping the hologram */}
                 <div className="pointer-events-none absolute inset-x-8 h-24 animate-scanline rounded-full bg-gradient-to-b from-transparent via-blue-400/10 to-transparent" />
