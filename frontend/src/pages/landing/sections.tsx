@@ -137,18 +137,48 @@ export function Hero() {
         >
           {/* Hologram stage */}
           <div className="relative w-full">
+            {/* Rotating conic light rays */}
+            <div
+              aria-hidden
+              className="absolute inset-0 -z-10 animate-spin-slow rounded-full"
+              style={{
+                background:
+                  'conic-gradient(from 0deg, transparent 0deg, rgba(59,130,246,0.08) 30deg, transparent 60deg, transparent 120deg, rgba(59,130,246,0.08) 150deg, transparent 180deg, transparent 240deg, rgba(59,130,246,0.08) 270deg, transparent 300deg)',
+                maskImage: 'radial-gradient(circle, black 0%, transparent 70%)',
+                WebkitMaskImage: 'radial-gradient(circle, black 0%, transparent 70%)',
+              }}
+            />
             {/* Glow + floating chips */}
             <div className="relative animate-float">
               <div className="absolute inset-0 -z-10 animate-pulse-ring rounded-full bg-blue-400/20 blur-2xl" />
               <div className="absolute inset-0 -z-10 animate-pulse-ring rounded-full bg-blue-400/20 blur-2xl [animation-delay:1s]" />
-              <img
-                src="/ai-brain.png"
-                alt="AI brain hologram"
-                loading="lazy"
-                className="h-auto w-full max-w-[620px] object-contain"
+              <div className="animate-breathe">
+                <img
+                  src="/ai-brain.png"
+                  alt="AI brain hologram"
+                  loading="lazy"
+                  className="h-auto w-full max-w-[620px] object-contain"
+                />
+                {/* Scanline sweeping the hologram */}
+                <div className="pointer-events-none absolute inset-x-8 h-24 animate-scanline rounded-full bg-gradient-to-b from-transparent via-blue-400/15 to-transparent blur-md" />
+              </div>
+            </div>
+
+            {/* Orbiting light particles */}
+            <div
+              aria-hidden
+              className="pointer-events-none absolute left-1/2 top-1/2 h-0 w-0"
+              style={{ ['--orbit-r' as string]: 'min(46%, 150px)' }}
+            >
+              <span className="absolute h-2 w-2 -translate-x-1/2 -translate-y-1/2 animate-orbit rounded-full bg-blue-400/70 blur-[1px]" />
+              <span
+                className="absolute h-1.5 w-1.5 -translate-x-1/2 -translate-y-1/2 animate-orbit rounded-full bg-primary/60 blur-[1px]"
+                style={{ animationDelay: '3s' }}
               />
-              {/* Scanline sweeping the hologram */}
-              <div className="pointer-events-none absolute inset-x-8 h-24 animate-scanline rounded-full bg-gradient-to-b from-transparent via-blue-400/15 to-transparent blur-md" />
+              <span
+                className="absolute h-1 w-1 -translate-x-1/2 -translate-y-1/2 animate-orbit rounded-full bg-cyan-300/70 blur-[1px]"
+                style={{ animationDelay: '6s' }}
+              />
             </div>
 
             {/* Floating holographic status chips */}

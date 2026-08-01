@@ -398,6 +398,47 @@
   opacity: 1;
 }
 
+/* Slow rotation for holographic light rays */
+@keyframes spin-slow {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-spin-slow {
+  animation: spin-slow 24s linear infinite;
+  transform-origin: center;
+}
+
+/* Gentle breathing scale for the hologram core */
+@keyframes breathe {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.04);
+  }
+}
+
+.animate-breathe {
+  animation: breathe 5s ease-in-out infinite;
+}
+
+/* Orbiting light particles around the hologram */
+@keyframes orbit {
+  0% {
+    transform: rotate(0deg) translateX(var(--orbit-r, 90px)) rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg) translateX(var(--orbit-r, 90px)) rotate(-360deg);
+  }
+}
+
+.animate-orbit {
+  animation: orbit 14s linear infinite;
+}
+
 /* Respect reduced-motion preferences */
 @media (prefers-reduced-motion: reduce) {
   .animate-aurora,
@@ -408,7 +449,10 @@
   .animate-glow-pulse,
   .animate-border-spin,
   .animate-float,
-  .animate-pulse-ring {
+  .animate-pulse-ring,
+  .animate-spin-slow,
+  .animate-breathe,
+  .animate-orbit {
     animation: none !important;
   }
   .nav-link::after {
