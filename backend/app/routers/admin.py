@@ -276,14 +276,6 @@ async def get_interview_progress(
 # --- View endpoints (admin) --------------------------------------------------
 
 
-async def _get_interview_full(db: AsyncSession, interview_id: str) -> Interview:
-    repo = InterviewRepository(db)
-    interview = await repo.get_full(interview_id)
-    if interview is None:
-        raise NotFoundError("Interview not found")
-    return interview
-
-
 @router.get("/transcript", response_model=TranscriptOut)
 async def get_transcript(
     interview_id: str,
@@ -305,7 +297,10 @@ async def get_analysis(
     db: AsyncSession = Depends(get_db),
 ):
     """Get the full analysis bundle for an interview (all artifacts)."""
-    interview = await _get_interview_full(db, interview_id)
+    repo = InterviewRepository(db)
+    interview = await repo.get_for_analysis(interview_id)
+    if interview is None:
+        raise NotFoundError("Interview not found")
 
     tech = interview.technical_evaluation
     scores = interview.scores

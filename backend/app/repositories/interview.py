@@ -40,6 +40,24 @@ class InterviewRepository(BaseRepository[Interview]):
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
 
+    async def get_for_analysis(self, id: uuid.UUID | str) -> Interview | None:
+        """Load ONLY the relations the analysis bundle needs.
+
+        Skips files/PDF rows (never rendered in the analysis view) so the
+        admin detail page loads fast even against a remote database.
+        """
+        stmt = (
+            select(Interview)
+            .where(Interview.id == _coerce_uuid(id))
+            .options(
+                *_TO_ONE,
+                selectinload(Interview.strengths),
+                selectinload(Interview.weaknesses),
+            )
+        )
+        result = await self.db.execute(stmt)
+        return result.scalar_one_or_none()
+
     async def get_meta(self, id: uuid.UUID | str) -> Interview | None:
         """Load ONLY the metadata a single-interview detail view needs.
 
