@@ -6,7 +6,7 @@ import toast from 'react-hot-toast'
 import { Button, Card, CardContent, Input, Skeleton } from '@/components/ui'
 import { Avatar, AvatarFallback, AvatarImage, EmptyState, PageHeader, RecommendationBadge, StatusBadge } from '@/components/shared'
 import { useAdminInterviews } from '@/hooks'
-import { adminApi, mediaUrl, getErrorMessage } from '@/services/api'
+import { adminApi, mediaUrl, getErrorMessage, getToken } from '@/services/api'
 import { useMutation } from '@tanstack/react-query'
 import { initials } from '@/lib/utils'
 
@@ -30,25 +30,40 @@ export function AdminReports() {
       .sort((a, b) => new Date(b.created_at ?? 0).getTime() - new Date(a.created_at ?? 0).getTime())
   }, [interviews, search])
 
+  // POST-based download — download managers (IDM) only hijack GET requests,
+  // so the PDF always reaches the browser as a normal blob download.
   const downloadMutation = useMutation({
     mutationFn: async (id: string) => {
       setDownloadingId(id)
       try {
-        return await adminApi.reportPdf(id)
+        const token = getToken()
+        const res = await fetch(adminApi.reportPdfUrl(id), {
+          method: 'POST',
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        })
+        if (!res.ok) {
+          let detail = `PDF request failed (${res.status})`
+          try {
+            const data = await res.json()
+            detail = data?.detail ?? detail
+          } catch {
+            /* non-JSON error body */
+          }
+          throw new Error(detail)
+        }
+        const blob = await res.blob()
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `HireLens-Report-${id}.pdf`
+        a.click()
+        URL.revokeObjectURL(url)
       } finally {
         setDownloadingId((current) => (current === id ? null : current))
       }
     },
-    onSuccess: (blob, id) => {
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `HireLens-Report-${id}.pdf`
-      a.click()
-      URL.revokeObjectURL(url)
-      toast.success('Report downloaded')
-    },
-    onError: (error) => toast.error(getErrorMessage(error)),
+    onSuccess: () => toast.success('Report downloaded'),
+    onError: (error) => toast.error(error instanceof Error ? error.message : getErrorMessage(error)),
   })
 
   if (isLoading) {

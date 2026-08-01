@@ -2,6 +2,7 @@ import { lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { ProtectedRoute, GuestOnlyRoute } from './guards'
 import { FullScreenLoader } from '@/components/shared'
+import { StopOnRouteChange } from '@/components/shared/StopOnRouteChange'
 import { NotFoundPage, ForbiddenPage, ServerErrorPage } from '@/pages/errors'
 import { CandidateLayout } from '@/layouts/CandidateLayout'
 import { AdminLayout } from '@/layouts/AdminLayout'
@@ -17,6 +18,7 @@ const CandidateSettings = lazy(() => import('@/pages/candidate/CandidateSettings
 const CandidateResults = lazy(() => import('@/pages/candidate/CandidateResults').then((m) => ({ default: m.CandidateResults })))
 const CandidateProcessing = lazy(() => import('@/pages/candidate/CandidateProcessing').then((m) => ({ default: m.CandidateProcessing })))
 const AdminDashboard = lazy(() => import('@/pages/admin/AdminDashboard').then((m) => ({ default: m.AdminDashboard })))
+const AdminJobs = lazy(() => import('@/pages/admin/AdminJobs').then((m) => ({ default: m.AdminJobs })))
 const AdminCandidates = lazy(() => import('@/pages/admin/AdminCandidates').then((m) => ({ default: m.AdminCandidates })))
 const AdminCandidateDetail = lazy(() => import('@/pages/admin/AdminCandidateDetail').then((m) => ({ default: m.AdminCandidateDetail })))
 const AdminUpload = lazy(() => import('@/pages/admin/AdminUpload').then((m) => ({ default: m.AdminUpload })))
@@ -28,6 +30,7 @@ const AdminSettings = lazy(() => import('@/pages/admin/AdminSettings').then((m) 
 export default function AppRouter() {
   return (
     <BrowserRouter>
+      <StopOnRouteChange />
       <Routes>
         {/* Public */}
         <Route
@@ -121,6 +124,14 @@ export default function AppRouter() {
               element={
                 <Suspense fallback={<FullScreenLoader />}>
                   <AdminDashboard />
+                </Suspense>
+              }
+            />
+            <Route
+              path="/admin/jobs"
+              element={
+                <Suspense fallback={<FullScreenLoader />}>
+                  <AdminJobs />
                 </Suspense>
               }
             />

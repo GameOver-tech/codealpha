@@ -40,6 +40,13 @@ export interface ChangePasswordRequest {
   new_password: string
 }
 
+export interface UserUpdate {
+  first_name?: string
+  last_name?: string
+  phone?: string
+  gender?: string
+}
+
 export interface Job {
   id: string
   title: string

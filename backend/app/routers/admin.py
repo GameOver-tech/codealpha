@@ -405,21 +405,34 @@ async def get_report_pdf(
     Deepgram or the LLM, and nothing is written to disk or the database —
     the PDF is returned directly to the client.
     """
-    from app.services.pdf_service import generate_pdf_ondemand
+    pdf_bytes, filename = await _generate_report_pdf(db, current_user, interview_id)
+    return _pdf_response(pdf_bytes, filename)
 
-    pdf_bytes, filename = await generate_pdf_ondemand(db, interview_id)
 
-    await ActivityLogRepository(db).log(
-        current_user.id, "pdf_generated", "interview", interview_id,
-        {"filename": filename, "on_demand": True},
-    )
-    await db.commit()
+@router.post("/report/pdf/download")
+async def download_report_pdf(
+    interview_id: str,
+    current_user: User = Depends(require_role("admin")),
+    db: AsyncSession = Depends(get_db),
+):
+    """POST variant of the PDF download.
 
-    return Response(
-        content=pdf_bytes,
-        media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
-    )
+    Download managers (IDM, etc.) only intercept GET requests — a POST
+    download is never hijacked, so this is the reliable path from the app.
+    """
+    pdf_bytes, filename = await _generate_report_pdf(db, current_user, interview_id, log_action="pdf_generated")
+    return _pdf_response(pdf_bytes, filename)
+
+
+@router.post("/report/pdf/regenerate")
+async def regenerate_report_pdf_post(
+    interview_id: str,
+    current_user: User = Depends(require_role("admin")),
+    db: AsyncSession = Depends(get_db),
+):
+    """POST variant of the regenerate-PDF action (same IDM-safe rationale)."""
+    pdf_bytes, filename = await _generate_report_pdf(db, current_user, interview_id, log_action="pdf_regenerated")
+    return _pdf_response(pdf_bytes, filename)
 
 
 @router.get("/report/pdf/regenerate")
@@ -433,16 +446,25 @@ async def regenerate_report_pdf(
     Identical to the on-demand generator — this is an explicit admin action
     that rebuilds the PDF in seconds without reprocessing the interview.
     """
+    pdf_bytes, filename = await _generate_report_pdf(db, current_user, interview_id, log_action="pdf_regenerated")
+    return _pdf_response(pdf_bytes, filename)
+
+
+async def _generate_report_pdf(db, current_user, interview_id, *, log_action: str = "pdf_generated"):
+    """Shared PDF generation + audit logging for all download variants."""
     from app.services.pdf_service import generate_pdf_ondemand
 
     pdf_bytes, filename = await generate_pdf_ondemand(db, interview_id)
 
     await ActivityLogRepository(db).log(
-        current_user.id, "pdf_regenerated", "interview", interview_id,
+        current_user.id, log_action, "interview", interview_id,
         {"filename": filename, "on_demand": True},
     )
     await db.commit()
+    return pdf_bytes, filename
 
+
+def _pdf_response(pdf_bytes: bytes, filename: str) -> Response:
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",

@@ -42,9 +42,9 @@ import {
   TabsTrigger,
   Badge,
 } from '@/components/ui'
-import { CircularProgress, EmptyState, PageHeader, RecommendationBadge, StatusBadge, AdminStatusBadge, Avatar, AvatarImage, AvatarFallback } from '@/components/shared'
+import { CircularProgress, EmptyState, PageHeader, RecommendationBadge, StatusBadge, AdminStatusBadge, Avatar, AvatarImage, AvatarFallback, SpeakButton, VoicePlayer } from '@/components/shared'
 import { useAdminAnalysis, useAdminInterviewMeta, useAdminProgress, queryKeys } from '@/hooks'
-import { adminApi, mediaUrl, getErrorMessage } from '@/services/api'
+import { adminApi, mediaUrl, getErrorMessage, getToken } from '@/services/api'
 import { formatDuration, initials } from '@/lib/utils'
 
 const ADMIN_STATUSES = [
@@ -84,7 +84,10 @@ function SectionCard({ title, text }: { title: string; text?: string }) {
   return (
     <Card>
       <CardContent className="p-6">
-        <h4 className="font-display text-base font-bold text-foreground">{title}</h4>
+        <div className="flex items-start justify-between gap-2">
+          <h4 className="font-display text-base font-bold text-foreground">{title}</h4>
+          <VoicePlayer text={text} compact />
+        </div>
         <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{text}</p>
       </CardContent>
     </Card>
@@ -101,18 +104,38 @@ export function AdminCandidateDetail() {
   const { data: progress } = useAdminProgress(interviewId)
   const { data: bundle, isLoading, isError } = useAdminAnalysis(interviewId)
 
-  const reportPdfMutation = useMutation({
-    mutationFn: (id: string) => adminApi.reportPdf(id),
-    onSuccess: (blob, id) => {
-      const url = URL.createObjectURL(blob)
+  // POST-based download — download managers (IDM) only hijack GET requests,
+  // so the PDF always reaches the browser as a normal blob download.
+  const downloadPdf = useMutation({
+    mutationFn: async ({ id, url }: { id: string; url: string }) => {
+      const token = getToken()
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      })
+      if (!res.ok) {
+        let detail = `PDF request failed (${res.status})`
+        try {
+          const data = await res.json()
+          detail = data?.detail ?? detail
+        } catch {
+          /* non-JSON error body */
+        }
+        throw new Error(detail)
+      }
+      const blob = await res.blob()
+      const objectUrl = URL.createObjectURL(blob)
       const a = document.createElement('a')
-      a.href = url
+      a.href = objectUrl
       a.download = `HireLens-Report-${meta?.candidate_name ?? id}.pdf`
       a.click()
-      URL.revokeObjectURL(url)
-      toast.success('Report downloaded')
+      URL.revokeObjectURL(objectUrl)
+      return id
     },
-    onError: (error) => toast.error(getErrorMessage(error)),
+    onSuccess: (_, vars) => {
+      toast.success(vars.url.includes('regenerate') ? 'PDF regenerated from stored results' : 'Report downloaded')
+    },
+    onError: (error) => toast.error(error instanceof Error ? error.message : getErrorMessage(error)),
   })
 
   const regenerateMutation = useMutation({
@@ -120,20 +143,6 @@ export function AdminCandidateDetail() {
     onSuccess: () => {
       toast.success('Regeneration started — the evaluation will be rebuilt.')
       queryClient.invalidateQueries({ queryKey: queryKeys.adminProgress(interviewId ?? '') })
-    },
-    onError: (error) => toast.error(getErrorMessage(error)),
-  })
-
-  const regeneratePdfMutation = useMutation({
-    mutationFn: (id: string) => adminApi.regenerateReportPdf(id),
-    onSuccess: (blob) => {
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `HireLens-Report-${meta?.candidate_name ?? interviewId}.pdf`
-      a.click()
-      URL.revokeObjectURL(url)
-      toast.success('PDF regenerated from stored results')
     },
     onError: (error) => toast.error(getErrorMessage(error)),
   })
@@ -204,15 +213,15 @@ export function AdminCandidateDetail() {
           <div className="flex flex-wrap gap-2">
             <Button
               variant="outline"
-              onClick={() => regeneratePdfMutation.mutate(interviewId!)}
-              loading={regeneratePdfMutation.isPending}
+              onClick={() => downloadPdf.mutate({ id: interviewId!, url: adminApi.regenerateReportPdfUrl(interviewId!) })}
+              loading={downloadPdf.isPending}
             >
               <RefreshCw />
               Regenerate PDF
             </Button>
             <Button
-              onClick={() => reportPdfMutation.mutate(interviewId!)}
-              loading={reportPdfMutation.isPending}
+              onClick={() => downloadPdf.mutate({ id: interviewId!, url: adminApi.reportPdfUrl(interviewId!) })}
+              loading={downloadPdf.isPending}
             >
               <Download />
               Download report
@@ -369,6 +378,7 @@ export function AdminCandidateDetail() {
                 <CardTitle className="flex items-center gap-2">
                   <CheckCircle2 className="h-5 w-5 text-success" />
                   Strengths
+                  <SpeakButton className="ml-auto" text={bundle.strengths.join('. ')} />
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -391,6 +401,7 @@ export function AdminCandidateDetail() {
                 <CardTitle className="flex items-center gap-2">
                   <XCircle className="h-5 w-5 text-destructive" />
                   Areas for improvement
+                  <SpeakButton className="ml-auto" text={bundle.weaknesses.join('. ')} />
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -414,7 +425,10 @@ export function AdminCandidateDetail() {
           {report && (
             <Card>
               <CardContent className="space-y-4 p-6">
-                <h3 className="font-display text-lg font-bold text-foreground">Executive summary</h3>
+                <div className="flex items-center justify-between">
+                  <h3 className="font-display text-lg font-bold text-foreground">Executive summary</h3>
+                  <SpeakButton text={report.executive_summary} />
+                </div>
                 <p className="leading-relaxed text-muted-foreground">{report.executive_summary}</p>
               </CardContent>
             </Card>
@@ -451,6 +465,7 @@ export function AdminCandidateDetail() {
                   {transcript.confidence > 0 && (
                     <Badge variant="secondary">Confidence: {Math.round(transcript.confidence * 100)}%</Badge>
                   )}
+                  <SpeakButton className="ml-auto" text={transcript.full_text} />
                 </div>
                 <div className="max-h-[560px] space-y-3 overflow-y-auto pr-3">
                   {transcript.segments && transcript.segments.length > 0 ? (

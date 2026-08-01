@@ -1,23 +1,26 @@
 import { memo, useCallback, useEffect, useRef, useState } from 'react'
-import { Bot, Loader2, MessageCircle, RotateCcw, Send, Sparkles, Wrench, X } from 'lucide-react'
+import { Bot, Loader2, MessageCircle, Paperclip, RotateCcw, Send, Sparkles, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
-import { streamChat } from '@/services/api'
-import type { ChatHistoryItem, StreamToolEvent } from '@/types'
+import { chatApi, streamChat } from '@/services/api'
+import type { ChatHistoryItem } from '@/types'
 import { renderMarkdown } from '@/lib/markdown'
 import { cn } from '@/lib/utils'
+import { SpeakButton, VoicePlayer } from '@/components/shared'
 
 interface DisplayMessage {
   id: string
   role: 'user' | 'assistant'
   content: string
-  toolEvents: StreamToolEvent[]
+  attachment?: { name: string; size: number }
   streaming?: boolean
 }
 
 interface ChatSidebarProps {
   role: 'admin' | 'candidate'
 }
+
+const ACCEPTED_ATTACHMENTS = 'video/*,audio/*,image/*,.mp4,.mov,.avi,.mkv,.mp3,.wav,.m4a,.flac,.aac'
 
 // Memoized so streaming deltas only re-render the message being updated.
 const MessageBubble = memo(function MessageBubble({ message }: { message: DisplayMessage }) {
@@ -37,26 +40,30 @@ const MessageBubble = memo(function MessageBubble({ message }: { message: Displa
         )}
       >
         {message.role === 'assistant' ? (
-          <div
-            className="chat-markdown [&_a]:break-all [&_table]:my-1 [&_code]:rounded [&_code]:bg-muted [&_code]:px-1 [&_code]:py-0.5 [&_code]:font-mono [&_code]:text-[0.85em]"
-            dangerouslySetInnerHTML={{ __html: renderMarkdown(message.content) }}
-          />
-        ) : (
-          <p className="whitespace-pre-wrap">{message.content}</p>
-        )}
-
-        {message.role === 'assistant' && message.toolEvents.length > 0 && (
-          <div className="mt-2 space-y-1 border-t border-border/40 pt-2">
-            {message.toolEvents.map((t, i) => (
-              <div key={i} className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
-                <Wrench className="h-3 w-3" />
-                <span className="font-mono">{t.name}</span>
-                <span className="text-primary">
-                  {t.status === 'started' ? '…' : t.status === 'done' ? '✓' : '✗'}
-                </span>
-                {t.error && <span className="truncate text-destructive">({t.error})</span>}
+          <div>
+            <div
+              className="chat-markdown [&_a]:break-all [&_table]:my-1 [&_code]:rounded [&_code]:bg-muted [&_code]:px-1 [&_code]:py-0.5 [&_code]:font-mono [&_code]:text-[0.85em]"
+              dangerouslySetInnerHTML={{ __html: renderMarkdown(message.content) }}
+            />
+            {!message.streaming && message.content && (
+              <div className="mt-2 flex flex-col items-end gap-1.5">
+                <VoicePlayer text={message.content} compact autoPlay />
+                <SpeakButton text={message.content} />
               </div>
-            ))}
+            )}
+          </div>
+        ) : (
+          <div>
+            {message.attachment && (
+              <span className="mb-1.5 inline-flex max-w-full items-center gap-1.5 rounded-lg border border-border/50 bg-background/70 px-2 py-1 text-[11px] font-medium text-muted-foreground">
+                <Paperclip className="h-3 w-3 shrink-0" />
+                <span className="truncate">{message.attachment.name}</span>
+                <span className="shrink-0 text-[10px] text-muted-foreground/60">
+                  {(message.attachment.size / (1024 * 1024)).toFixed(1)} MB
+                </span>
+              </span>
+            )}
+            <p className="whitespace-pre-wrap">{message.content}</p>
           </div>
         )}
 
@@ -84,6 +91,8 @@ export function ChatSidebar({ role }: ChatSidebarProps) {
   const [messages, setMessages] = useState<DisplayMessage[]>([])
   const [input, setInput] = useState('')
   const [streaming, setStreaming] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const abortRef = useRef<AbortController | null>(null)
   const scrollRef = useRef<HTMLDivElement | null>(null)
 
@@ -107,19 +116,75 @@ export function ChatSidebar({ role }: ChatSidebarProps) {
     setMessages([])
     setInput('')
     setStreaming(false)
+    setUploading(false)
   }, [])
+
+  const handleFileSelected = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0]
+      e.target.value = ''
+      if (!file || role !== 'admin' || streaming || uploading) return
+
+      setUploading(true)
+      const userMsg: DisplayMessage = {
+        id: `u-${Date.now()}`,
+        role: 'user',
+        content: 'Uploaded an interview recording for processing.',
+        attachment: { name: file.name, size: file.size },
+      }
+      setMessages((prev) => [...prev, userMsg])
+
+      const candidateEmail = window.prompt('Candidate email (the interview belongs to):')
+      if (!candidateEmail?.trim()) {
+        setMessages((prev) => [
+          ...prev,
+          { id: `a-${Date.now()}`, role: 'assistant', content: 'Upload cancelled — no candidate email provided.', streaming: false },
+        ])
+        setUploading(false)
+        return
+      }
+
+      const jobTitle = window.prompt('Job title (optional):')?.trim() || 'Interview'
+
+      try {
+        const res = await chatApi.uploadInterview(file, candidateEmail.trim(), jobTitle)
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `a-${Date.now()}`,
+            role: 'assistant',
+            content:
+              `✅ Interview **${file.name}** uploaded for **${res.candidate_email}** (` +
+              `${res.status}). Processing has started automatically — I'll track it and ` +
+              `can email the result once it's ready. Just ask!`,
+            streaming: false,
+          },
+        ])
+      } catch (error) {
+        const message =
+          (error as { response?: { data?: { detail?: string } } })?.response?.data?.detail ??
+          'Upload failed. Please try again.'
+        setMessages((prev) => [
+          ...prev,
+          { id: `a-${Date.now()}`, role: 'assistant', content: `⚠️ ${message}`, streaming: false },
+        ])
+      } finally {
+        setUploading(false)
+      }
+    },
+    [role, streaming, uploading],
+  )
 
   const send = useCallback(
     async (text?: string) => {
       const message = (text ?? input).trim()
       if (!message || streaming) return
 
-      const userMsg: DisplayMessage = { id: `u-${Date.now()}`, role: 'user', content: message, toolEvents: [] }
+      const userMsg: DisplayMessage = { id: `u-${Date.now()}`, role: 'user', content: message }
       const assistantMsg: DisplayMessage = {
         id: `a-${Date.now() + 1}`,
         role: 'assistant',
         content: '',
-        toolEvents: [],
         streaming: true,
       }
       setMessages((prev) => [...prev, userMsg, assistantMsg])
@@ -141,13 +206,6 @@ export function ChatSidebar({ role }: ChatSidebarProps) {
             onMessage: (delta) => {
               setMessages((prev) =>
                 prev.map((m) => (m.id === assistantMsg.id ? { ...m, content: m.content + delta } : m)),
-              )
-            },
-            onTool: (tool) => {
-              setMessages((prev) =>
-                prev.map((m) =>
-                  m.id === assistantMsg.id ? { ...m, toolEvents: [...m.toolEvents, tool as StreamToolEvent] } : m,
-                ),
               )
             },
             onDone: (content) => {
@@ -240,6 +298,28 @@ export function ChatSidebar({ role }: ChatSidebarProps) {
       {/* Input */}
       <div className="shrink-0 border-t border-border/60 p-3">
         <div className="flex items-end gap-2">
+          {role === 'admin' && (
+            <>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept={ACCEPTED_ATTACHMENTS}
+                className="hidden"
+                onChange={handleFileSelected}
+              />
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={streaming || uploading}
+                className="h-10 w-10 shrink-0 text-muted-foreground/70 hover:text-primary"
+                aria-label="Attach interview recording"
+                title="Attach interview recording (audio/video)"
+              >
+                {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Paperclip className="h-4 w-4" />}
+              </Button>
+            </>
+          )}
           <Textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -265,7 +345,9 @@ export function ChatSidebar({ role }: ChatSidebarProps) {
           </Button>
         </div>
         <p className="mt-1.5 text-[10px] text-muted-foreground">
-          Verify important actions before confirming. Data is always fetched live.
+          {role === 'admin'
+            ? 'Attach an interview recording to upload & process it, or ask me to email a result.'
+            : 'Verify important actions before confirming. Data is always fetched live.'}
         </p>
       </div>
     </div>

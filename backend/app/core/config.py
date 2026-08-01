@@ -100,6 +100,24 @@ class Settings(BaseSettings):
     UPLOAD_DIR: str = str(Path(__file__).resolve().parents[3] / "uploads")
     GENERATED_DIR: str = str(Path(__file__).resolve().parents[3] / "generated")
 
+    # --- Email (SMTP) ---
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_USERNAME: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM: str = "HireLens AI <no-reply@hirelens.ai>"
+    SMTP_USE_TLS: bool = True
+    EMAIL_ENABLED: bool = False
+
+    # --- Text-to-Speech (ElevenLabs) ---
+    ELEVENLABS_API_KEY: str = ""
+    ELEVENLABS_VOICE_ID: str = "21m00Tcm4TlvDq8ikWAM"
+    ELEVENLABS_MODEL_ID: str = "eleven_multilingual_v2"
+    TTS_CACHE_DIR: str = str(Path(__file__).resolve().parents[3] / "storage" / "tts_cache")
+    TTS_MAX_CHARS: int = 10000
+    TTS_STABILITY: float = 0.5
+    TTS_SIMILARITY: float = 0.75
+
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.CORS_ORIGINS.split(",") if o.strip()]

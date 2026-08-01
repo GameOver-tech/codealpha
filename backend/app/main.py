@@ -7,7 +7,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.core.config import settings
 from app.core.logging import get_logger
-from app.routers import chat, health, auth, jobs, interviews, profile, admin
+from app.routers import chat, health, auth, jobs, interviews, profile, admin, tts
 from app.utils.exceptions import TranscriptionError
 
 logger = get_logger(__name__)
@@ -142,6 +142,7 @@ app.include_router(interviews.router)
 app.include_router(profile.router)
 app.include_router(admin.router)
 app.include_router(chat.router)
+app.include_router(tts.router)
 
 # Serve locally-stored uploads (avatars, recordings, generated PDFs) at /media.
 # Supabase Storage sync replaces this in production, but local dev must work.

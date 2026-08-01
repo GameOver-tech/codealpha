@@ -178,6 +178,12 @@ def extract_audio(source_path: str, work_dir: str | None = None) -> str:
         stderr = (result.stderr or b"").decode("utf-8", errors="replace")[-500:]
         raise TranscriptionError(f"Audio extraction failed: {stderr}")
 
+    if target.stat().st_size < 1024:
+        raise TranscriptionError(
+            "The video file has no audible audio track — nothing could be "
+            "extracted. Upload a recording that contains speech."
+        )
+
     logger.info(
         "Audio extracted from %s -> %s (%s bytes)",
         source.name,
@@ -205,16 +211,23 @@ def _build_full_text(segments: list[dict[str, Any]]) -> str:
 def _map_segments(
     utterance_groups: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    """Map Deepgram utterances to our segment schema (start/end/text/speaker)."""
+    """Map Deepgram utterances to our segment schema (start/end/text/speaker).
+
+    Deepgram utterances carry a ``transcript`` field plus (optionally) word-
+    level timestamps. The ``transcript`` is the source of truth for the text;
+    ``words`` are used only for timestamps and confidence. Falling back to
+    ``transcript`` prevents valid speech from being dropped when word
+    timestamps are absent.
+    """
     segments: list[dict[str, Any]] = []
     for utt in utterance_groups or []:
         words = utt.get("words") or []
+        text = _segment_text(words) or (utt.get("transcript") or "").strip()
+        if not text:
+            continue
         start = float(utt.get("start") or (words[0]["start"] if words else 0))
         end = float(utt.get("end") or (words[-1]["end"] if words else start))
         speaker = utt.get("speaker")
-        text = _segment_text(words)
-        if not text:
-            continue
         segments.append(
             {
                 "start": round(start, 2),
@@ -379,7 +392,11 @@ def _validate_transcript(full_text: str) -> None:
     short — processing must never continue with unusable content.
     """
     if not full_text or not full_text.strip():
-        raise TranscriptionError("Deepgram returned an empty transcript.")
+        raise TranscriptionError(
+            "No speech was detected in the recording. Make sure the file "
+            "contains audible speech (not silence, music, or a video without "
+            "an audio track), then upload it again."
+        )
     if len(full_text.strip()) <= 20:
         raise TranscriptionError(
             "Insufficient speech detected (transcript is too short to evaluate)."
@@ -435,12 +452,13 @@ async def transcribe_audio(file_path: str) -> dict[str, Any]:
         channels = results.get("channels") or []
         alt = channels[0].get("alternatives", [{}])[0] if channels else {}
         words = alt.get("words") or []
-        if words:
+        alt_text = (alt.get("transcript") or "").strip()
+        if words or alt_text:
             segments = [
                 {
-                    "start": round(float(words[0]["start"]), 2),
-                    "end": round(float(words[-1]["end"]), 2),
-                    "text": _segment_text(words),
+                    "start": round(float(words[0]["start"]), 2) if words else 0.0,
+                    "end": round(float(words[-1]["end"]), 2) if words else 0.0,
+                    "text": _segment_text(words) or alt_text,
                     "speaker": None,
                     "confidence": round(float(alt.get("confidence") or 0.0), 4),
                 }
