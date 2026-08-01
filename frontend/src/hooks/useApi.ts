@@ -65,13 +65,15 @@ export function useInterviewResult() {
   })
 }
 
-export function useAdminInterviews() {
+export function useAdminInterviews(enabled = true) {
   return useQuery({
     queryKey: queryKeys.adminInterviews,
     queryFn: async () => (await adminApi.interviews()).data,
+    enabled,
     staleTime: 30 * 1000,
     // Poll in the background so status changes surface without manual
-    // refresh, but not faster than the data actually changes.
+    // refresh, but not faster than the data actually changes. Polling is
+    // paused while the query is disabled (e.g. notification bell closed).
     refetchInterval: (query) =>
       query.state.data && query.state.data.some((i) => ['uploaded', 'processing', 'transcript_ready', 'ai_evaluation', 'pdf_generated'].includes(i.status))
         ? 15 * 1000

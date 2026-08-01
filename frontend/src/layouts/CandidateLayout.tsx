@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, lazy, Suspense } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
@@ -13,7 +13,11 @@ import {
 } from 'lucide-react'
 import { Avatar, AvatarFallback, AvatarImage, Button } from '@/components/ui'
 import { ThemeToggle } from '@/components/shared'
-import { ChatSidebar } from '@/components/chat'
+// Lazy-load the AI chat sidebar — it pulls in markdown rendering + voice
+// players, which shouldn't block the first paint of every candidate page.
+const ChatSidebar = lazy(() =>
+  import('@/components/chat/ChatSidebar').then((m) => ({ default: m.ChatSidebar })),
+)
 import { useAuth } from '@/context'
 import { useProfile } from '@/hooks'
 import { mediaUrl } from '@/services/api'
@@ -201,7 +205,9 @@ export function CandidateLayout() {
         </main>
       </div>
 
-      <ChatSidebar role="candidate" />
+      <Suspense fallback={null}>
+        <ChatSidebar role="candidate" />
+      </Suspense>
     </div>
   )
 }

@@ -120,6 +120,34 @@ function DashboardStatCard({
 export function AdminDashboard() {
   const { data, isLoading, isError } = useAdminDashboard()
 
+  // Hooks must run unconditionally — before any early return — so their
+  // order is identical on every render.
+  const statusDistribution = useMemo(() => {
+    const counts = data?.status_counts ?? {}
+    return Object.keys(counts)
+      .filter((s) => counts[s] > 0)
+      .map((s) => ({
+        name: STATUS_LABELS[s] ?? s.replace(/_/g, ' '),
+        value: counts[s],
+        fill: STATUS_COLORS[s] ?? '#2563EB',
+      }))
+      .sort((a, b) => b.value - a.value)
+  }, [data])
+
+  const recent: AdminDashboardRecent[] = data?.recent ?? []
+
+  const volumeByDay = useMemo(() => {
+    const buckets = new Map<string, number>()
+    recent.forEach((i) => {
+      if (!i.created_at) return
+      const day = new Date(i.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+      buckets.set(day, (buckets.get(day) ?? 0) + 1)
+    })
+    return [...buckets.entries()]
+      .sort((a, b) => new Date(a[0]).getTime() - new Date(b[0]).getTime())
+      .map(([date, count]) => ({ date, count }))
+  }, [recent])
+
   if (isLoading) {
     return (
       <div className="space-y-6">
@@ -148,33 +176,6 @@ export function AdminDashboard() {
   }
 
   const stats = data.stats
-  const recent: AdminDashboardRecent[] = data.recent ?? []
-
-  // Distribution for the donut chart — only statuses with data.
-  const statusDistribution = useMemo(() => {
-    const counts = data.status_counts ?? {}
-    return Object.keys(counts)
-      .filter((s) => counts[s] > 0)
-      .map((s) => ({
-        name: STATUS_LABELS[s] ?? s.replace(/_/g, ' '),
-        value: counts[s],
-        fill: STATUS_COLORS[s] ?? '#2563EB',
-      }))
-      .sort((a, b) => b.value - a.value)
-  }, [data])
-
-  // Trend line: group interviews by day (from real created_at dates).
-  const volumeByDay = useMemo(() => {
-    const buckets = new Map<string, number>()
-    recent.forEach((i) => {
-      if (!i.created_at) return
-      const day = new Date(i.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
-      buckets.set(day, (buckets.get(day) ?? 0) + 1)
-    })
-    return [...buckets.entries()]
-      .sort((a, b) => new Date(a[0]).getTime() - new Date(b[0]).getTime())
-      .map(([date, count]) => ({ date, count }))
-  }, [recent])
 
   // Completion rate derived from real counts.
   const completionRate = stats.total_interviews > 0
