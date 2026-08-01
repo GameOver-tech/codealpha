@@ -114,7 +114,7 @@ class GroqChatProvider:
         tools: list[dict] | None = None,
         *,
         temperature: float = 0.3,
-        max_tokens: int = 2048,
+        max_tokens: int = 1024,
     ) -> AsyncIterator[dict[str, Any]]:
         """Stream a chat completion, falling back across providers on 429/5xx.
 

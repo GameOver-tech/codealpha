@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, type QueryClient } from '@tanstack/react-query'
 import { candidateApi, adminApi, jobsApi, profileApi } from '@/services/api'
 import type { CandidateSummary, InterviewStatusValue } from '@/types'
 
@@ -119,6 +119,16 @@ export function useAdminAnalysis(interviewId: string | undefined) {
     // The analysis bundle is heavy (fetches all artifacts). Cache it for
     // several minutes — navigating back to a candidate is then instant.
     // Regenerate/override mutations invalidate this key explicitly.
+    staleTime: 5 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
+  })
+}
+
+/** Prefetch a candidate's full analysis so the report page opens instantly. */
+export function prefetchAdminAnalysis(queryClient: QueryClient, interviewId: string) {
+  return queryClient.prefetchQuery({
+    queryKey: queryKeys.adminAnalysis(interviewId),
+    queryFn: async () => (await adminApi.analysis(interviewId)).data,
     staleTime: 5 * 60 * 1000,
   })
 }

@@ -59,10 +59,27 @@ QUEUE_KEY = "hirelens:interview-queue"
 _dashboard_cache: tuple[float, dict] | None = None
 DASHBOARD_CACHE_TTL_SECONDS = 15.0
 
+# In-process TTL cache for the per-interview analysis bundle. The candidate
+# report page (Overview/Evaluation/Transcript/AI Insights) depends on this
+# heavy payload, so the first load pays the DB latency and every tab switch
+# or back-navigation within the TTL is served instantly from memory.
+_analysis_cache: dict[str, tuple[float, dict]] = {}
+ANALYSIS_CACHE_TTL_SECONDS = 60.0
+
+# In-process TTL cache for the full interview list (candidates page +
+# notification bell). Polled every 15-60s in the frontend, so a short TTL
+# keeps it fresh without paying ~3s per poll against the remote DB.
+_interviews_cache: tuple[float, list] | None = None
+INTERVIEWS_CACHE_TTL_SECONDS = 15.0
+
 
 def invalidate_dashboard_cache() -> None:
-    global _dashboard_cache
+    global _dashboard_cache, _interviews_cache
     _dashboard_cache = None
+    _interviews_cache = None
+    # A mutation invalidates every cached analysis too — the cached payload
+    # is only valid for the interview that produced it.
+    _analysis_cache.clear()
 
 
 def _require_admin(current_user: User):
@@ -296,7 +313,19 @@ async def get_analysis(
     current_user: User = Depends(require_role("admin")),
     db: AsyncSession = Depends(get_db),
 ):
-    """Get the full analysis bundle for an interview (all artifacts)."""
+    """Get the full analysis bundle for an interview (all artifacts).
+
+    Served from an in-process TTL cache when fresh — the report page
+    (Overview/Evaluation/Transcript/AI Insights) reloads this payload on
+    every navigation, and the remote DB costs ~3s per round trip.
+    """
+    import time as _time
+
+    now = _time.monotonic()
+    cached = _analysis_cache.get(interview_id)
+    if cached is not None and now - cached[0] < ANALYSIS_CACHE_TTL_SECONDS:
+        return cached[1]
+
     repo = InterviewRepository(db)
     interview = await repo.get_for_analysis(interview_id)
     if interview is None:
@@ -319,7 +348,7 @@ async def get_analysis(
             if c.key not in ("id", "interview_id", "created_at", "updated_at")
         }
 
-    return AnalysisBundle(
+    bundle = AnalysisBundle(
         transcript=interview.transcript,
         speech_analysis=interview.speech_analysis,
         sentiment_analysis=interview.sentiment_analysis,
@@ -329,7 +358,10 @@ async def get_analysis(
         weaknesses=weaknesses,
         recommendation=interview.recommendation,
         report=report,
-    )
+    ).model_dump(mode="json")
+
+    _analysis_cache[interview_id] = (now, bundle)
+    return bundle
 
 
 @router.get("/scores", response_model=dict)
@@ -531,7 +563,19 @@ async def list_interviews(
     """List all interviews with candidate name/email and status.
 
     Candidate details come from the eager-loaded relationship — no N+1.
+    Served from an in-process TTL cache (invalidated on mutations) so the
+    candidates page / notification bell polling never pays the ~3s remote
+    DB latency on every poll.
     """
+    import time as _time
+
+    global _interviews_cache
+
+    now = _time.monotonic()
+    cached = _interviews_cache
+    if cached is not None and now - cached[0] < INTERVIEWS_CACHE_TTL_SECONDS:
+        return cached[1]
+
     repo = InterviewRepository(db)
     interviews = await repo.list_all_summary()
     result = []
@@ -572,6 +616,8 @@ async def list_interviews(
                 "created_at": interview.created_at.isoformat() if interview.created_at else None,
             }
         )
+
+    _interviews_cache = (now, result)
     return result
 
 
