@@ -1,18 +1,8 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
-import { RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, ResponsiveContainer } from 'recharts'
 import { ArrowRight, BadgeCheck, PlayCircle, Sparkles, Upload, FileText, Brain, LineChart, Trophy, Plus } from 'lucide-react'
 import { CTAButton } from '@/components/shared'
-import { CircularProgress } from '@/components/shared'
-
-const HERO_RADAR = [
-  { axis: 'Technical', score: 92 },
-  { axis: 'Communication', score: 85 },
-  { axis: 'Problem Solving', score: 82 },
-  { axis: 'Confidence', score: 80 },
-  { axis: 'Experience', score: 88 },
-]
 
 export function Hero() {
   return (
@@ -86,73 +76,23 @@ export function Hero() {
           </motion.div>
         </div>
 
-        {/* Hero visual: animated score card */}
+        {/* Hero visual: AI brain hologram */}
         <motion.div
           initial={{ opacity: 0, scale: 0.92 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.7, delay: 0.3 }}
-          className="relative mx-auto w-full max-w-md"
+          className="relative mx-auto flex w-full max-w-[620px] items-center justify-center"
         >
-          <div className="glass-strong animate-float rounded-3xl p-8 shadow-card">
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Interview Score</p>
-                <p className="mt-0.5 text-xs text-muted-foreground">Senior Software Engineer</p>
-              </div>
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-success/10 px-3 py-1 text-xs font-semibold text-success">
-                <Trophy className="h-3.5 w-3.5" />
-                Recommended
-              </span>
-            </div>
-
-            <div className="mt-6 flex items-center justify-center">
-              <CircularProgress value={87} size={180} label="Overall" />
-            </div>
-
-            <div className="mt-6 h-48 w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <RadarChart data={HERO_RADAR} outerRadius="78%">
-                  <PolarGrid stroke="currentColor" className="text-slate-300 dark:text-slate-600" />
-                  <PolarAngleAxis dataKey="axis" tick={{ fill: '#94a3b8', fontSize: 11 }} />
-                  <PolarRadiusAxis domain={[0, 100]} tick={false} axisLine={false} />
-                  <Radar dataKey="score" stroke="#2563EB" fill="#2563EB" fillOpacity={0.35} strokeWidth={2} />
-                </RadarChart>
-              </ResponsiveContainer>
-            </div>
-
-            <div className="mt-4 grid grid-cols-2 gap-3">
-              <div className="rounded-xl bg-muted/60 p-3">
-                <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Technical</p>
-                <p className="mt-0.5 font-display text-lg font-bold text-foreground">92/100</p>
-              </div>
-              <div className="rounded-xl bg-muted/60 p-3">
-                <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Communication</p>
-                <p className="mt-0.5 font-display text-lg font-bold text-foreground">85/100</p>
-              </div>
-            </div>
+          <div className="relative w-full animate-float">
+            <div className="absolute inset-0 -z-10 animate-pulse-ring rounded-full bg-blue-400/20 blur-2xl" />
+            <div className="absolute inset-0 -z-10 animate-pulse-ring rounded-full bg-blue-400/20 blur-2xl [animation-delay:1s]" />
+            <img
+              src="/ai-brain.png"
+              alt="AI brain hologram"
+              loading="lazy"
+              className="h-auto w-full max-w-[620px] object-contain"
+            />
           </div>
-
-          {/* Floating chips */}
-          <motion.div
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.9 }}
-            className="absolute -left-6 -top-6 hidden rounded-2xl glass-strong px-4 py-3 shadow-card sm:block"
-          >
-            <p className="flex items-center gap-2 text-xs font-semibold text-foreground">
-              <Upload className="h-4 w-4 text-primary" /> Upload
-            </p>
-          </motion.div>
-          <motion.div
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 1.1 }}
-            className="absolute -bottom-6 -right-4 hidden rounded-2xl glass-strong px-4 py-3 shadow-card sm:block"
-          >
-            <p className="flex items-center gap-2 text-xs font-semibold text-foreground">
-              <Brain className="h-4 w-4 text-primary" /> AI Analysis
-            </p>
-          </motion.div>
         </motion.div>
       </div>
     </section>
