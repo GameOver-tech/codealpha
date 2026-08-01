@@ -1,16 +1,16 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
-import { ArrowRight, BadgeCheck, PlayCircle, Sparkles, Upload, FileText, Brain, LineChart, Trophy, Plus, Star, Zap, ShieldCheck, Activity } from 'lucide-react'
+import { ArrowRight, BadgeCheck, PlayCircle, Sparkles, Upload, FileText, Brain, LineChart, Trophy, Plus, Star, Zap, ShieldCheck } from 'lucide-react'
 import { CTAButton } from '@/components/shared'
 
-/* Per-word headline reveal: blur-in + rise with a gradient highlight on key words */
+/* Per-word headline reveal: rise with a crisp settle and gradient highlight on key words */
 function Word({ children, gradient }: { children: React.ReactNode; gradient?: boolean }) {
   return (
     <motion.span
       variants={{
-        hidden: { opacity: 0, y: 16, filter: 'blur(8px)' },
-        show: { opacity: 1, y: 0, filter: 'blur(0px)', transition: { duration: 0.6, ease: [0.22, 1, 0.36, 1] } },
+        hidden: { opacity: 0, y: 16, filter: 'blur(4px)' },
+        show: { opacity: 1, y: 0, filter: 'blur(0px)', transition: { duration: 0.5, ease: [0.22, 1, 0.36, 1] } },
       }}
       className={gradient ? 'relative inline-block text-gradient animate-gradient-shift' : 'inline-block'}
     >
@@ -24,6 +24,50 @@ function Word({ children, gradient }: { children: React.ReactNode; gradient?: bo
       )}
       {children}
     </motion.span>
+  )
+}
+
+/* 3D holographic data panel with readable text and real depth */
+function HoloPanel({
+  icon: Icon,
+  iconClass,
+  title,
+  desc,
+  className = '',
+  delay = 0.9,
+  tilt,
+  success = false,
+}: {
+  icon: React.ComponentType<{ className?: string }>
+  iconClass?: string
+  title: string
+  desc: string
+  className?: string
+  delay?: number
+  tilt: { rotateY: number; rotateX: number; z: number }
+  success?: boolean
+}) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 16, scale: 0.85 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={{ delay, duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+      style={{
+        transformStyle: 'preserve-3d',
+        transform: `rotateY(${tilt.rotateY}deg) rotateX(${tilt.rotateX}deg) translateZ(${tilt.z}px)`,
+      }}
+      className={`absolute hidden rounded-2xl border border-white/50 bg-white/75 p-3 shadow-card backdrop-blur-xl dark:border-white/10 dark:bg-slate-900/80 md:block ${className}`}
+    >
+      <div className="flex items-center gap-2.5">
+        <span className={`flex h-8 w-8 items-center justify-center rounded-lg ${iconClass ?? 'bg-primary/10 text-primary'}`}>
+          <Icon className="h-4 w-4" />
+        </span>
+        <div>
+          <p className={`text-xs font-bold leading-tight ${success ? 'text-success' : 'text-foreground'}`}>{title}</p>
+          <p className="text-[10px] leading-tight text-muted-foreground">{desc}</p>
+        </div>
+      </div>
+    </motion.div>
   )
 }
 
@@ -70,7 +114,7 @@ export function Hero() {
             initial={{ opacity: 0, y: 24 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.2 }}
-            className="mt-6 max-w-xl text-lg leading-relaxed text-muted-foreground"
+            className="mt-6 max-w-xl text-lg leading-relaxed text-pretty text-muted-foreground"
           >
             Upload interview recordings and get deep, data-driven insights — speech analysis,
             sentiment detection, skill scoring, and hiring recommendations in minutes.
@@ -128,7 +172,7 @@ export function Hero() {
           </motion.div>
         </div>
 
-        {/* Hero visual: AI brain hologram */}
+        {/* Hero visual: AI brain hologram with real 3D data panels */}
         <motion.div
           initial={{ opacity: 0, scale: 0.92 }}
           animate={{ opacity: 1, scale: 1 }}
@@ -136,7 +180,7 @@ export function Hero() {
           className="relative mx-auto flex w-full max-w-[620px] items-center justify-center"
         >
           {/* Hologram stage */}
-          <div className="relative w-full">
+          <div className="relative w-full" style={{ perspective: '1400px' }}>
             {/* Rotating conic light rays */}
             <div
               aria-hidden
@@ -148,19 +192,22 @@ export function Hero() {
                 WebkitMaskImage: 'radial-gradient(circle, black 0%, transparent 70%)',
               }}
             />
-            {/* Glow + floating chips */}
+            {/* Brain core */}
             <div className="relative animate-float">
-              <div className="absolute inset-0 -z-10 animate-pulse-ring rounded-full bg-blue-400/20 blur-2xl" />
-              <div className="absolute inset-0 -z-10 animate-pulse-ring rounded-full bg-blue-400/20 blur-2xl [animation-delay:1s]" />
+              <div className="absolute inset-0 -z-10 animate-pulse-ring rounded-full bg-blue-400/15 blur-xl" />
+              <div className="absolute inset-0 -z-10 animate-pulse-ring rounded-full bg-blue-400/15 blur-xl [animation-delay:1s]" />
               <div className="animate-breathe">
                 <img
-                  src="/ai-brain.png"
+                  src="/ai-brain-opt.png"
+                  srcSet="/ai-brain-opt.png 1280w, /ai-brain.png 10240w"
+                  sizes="(min-width: 1024px) 620px, (min-width: 640px) 50vw, 100vw"
                   alt="AI brain hologram"
                   loading="lazy"
-                  className="h-auto w-full max-w-[620px] object-contain"
+                  decoding="async"
+                  className="mx-auto h-auto w-[78%] max-w-[500px] object-contain"
                 />
                 {/* Scanline sweeping the hologram */}
-                <div className="pointer-events-none absolute inset-x-8 h-24 animate-scanline rounded-full bg-gradient-to-b from-transparent via-blue-400/15 to-transparent blur-md" />
+                <div className="pointer-events-none absolute inset-x-8 h-24 animate-scanline rounded-full bg-gradient-to-b from-transparent via-blue-400/10 to-transparent" />
               </div>
             </div>
 
@@ -168,44 +215,57 @@ export function Hero() {
             <div
               aria-hidden
               className="pointer-events-none absolute left-1/2 top-1/2 h-0 w-0"
-              style={{ ['--orbit-r' as string]: 'min(46%, 150px)' }}
+              style={{ ['--orbit-r' as string]: 'min(42%, 140px)' }}
             >
-              <span className="absolute h-2 w-2 -translate-x-1/2 -translate-y-1/2 animate-orbit rounded-full bg-blue-400/70 blur-[1px]" />
+              <span className="absolute h-2 w-2 -translate-x-1/2 -translate-y-1/2 animate-orbit rounded-full bg-blue-400/80" />
               <span
-                className="absolute h-1.5 w-1.5 -translate-x-1/2 -translate-y-1/2 animate-orbit rounded-full bg-primary/60 blur-[1px]"
+                className="absolute h-1.5 w-1.5 -translate-x-1/2 -translate-y-1/2 animate-orbit rounded-full bg-primary/70"
                 style={{ animationDelay: '3s' }}
               />
               <span
-                className="absolute h-1 w-1 -translate-x-1/2 -translate-y-1/2 animate-orbit rounded-full bg-cyan-300/70 blur-[1px]"
+                className="absolute h-1 w-1 -translate-x-1/2 -translate-y-1/2 animate-orbit rounded-full bg-cyan-300/80"
                 style={{ animationDelay: '6s' }}
               />
             </div>
 
-            {/* Floating holographic status chips */}
-            <motion.div
-              initial={{ opacity: 0, x: -16 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.9 }}
-              className="absolute -left-4 top-8 hidden rounded-2xl glass-strong px-4 py-3 shadow-card md:block"
-            >
-              <p className="flex items-center gap-2 text-xs font-semibold text-foreground">
-                <span className="relative flex h-2 w-2">
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-success opacity-75" />
-                  <span className="relative inline-flex h-2 w-2 rounded-full bg-success" />
-                </span>
-                Analyzing in real time
-              </p>
-            </motion.div>
-            <motion.div
-              initial={{ opacity: 0, x: 16 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 1.1 }}
-              className="absolute -right-4 bottom-10 hidden rounded-2xl glass-strong px-4 py-3 shadow-card md:block"
-            >
-              <p className="flex items-center gap-2 text-xs font-semibold text-foreground">
-                <Activity className="h-4 w-4 text-primary" /> Score 92/100
-              </p>
-            </motion.div>
+            {/* Real 3D holographic data panels — readable logic in one second */}
+            <HoloPanel
+              delay={0.85}
+              className="-left-2 top-8 md:-left-6"
+              tilt={{ rotateY: 18, rotateX: -6, z: 60 }}
+              icon={Upload}
+              iconClass="bg-primary/15 text-primary"
+              title="Upload"
+              desc="Drop interview video"
+            />
+            <HoloPanel
+              delay={1.0}
+              className="-right-2 top-16 md:-right-6"
+              tilt={{ rotateY: -18, rotateX: -6, z: 80 }}
+              icon={Brain}
+              iconClass="bg-blue-500/15 text-blue-500"
+              title="AI Analysis"
+              desc="Speech + sentiment"
+            />
+            <HoloPanel
+              delay={1.15}
+              className="bottom-10 left-2 md:left-0"
+              tilt={{ rotateY: 14, rotateX: 8, z: 40 }}
+              icon={LineChart}
+              iconClass="bg-primary/15 text-primary"
+              title="Skill Score"
+              desc="92 / 100"
+            />
+            <HoloPanel
+              delay={1.3}
+              className="bottom-4 right-2 md:right-2"
+              tilt={{ rotateY: -14, rotateX: 8, z: 50 }}
+              icon={Trophy}
+              iconClass="bg-success/15 text-success"
+              title="Verdict"
+              desc="Recommended"
+              success
+            />
           </div>
         </motion.div>
       </div>
@@ -248,6 +308,13 @@ export function HowItWorks() {
           <h2 className="mt-4 font-display text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
             From recording to recommendation in minutes
           </h2>
+          <motion.div
+            initial={{ scaleX: 0 }}
+            whileInView={{ scaleX: 1 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.7, ease: 'easeOut' }}
+            className="mx-auto mt-3 h-1 w-20 origin-center rounded-full bg-gradient-to-r from-primary via-blue-400 to-primary"
+          />
           <p className="mt-4 text-muted-foreground">
             A fully automated pipeline that turns raw interview recordings into actionable hiring intelligence.
           </p>
@@ -334,6 +401,13 @@ export function Features() {
           <h2 className="mt-4 font-display text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
             Everything you need to evaluate talent
           </h2>
+          <motion.div
+            initial={{ scaleX: 0 }}
+            whileInView={{ scaleX: 1 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.7, ease: 'easeOut' }}
+            className="mx-auto mt-3 h-1 w-20 origin-center rounded-full bg-gradient-to-r from-primary via-blue-400 to-primary"
+          />
           <p className="mt-4 text-muted-foreground">
             Built for recruiters and candidates who want clarity, speed and fairness in hiring.
           </p>
@@ -415,6 +489,13 @@ export function Pricing() {
           <h2 className="mt-4 font-display text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
             Simple, transparent pricing
           </h2>
+          <motion.div
+            initial={{ scaleX: 0 }}
+            whileInView={{ scaleX: 1 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.7, ease: 'easeOut' }}
+            className="mx-auto mt-3 h-1 w-20 origin-center rounded-full bg-gradient-to-r from-primary via-blue-400 to-primary"
+          />
           <p className="mt-4 text-muted-foreground">Start free. Scale when you're ready.</p>
         </div>
 
@@ -506,6 +587,13 @@ export function FAQ() {
           <h2 className="mt-4 font-display text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
             Frequently asked questions
           </h2>
+          <motion.div
+            initial={{ scaleX: 0 }}
+            whileInView={{ scaleX: 1 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.7, ease: 'easeOut' }}
+            className="mx-auto mt-3 h-1 w-20 origin-center rounded-full bg-gradient-to-r from-primary via-blue-400 to-primary"
+          />
         </div>
 
         <div className="mt-12 space-y-4">
