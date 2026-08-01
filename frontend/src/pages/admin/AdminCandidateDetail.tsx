@@ -27,6 +27,8 @@ import {
   ShieldCheck,
   AlertTriangle,
   ClipboardCheck,
+  Languages,
+  Clock,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import {
@@ -51,13 +53,18 @@ import {
   AdminStatusBadge,
   ReadingHighlighter,
   SoundWaveButton,
+  Avatar,
+  AvatarImage,
+  AvatarFallback,
+  SpeakButton,
+  VoicePlayer,
 } from '@/components/shared'
 import { useAdminAnalysis, useAdminInterviews, useAdminProgress, queryKeys } from '@/hooks'
 import { useAutoScroll } from '@/hooks'
 import { useVoice } from '@/hooks/useVoice'
 import { buildReadingDocument } from '@/services/readingEngine'
-import { adminApi, getErrorMessage, getToken } from '@/services/api'
-import { cn, formatDuration } from '@/lib/utils'
+import { adminApi, mediaUrl, getErrorMessage, getToken } from '@/services/api'
+import { cn, formatDuration, initials } from '@/lib/utils'
 
 const ADMIN_STATUSES = [
   'Pending',
@@ -129,8 +136,7 @@ export function AdminCandidateDetail() {
   const [overrideVerdict, setOverrideVerdict] = useState<(typeof VERDICTS)[number]>('Recommended')
   const [overrideReason, setOverrideReason] = useState('')
 
-  const { data: interviews } = useAdminInterviews()
-  const meta = interviews?.find((i) => i.id === interviewId)
+  const { data: meta } = useAdminInterviewMeta(interviewId)
   const { data: progress } = useAdminProgress(interviewId)
   const { data: bundle, isLoading, isError } = useAdminAnalysis(interviewId)
 
@@ -584,13 +590,51 @@ export function AdminCandidateDetail() {
           {transcript ? (
             <Card>
               <CardContent className="p-6">
-                <div className="mb-4 flex flex-wrap items-center gap-3">
-                  <Badge variant="secondary">Source: {transcript.source}</Badge>
-                  <Badge variant="secondary">Language: {transcript.language}</Badge>
-                  {transcript.confidence > 0 && (
-                    <Badge variant="secondary">Confidence: {Math.round(transcript.confidence * 100)}%</Badge>
-                  )}
+                {/* Transcript metadata header — readable labels, not icons alone */}
+                <div className="mb-5 flex flex-wrap items-start justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary/10 to-accent/10 text-primary ring-1 ring-primary/10">
+                      <FileText className="h-5 w-5" strokeWidth={1.75} />
+                    </span>
+                    <div>
+                      <h4 className="font-display text-base font-bold text-foreground">Interview transcript</h4>
+                      <p className="text-xs text-muted-foreground">
+                        Word count: {transcript.full_text.trim().split(/\s+/).filter(Boolean).length.toLocaleString()}
+                      </p>
+                    </div>
+                  </div>
+                  <SpeakButton text={transcript.full_text} />
                 </div>
+
+                <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                  <div className="rounded-xl border border-border/60 bg-muted/30 p-3">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Language</p>
+                    <p className="mt-1 flex items-center gap-1.5 text-sm font-semibold text-foreground">
+                      <Languages className="h-3.5 w-3.5 text-primary" />
+                      {transcript.language || '—'}
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-border/60 bg-muted/30 p-3">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Source</p>
+                    <p className="mt-1 text-sm font-semibold capitalize text-foreground">{transcript.source || '—'}</p>
+                  </div>
+                  <div className="rounded-xl border border-border/60 bg-muted/30 p-3">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Duration</p>
+                    <p className="mt-1 flex items-center gap-1.5 text-sm font-semibold text-foreground">
+                      <Clock className="h-3.5 w-3.5 text-primary" />
+                      {transcript.segments.length > 0
+                        ? formatDuration(transcript.segments[transcript.segments.length - 1].end)
+                        : '—'}
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-border/60 bg-muted/30 p-3">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Confidence</p>
+                    <p className="mt-1 text-sm font-semibold text-foreground">
+                      {transcript.confidence > 0 ? `${Math.round(transcript.confidence * 100)}%` : '—'}
+                    </p>
+                  </div>
+                </div>
+
                 <div className="max-h-[560px] space-y-3 overflow-y-auto pr-3">
                   {transcript.segments && transcript.segments.length > 0 ? (
                     transcript.segments.map((segment, i) => (

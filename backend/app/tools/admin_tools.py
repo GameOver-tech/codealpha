@@ -181,6 +181,11 @@ async def update_candidate(db: AsyncSession, actor: User, **args) -> dict:
     if args.get("is_active") is not None:
         user.is_active = bool(args["is_active"])
         updated["is_active"] = user.is_active
+        # Active-flag changes must be visible immediately — drop the cached
+        # user so the next request re-reads from the DB.
+        from app.dependencies.auth import invalidate_user_cache
+
+        invalidate_user_cache(str(user.auth_uid) if user.auth_uid else None)
 
     profile_data = {}
     for key in ("experience", "skills", "education", "current_company", "expected_salary"):
@@ -540,6 +545,10 @@ async def change_role(db: AsyncSession, actor: User, **args) -> dict:
         {"from": user.role.value, "to": role},
     )
     await db.commit()
+    # Role changes must take effect immediately — drop the cached user row.
+    from app.dependencies.auth import invalidate_user_cache
+
+    invalidate_user_cache(str(user.auth_uid) if user.auth_uid else None)
     return {"email": user.email, "role": role}
 
 

@@ -4,6 +4,7 @@ regenerate results from a stored transcript, and delete interviews.
 from __future__ import annotations
 
 import asyncio
+import time
 import traceback
 import uuid
 from datetime import datetime, timezone
@@ -50,6 +51,18 @@ logger = get_logger(__name__)
 router = APIRouter(prefix="/api/admin", tags=["Admin"])
 
 QUEUE_KEY = "hirelens:interview-queue"
+
+# In-process TTL cache for the dashboard payload. The database is a hosted
+# Supabase instance with ~3s per round-trip latency; the dashboard polls
+# every 30s, so caching avoids paying that latency on every poll. Invalidated
+# on any interview mutation (upload/delete/status change).
+_dashboard_cache: tuple[float, dict] | None = None
+DASHBOARD_CACHE_TTL_SECONDS = 15.0
+
+
+def invalidate_dashboard_cache() -> None:
+    global _dashboard_cache
+    _dashboard_cache = None
 
 
 def _require_admin(current_user: User):
@@ -153,6 +166,7 @@ async def upload_interview(
     # Kick off the pipeline in the background (Redis queue or BackgroundTasks).
     interview.started_at = datetime.now(timezone.utc)
     await db.commit()
+    invalidate_dashboard_cache()
     await _submit_pipeline(interview.id, background_tasks)
 
     return {
@@ -453,6 +467,62 @@ def _pdf_response(pdf_bytes: bytes, filename: str) -> Response:
     )
 
 
+@router.get("/dashboard", response_model=dict)
+async def get_admin_dashboard(
+    current_user: User = Depends(require_role("admin")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Lightweight dashboard payload: aggregated stats + recent interviews.
+
+    Stats are computed in ONE aggregate query (via analytics.dashboard_stats)
+    instead of downloading every interview row and counting client-side.
+    Recent interviews are limited to the latest 6 with only the fields the
+    dashboard renders. Served from an in-process TTL cache to avoid the
+    remote DB latency on every 30s poll.
+    """
+    global _dashboard_cache
+    now = time.monotonic()
+    if _dashboard_cache is not None and now - _dashboard_cache[0] < DASHBOARD_CACHE_TTL_SECONDS:
+        return _dashboard_cache[1]
+
+    from app.tools import analytics
+
+    interviews = InterviewRepository(db)
+    recent_rows = await interviews.list_recent_summary(6)
+
+    recent = []
+    for interview in recent_rows:
+        candidate = interview.candidate
+        rec = interview.recommendation
+        recent.append(
+            {
+                "id": str(interview.id),
+                "candidate_id": str(interview.candidate_id),
+                "candidate_name": candidate.full_name if candidate else "—",
+                "candidate_email": candidate.email if candidate else "—",
+                "job_title": interview.job_title,
+                "status": interview.status.value,
+                "admin_status": interview.admin_status,
+                "overall_score": interview.scores.overall_score if interview.scores else None,
+                "recommendation": rec.verdict.value if rec else None,
+                "profile_picture_url": (
+                    candidate.profile.profile_picture_url
+                    if candidate is not None and candidate.profile is not None
+                    else None
+                ),
+                "created_at": interview.created_at.isoformat() if interview.created_at else None,
+            }
+        )
+
+    payload = {
+        "stats": await analytics.dashboard_stats(db),
+        "status_counts": await interviews.status_counts(),
+        "recent": recent,
+    }
+    _dashboard_cache = (now, payload)
+    return payload
+
+
 @router.get("/interviews", response_model=list[dict])
 async def list_interviews(
     current_user: User = Depends(require_role("admin")),
@@ -503,6 +573,59 @@ async def list_interviews(
             }
         )
     return result
+
+
+@router.get("/interview/{interview_id}/meta")
+async def get_interview_meta(
+    interview_id: str,
+    current_user: User = Depends(require_role("admin")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get lightweight metadata for a single interview.
+
+    Used by the admin candidate-detail page — avoids downloading the full
+    interview list just to find one row. Returns the same shape as one
+    entry of /api/admin/interviews.
+    """
+    interviews = InterviewRepository(db)
+    interview = await interviews.get_meta(interview_id)
+    if interview is None:
+        raise NotFoundError("Interview not found")
+
+    candidate = interview.candidate
+    rec = interview.recommendation
+    profile = None
+    if candidate is not None and candidate.profile is not None:
+        profile = {
+            "skills": candidate.profile.skills,
+            "education": candidate.profile.education,
+            "experience": candidate.profile.experience,
+            "current_company": candidate.profile.current_company,
+            "profile_picture_url": candidate.profile.profile_picture_url,
+        }
+    return {
+        "id": str(interview.id),
+        "candidate_id": str(interview.candidate_id),
+        "candidate_name": candidate.full_name if candidate else "—",
+        "candidate_email": candidate.email if candidate else "—",
+        "candidate_profile": profile,
+        "admin_status": interview.admin_status,
+        "job_title": interview.job_title,
+        "status": interview.status.value,
+        "progress": interview.processing_progress,
+        "stage": interview.current_stage or "",
+        "duration_seconds": interview.duration_seconds,
+        "overall_score": interview.scores.overall_score if interview.scores else None,
+        "recommendation": rec.verdict.value if rec else None,
+        "failure_reason": interview.failure_reason,
+        "failure_stage": interview.failure_stage,
+        "processing_finished_at": (
+            interview.processing_finished_at.isoformat()
+            if interview.processing_finished_at
+            else None
+        ),
+        "created_at": interview.created_at.isoformat() if interview.created_at else None,
+    }
 
 
 # --- Regenerate / delete -----------------------------------------------------
@@ -578,6 +701,8 @@ async def update_interview_status(
     )
     await db.commit()
 
+    invalidate_dashboard_cache()
+
     return {
         "interview_id": str(interview.id),
         "admin_status": status,
@@ -618,6 +743,8 @@ async def override_recommendation(
         {"verdict": normalized.value},
     )
     await db.commit()
+
+    invalidate_dashboard_cache()
 
     return RecommendationMessage(
         verdict=rec.verdict.value,
@@ -688,4 +815,5 @@ async def delete_interview(
     )
     await db.commit()
 
+    invalidate_dashboard_cache()
     return {"message": f"Interview {interview_id} deleted successfully."}

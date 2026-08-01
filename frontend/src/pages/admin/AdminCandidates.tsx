@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useDeferredValue, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
@@ -38,6 +38,10 @@ export function AdminCandidates() {
   const [sortDir, setSortDir] = useState<SortDir>('desc')
   const [page, setPage] = useState(1)
 
+  // Keep the search input responsive — filtering runs on the deferred value
+  // so typing never blocks the table render.
+  const deferredSearch = useDeferredValue(search)
+
   const deleteMutation = useMutation({
     mutationFn: (id: string) => adminApi.deleteInterview(id),
     onSuccess: () => {
@@ -49,7 +53,7 @@ export function AdminCandidates() {
 
   const filtered = useMemo(() => {
     if (!interviews) return []
-    const q = search.trim().toLowerCase()
+    const q = deferredSearch.trim().toLowerCase()
     return interviews
       .filter((i) => {
         if (q) {
@@ -80,7 +84,7 @@ export function AdminCandidates() {
         const bv = String(b[sortKey] ?? '').toLowerCase()
         return av.localeCompare(bv) * dir
       })
-  }, [interviews, search, statusFilter, recommendationFilter, sortKey, sortDir])
+  }, [interviews, deferredSearch, statusFilter, recommendationFilter, sortKey, sortDir])
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
   const pageItems = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)

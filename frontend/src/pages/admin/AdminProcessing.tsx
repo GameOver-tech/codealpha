@@ -168,7 +168,7 @@ export function AdminProcessing() {
                   <Progress
                     value={progress.status === 'completed' ? 100 : progress.progress}
                     className="mt-6 h-2"
-                    indicatorClassName="bg-gradient-to-r from-primary to-blue-400"
+                    indicatorClassName="bg-gradient-to-r from-primary to-accent"
                   />
                   <p className="mt-2 text-xs font-medium text-muted-foreground">
                     {progress.status === 'completed' ? 100 : Math.round(progress.progress)}% complete

@@ -18,7 +18,10 @@ import { cn } from '@/lib/utils'
 export function NotificationsMenu() {
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
-  const { data: interviews = [] } = useAdminInterviews()
+  // Fetch the interview list lazily — only when the dropdown is opened.
+  // Previously this ran on mount and polled every 15s on EVERY admin page,
+  // which duplicated the dashboard's traffic and slowed every page load.
+  const { data: interviews = [], isFetching } = useAdminInterviews(open)
 
   // Build a real activity feed from the backend's interview list.
   const recent = [...interviews]
@@ -49,7 +52,12 @@ export function NotificationsMenu() {
         </div>
 
         <div className="max-h-80 overflow-y-auto">
-          {recent.length === 0 ? (
+          {isFetching && interviews.length === 0 ? (
+            <div className="flex flex-col items-center gap-2 px-4 py-10 text-center">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground/40" />
+              <p className="text-sm text-muted-foreground">Loading activity…</p>
+            </div>
+          ) : recent.length === 0 ? (
             <div className="flex flex-col items-center gap-2 px-4 py-10 text-center">
               <Inbox className="h-8 w-8 text-muted-foreground/40" />
               <p className="text-sm text-muted-foreground">No activity yet.</p>

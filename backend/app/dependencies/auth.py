@@ -26,11 +26,12 @@ logger = get_logger(__name__)
 bearer_scheme = HTTPBearer(auto_error=False)
 
 # Short-lived cache: JWT subject -> (fetched_at, User). Avoids a remote DB
-# round-trip on every single request (the DB is a hosted Supabase instance).
-# Role/active-flag changes propagate within the TTL. Call
-# invalidate_user_cache() after writes that change those fields.
+# round-trip on every single request (the DB is a hosted Supabase instance
+# with ~3s round-trip latency). Role/active-flag changes propagate within
+# the TTL — call invalidate_user_cache() after writes that change those
+# fields. 120s balances freshness with the cost of a remote round-trip.
 _user_cache: dict[str, tuple[float, User]] = {}
-USER_CACHE_TTL_SECONDS = 30.0
+USER_CACHE_TTL_SECONDS = 120.0
 
 
 def invalidate_user_cache(auth_uid: str | None) -> None:

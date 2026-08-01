@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, lazy, Suspense } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
@@ -11,12 +11,15 @@ import {
   X,
   ScanEye,
   Loader2,
-  Briefcase,
   LogOut,
 } from 'lucide-react'
 import { Avatar, AvatarFallback, AvatarImage, Button } from '@/components/ui'
 import { ThemeToggle, NotificationsMenu } from '@/components/shared'
-import { ChatSidebar } from '@/components/chat'
+// Lazy-load the AI chat sidebar — it pulls in markdown rendering + voice
+// players, which shouldn't block the first paint of every admin page.
+const ChatSidebar = lazy(() =>
+  import('@/components/chat/ChatSidebar').then((m) => ({ default: m.ChatSidebar })),
+)
 import { useAuth } from '@/context'
 import { initials } from '@/lib/utils'
 import { cn } from '@/lib/utils'
@@ -37,7 +40,6 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
   {
     label: 'Hiring',
     items: [
-      { to: '/admin/jobs', label: 'Jobs', icon: Briefcase },
       { to: '/admin/candidates', label: 'Candidates', icon: Users },
       { to: '/admin/upload', label: 'Interviews', icon: Upload },
       { to: '/admin/processing', label: 'Processing', icon: Loader2 },
@@ -216,7 +218,9 @@ export function AdminLayout() {
         </main>
       </div>
 
-      <ChatSidebar role="admin" />
+      <Suspense fallback={null}>
+        <ChatSidebar role="admin" />
+      </Suspense>
     </div>
   )
 }

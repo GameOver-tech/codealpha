@@ -2,7 +2,7 @@ import { useMutation } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { KeyRound, ShieldCheck, Bell, Palette, AlertTriangle, UserRound } from 'lucide-react'
+import { KeyRound, ShieldCheck, Bell, Palette, UserRound } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { Button, Card, CardContent, Input, Label, Switch } from '@/components/ui'
 import { PageHeader } from '@/components/shared'
@@ -307,32 +307,6 @@ export function AdminSettings() {
               </div>
               <Switch checked={securityAlerts} onCheckedChange={setSecurityAlerts} aria-label="Toggle security alerts" />
             </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Danger zone */}
-      <Card className="border-destructive/30">
-        <CardContent className="p-6">
-          <div className="flex items-start gap-4">
-            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-destructive/10 text-destructive">
-              <AlertTriangle className="h-5 w-5" />
-            </span>
-            <div className="flex-1">
-              <h3 className="font-display text-base font-bold text-destructive">Danger zone</h3>
-              <p className="mt-0.5 text-sm text-muted-foreground">
-                Irreversible account actions. Proceed with caution.
-              </p>
-            </div>
-          </div>
-          <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="text-sm font-semibold text-foreground">Deactivate account</p>
-              <p className="text-xs text-muted-foreground">Temporarily disable your admin access.</p>
-            </div>
-            <Button variant="outline" className="text-destructive hover:text-destructive">
-              Deactivate
-            </Button>
           </div>
         </CardContent>
       </Card>

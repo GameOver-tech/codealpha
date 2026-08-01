@@ -18,9 +18,14 @@ export default defineConfig({
           motion: ['framer-motion'],
           query: ['@tanstack/react-query'],
           ui: ['@radix-ui/react-dialog', '@radix-ui/react-dropdown-menu', '@radix-ui/react-select', '@radix-ui/react-tabs', '@radix-ui/react-toast', '@radix-ui/react-tooltip'],
+          forms: ['react-hook-form', '@hookform/resolvers', 'zod'],
+          dropzone: ['react-dropzone'],
         },
       },
     },
+    // Recharts is large and only used on the dashboard — don't let it
+    // block first paint of other admin pages.
+    chunkSizeWarningLimit: 700,
   },
   server: {
     port: 5173,

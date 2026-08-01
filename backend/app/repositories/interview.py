@@ -59,6 +59,25 @@ class InterviewRepository(BaseRepository[Interview]):
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
 
+    async def get_meta(self, id: uuid.UUID | str) -> Interview | None:
+        """Load ONLY the metadata a single-interview detail view needs.
+
+        Candidate (with profile), scores, recommendation and status fields —
+        skips transcript/speech/sentiment/technical evaluation/report, which
+        the analysis bundle already serves separately.
+        """
+        stmt = (
+            select(Interview)
+            .where(Interview.id == _coerce_uuid(id))
+            .options(
+                joinedload(Interview.candidate).joinedload(User.profile),
+                joinedload(Interview.scores),
+                joinedload(Interview.recommendation),
+            )
+        )
+        result = await self.db.execute(stmt)
+        return result.scalar_one_or_none()
+
     async def list_by_candidate(self, candidate_id: uuid.UUID | str) -> list[Interview]:
         """List a candidate's interviews for status/lifecycle views.
 
@@ -142,6 +161,40 @@ class InterviewRepository(BaseRepository[Interview]):
         )
         result = await self.db.execute(stmt)
         return list(result.scalars().all())
+
+    async def list_recent_summary(self, limit: int = 6) -> list[Interview]:
+        """Return the N most recent interviews with lightweight relations.
+
+        Used by the dashboard "recent interviews" panel — never downloads
+        the full interview history, only the latest rows.
+        """
+        stmt = (
+            select(Interview)
+            .order_by(Interview.created_at.desc())
+            .limit(limit)
+            .options(
+                joinedload(Interview.candidate).joinedload(User.profile),
+                joinedload(Interview.scores),
+                joinedload(Interview.recommendation),
+            )
+        )
+        result = await self.db.execute(stmt)
+        return list(result.scalars().all())
+
+    async def status_counts(self) -> dict[str, int]:
+        """Aggregate interview counts by pipeline status in a single query.
+
+        Returns e.g. {"uploaded": 2, "completed": 5, ...}. Only statuses
+        that appear in the data are included.
+        """
+        from sqlalchemy import func
+
+        stmt = (
+            select(Interview.status, func.count(Interview.id))
+            .group_by(Interview.status)
+        )
+        result = await self.db.execute(stmt)
+        return {row[0].value: int(row[1]) for row in result.all()}
 
     async def list_for_chat(self, limit: int = 100, offset: int = 0) -> list[Interview]:
         """List interviews for the AI assistant (chat tool).

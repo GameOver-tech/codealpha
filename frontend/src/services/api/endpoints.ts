@@ -1,5 +1,6 @@
 import { api, API_BASE_URL, getToken } from './client'
 import type {
+  AdminDashboard,
   AdminInterview,
   AdminUploadResponse,
   AnalysisBundle,
@@ -132,6 +133,11 @@ export const adminApi = {
     ),
 
   interviews: () => api.get<AdminInterview[]>('/api/admin/interviews'),
+
+  interviewMeta: (interviewId: string) =>
+    api.get<AdminInterview>(`/api/admin/interview/${interviewId}/meta`),
+
+  dashboard: () => api.get<AdminDashboard>('/api/admin/dashboard'),
 
   registeredCandidates: () => api.get<RegisteredCandidate[]>('/api/admin/candidates/registered'),
 
