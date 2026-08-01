@@ -4,6 +4,29 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { ArrowRight, BadgeCheck, PlayCircle, Sparkles, Upload, FileText, Brain, LineChart, Trophy, Plus, Star, Zap, ShieldCheck, Activity } from 'lucide-react'
 import { CTAButton } from '@/components/shared'
 
+/* Per-word headline reveal: blur-in + rise with a gradient highlight on key words */
+function Word({ children, gradient }: { children: React.ReactNode; gradient?: boolean }) {
+  return (
+    <motion.span
+      variants={{
+        hidden: { opacity: 0, y: 16, filter: 'blur(8px)' },
+        show: { opacity: 1, y: 0, filter: 'blur(0px)', transition: { duration: 0.6, ease: [0.22, 1, 0.36, 1] } },
+      }}
+      className={gradient ? 'relative inline-block text-gradient animate-gradient-shift' : 'inline-block'}
+    >
+      {gradient && (
+        <motion.span
+          initial={{ scaleX: 0 }}
+          animate={{ scaleX: 1 }}
+          transition={{ delay: 1.1, duration: 0.6, ease: 'easeOut' }}
+          className="absolute -bottom-1 left-0 right-0 h-[3px] origin-left rounded-full bg-gradient-to-r from-primary via-blue-400 to-primary opacity-60"
+        />
+      )}
+      {children}
+    </motion.span>
+  )
+}
+
 export function Hero() {
   return (
     <section className="relative overflow-hidden pb-24 pt-32 md:pb-32 md:pt-40">
@@ -28,12 +51,19 @@ export function Hero() {
           </motion.div>
 
           <motion.h1
-            initial={{ opacity: 0, y: 24 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.1 }}
+            initial="hidden"
+            animate="show"
+            variants={{ hidden: {}, show: { transition: { staggerChildren: 0.09, delayChildren: 0.15 } } }}
             className="mt-6 font-display text-4xl font-extrabold leading-[1.1] tracking-tight text-foreground sm:text-5xl lg:text-6xl"
           >
-            Your AI-powered <span className="text-gradient animate-gradient-shift">talent evaluation</span> partner
+            <span className="block">
+              <Word>AI-powered</Word>{' '}
+              <Word gradient>hiring intelligence</Word>{' '}
+              <Word>for</Word>{' '}
+              <Word>smarter</Word>{' '}
+              <Word>talent</Word>{' '}
+              <Word>decisions</Word>
+            </span>
           </motion.h1>
 
           <motion.p
