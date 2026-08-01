@@ -98,6 +98,13 @@ class InterviewPipeline:
     async def _set_status(self, interview_id, status: InterviewStatus, error: str = "") -> None:
         await self.interviews.set_status(interview_id, status, error)
         await self.db.commit()
+        # Status changes must invalidate the admin caches (interviews list /
+        # analysis bundles are TTL-cached in the admin router) so the
+        # notifications bell and candidates page reflect the new status
+        # immediately instead of serving stale data for the TTL window.
+        from app.routers.admin import invalidate_dashboard_cache
+
+        invalidate_dashboard_cache()
 
     async def _set_progress(
         self, interview_id, progress: int, stage: str, *, commit: bool = True
@@ -164,6 +171,11 @@ class InterviewPipeline:
                 traceback_text=tb,
             )
             await self.db.commit()
+            # Clear the admin caches so the FAILED state surfaces in the
+            # notifications bell / candidates page right away.
+            from app.routers.admin import invalidate_dashboard_cache
+
+            invalidate_dashboard_cache()
         except Exception:  # noqa: BLE001 — never let failure handling itself fail
             await self.db.rollback()
             logger.exception("Could not persist FAILED status for interview %s", interview_id)
