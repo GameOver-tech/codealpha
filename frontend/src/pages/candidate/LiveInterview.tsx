@@ -64,6 +64,10 @@ const QUESTIONS: Question[] = [
 
 const TOTAL_SECONDS = QUESTIONS.reduce((sum, q) => sum + q.seconds, 0)
 
+/** localStorage key marking that this candidate has submitted a live interview.
+ *  Guards against a second recording even without a backend round-trip. */
+const LIVE_SUBMITTED_KEY = 'hirelens_live_submitted'
+
 /**
  * Speak the AI interviewer's line with ElevenLabs (premium voice), falling
  * back to the browser's SpeechSynthesis only if the API is unavailable. This
@@ -141,9 +145,15 @@ export function LiveInterview() {
   // If the candidate already has a live interview (submitted or in progress),
   // show a friendly "already submitted" message instead of the robot.
   const hasExistingLive = useMemo(() => {
-    if (!existingStatus) return false
-    return existingStatus.interview_type === 'live'
-  }, [existingStatus])
+    if (existingStatus) return existingStatus.interview_type === 'live'
+    // Fallback: even before the status API responds, a locally-recorded
+    // submission in THIS browser blocks a second attempt immediately.
+    try {
+      return localStorage.getItem(LIVE_SUBMITTED_KEY) === String(user?.id ?? '')
+    } catch {
+      return false
+    }
+  }, [existingStatus, user?.id])
 
   // --- Network indicator ---
   useEffect(() => {
@@ -250,6 +260,17 @@ export function LiveInterview() {
   // recording begins — there is NO "Start interview" button to click.
   const requestPermissions = useCallback(async () => {
     setPermissionError('')
+    // Hard local guard: if this browser has already submitted a live
+    // interview for this candidate, never start a second recording — even if
+    // the status API hasn't responded yet.
+    try {
+      if (localStorage.getItem(LIVE_SUBMITTED_KEY) === String(user?.id ?? '')) {
+        setPhase('done')
+        return
+      }
+    } catch {
+      /* storage unavailable — fall through */
+    }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true })
       mediaStreamRef.current = stream
@@ -285,7 +306,7 @@ export function LiveInterview() {
       )
       setPhase('error')
     }
-  }, [startMeter, startQuestion])
+  }, [startMeter, startQuestion, user?.id])
 
   // Attach the camera stream to the video element whenever it mounts (the
   // element only renders in the intro/running layout, AFTER permission is
@@ -357,6 +378,14 @@ export function LiveInterview() {
     async (blob: Blob) => {
       setPhase('uploading')
       setUploadProgress(15)
+      // Mark this candidate's browser as submitted IMMEDIATELY — so even if
+      // the page is refreshed or the user navigates back before the backend
+      // responds, a second recording is blocked.
+      try {
+        localStorage.setItem(LIVE_SUBMITTED_KEY, String(user?.id ?? ''))
+      } catch {
+        /* storage unavailable — backend still guards */
+      }
       try {
         const file = new File([blob], 'live_interview.webm', { type: 'video/webm' })
         // Progress is a client-side estimate — the real work happens on the server.
@@ -379,7 +408,7 @@ export function LiveInterview() {
         setPhase('done')
       }
     },
-    [interviewId],
+    [interviewId, user?.id],
   )
 
   // --- Advance on timer expiry ---
