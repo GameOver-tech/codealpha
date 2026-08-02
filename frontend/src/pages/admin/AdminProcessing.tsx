@@ -9,7 +9,6 @@ import {
   Trophy,
   AlertTriangle,
   CheckCircle2,
-  Loader2,
   RefreshCw,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
@@ -77,7 +76,6 @@ export function AdminProcessing() {
       {isLoading ? (
         <Card>
           <CardContent className="flex flex-col items-center gap-5 p-12">
-            <Loader2 className="h-12 w-12 animate-spin text-primary" />
             <p className="text-sm text-muted-foreground">Loading progress…</p>
           </CardContent>
         </Card>
@@ -143,12 +141,9 @@ export function AdminProcessing() {
                     <AlertTriangle className="h-10 w-10 text-destructive" />
                   </span>
                 ) : (
-                  <>
-                    <span className="absolute inset-0 animate-pulse-ring rounded-full bg-primary/30" />
-                    <span className="relative flex h-20 w-20 items-center justify-center rounded-full bg-primary/10">
-                      <Loader2 className="h-10 w-10 animate-spin text-primary" />
-                    </span>
-                  </>
+                  <span className="flex h-20 w-20 items-center justify-center rounded-full bg-primary/10 text-primary">
+                    <FileText className="h-10 w-10" />
+                  </span>
                 )}
               </div>
               <h3 className="mt-6 font-display text-lg font-bold text-foreground">

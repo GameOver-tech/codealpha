@@ -9,7 +9,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.core.config import settings
 from app.core.logging import get_logger
-from app.routers import admin, auth, chat, health, interviews, jobs, profile, tts
+from app.routers import admin, auth, chat, health, interviews, jobs, live_interview, profile, tts
 from app.utils.exceptions import TranscriptionError
 
 logger = get_logger(__name__)
@@ -143,6 +143,7 @@ app.include_router(jobs.router)
 app.include_router(interviews.router)
 app.include_router(profile.router)
 app.include_router(admin.router)
+app.include_router(live_interview.router)
 app.include_router(chat.router)
 app.include_router(tts.router)
 

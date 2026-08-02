@@ -64,12 +64,51 @@ async def get_my_interview_status(db: AsyncSession, actor: User, **args) -> dict
         "has_interview": True,
         "interview_id": str(interview.id),
         "status": status,
+        "interview_type": interview.interview_type or "recorded",
         "awaiting": is_pending,
         "awaiting_time_seconds": interview.duration_seconds,
         "created_at": created,
         "started_at": started,
         "completed_at": interview.completed_at.isoformat() if interview.completed_at else None,
         "message": message,
+    }
+
+
+async def can_start_live_interview(db: AsyncSession, actor: User, **args) -> dict:
+    """Whether the signed-in candidate may start a new live AI interview.
+
+    A candidate can start when they have no interview, or their latest one
+    is completed/failed. An interview that is still pending (uploaded,
+    processing, transcribing, evaluating, generating PDF) blocks a new session.
+    """
+    repo = InterviewRepository(db)
+    interviews = await repo.list_by_candidate(actor.id)
+    if not interviews:
+        return {
+            "can_start": True,
+            "has_interview": False,
+            "message": "You can start your live AI interview now.",
+        }
+    interview = interviews[0]
+    blocked = {
+        InterviewStatus.UPLOADED.value,
+        InterviewStatus.PROCESSING.value,
+        InterviewStatus.TRANSCRIPT_READY.value,
+        InterviewStatus.AI_EVALUATION.value,
+        InterviewStatus.PDF_GENERATED.value,
+    }
+    if interview.status.value in blocked:
+        return {
+            "can_start": False,
+            "has_interview": True,
+            "status": interview.status.value,
+            "message": "You already have an interview in progress. Please wait for it to complete before starting a new one.",
+        }
+    return {
+        "can_start": True,
+        "has_interview": True,
+        "status": interview.status.value,
+        "message": "You can start a new live AI interview.",
     }
 
 

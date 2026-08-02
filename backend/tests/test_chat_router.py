@@ -236,6 +236,7 @@ def test_candidate_tools_are_restricted(client):
     assert tools == {
         "get_my_interview_status",
         "get_my_result",
+        "can_start_live_interview",
         "faq_search",
         "contact_support",
         "get_my_notifications",

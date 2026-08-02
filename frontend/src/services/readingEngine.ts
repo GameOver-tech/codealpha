@@ -37,8 +37,6 @@ export function buildReadingDocument(input: {
   performanceAnalysis?: string
   improvementSuggestions?: string
   transcriptText?: string
-  speechNotes?: string
-  sentimentSummary?: string
   recommendationReason?: string
   /** Key-value pairs from the technical evaluation (AI Insights). */
   technicalEvaluation?: Record<string, string>
@@ -77,8 +75,6 @@ export function buildReadingDocument(input: {
   push('transcript', 'Transcript', input.transcriptText)
 
   // AI Insights tab
-  push('insights', 'Speech Analysis', input.speechNotes)
-  push('insights', 'Sentiment Analysis', input.sentimentSummary)
   push('insights', 'Recommendation', input.recommendationReason)
   // Each technical evaluation dimension becomes its own section so the
   // reader highlights the exact cell being spoken.

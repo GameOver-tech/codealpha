@@ -562,6 +562,7 @@ async def get_admin_dashboard(
                 ),
                 "created_at": interview.created_at.isoformat() if interview.created_at else None,
                 "has_speech": interview.has_speech,
+                "interview_type": interview.interview_type or "recorded",
             }
         )
 
@@ -635,6 +636,7 @@ async def list_interviews(
                 ),
                 "created_at": interview.created_at.isoformat() if interview.created_at else None,
                 "has_speech": interview.has_speech,
+                "interview_type": interview.interview_type or "recorded",
             }
         )
 
@@ -694,6 +696,7 @@ async def get_interview_meta(
         ),
         "created_at": interview.created_at.isoformat() if interview.created_at else None,
         "has_speech": interview.has_speech,
+        "interview_type": interview.interview_type or "recorded",
     }
 
 

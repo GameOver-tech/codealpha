@@ -60,6 +60,33 @@ export const candidateApi = {
   interviewResult: () => api.get<CandidateSummary>('/api/interview/result'),
 }
 
+/** Live AI Interview — candidate self-service session. */
+export const liveApi = {
+  start: () =>
+    api.post<{ interview_id: string; status: string }>(
+      '/api/live-interview/start',
+      { job_title: 'Live AI Interview' },
+    ),
+  upload: async (interviewId: string, file: File) => {
+    const form = new FormData()
+    form.append('file', file)
+    const res = await api.post<{ interview_id: string; status: string; admin_status: string }>(
+      `/api/live-interview/${interviewId}/upload`,
+      form,
+      {
+        // Do NOT set Content-Type manually — axios must generate the
+        // multipart boundary itself, otherwise the server can't parse it.
+        timeout: 0,
+      },
+    )
+    return res.data
+  },
+  status: (interviewId: string) =>
+    api.get<{ interview_id: string; status: string; admin_status: string }>(
+      `/api/live-interview/${interviewId}/status`,
+    ),
+}
+
 /** Build a public URL for a locally-stored upload (avatars, etc.). */
 export function mediaUrl(path: string | null | undefined): string | undefined {
   if (!path) return undefined

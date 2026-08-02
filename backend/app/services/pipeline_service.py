@@ -259,63 +259,79 @@ class InterviewPipeline:
         if transcript is None or force_transcribe:
             file = interview.files[0] if interview.files else None
             if file is None:
-                raise TranscriptionError("No interview file uploaded.")
-            logger.info(
-                "[Stage 1] Upload: filename=%s storage_path=%s",
-                file.original_filename,
-                file.storage_path,
-            )
+                # A live interview may already have a stored transcript from
+                # the inline transcription done at upload time. When the media
+                # file has been cleaned up (or was never persisted) but a
+                # transcript exists, proceed from the transcript instead of
+                # failing with "No interview file uploaded".
+                if transcript is not None:
+                    logger.info(
+                        "[Stage 1] No media file for interview %s — using stored transcript "
+                        "(length=%s)",
+                        interview_id,
+                        len(transcript.full_text or ""),
+                    )
+                    interview.has_speech = _has_usable_speech_text(transcript.full_text)
+                    await self.db.commit()
+                else:
+                    raise TranscriptionError("No interview file uploaded.")
+            else:
+                logger.info(
+                    "[Stage 1] Upload: filename=%s storage_path=%s",
+                    file.original_filename,
+                    file.storage_path,
+                )
 
-            await self._set_progress(interview_id, 10, "audio_extraction")
-            logger.info("[Stage 2] Audio extraction started (video -> audio if needed)")
-            result = await transcribe_audio(file.storage_path)
-            logger.info(
-                "[Stage 2] Audio extraction finished (transcript received) in %.1fs",
-                _elapsed(),
-            )
-            await self._set_progress(interview_id, 30, "transcription")
+                await self._set_progress(interview_id, 10, "audio_extraction")
+                logger.info("[Stage 2] Audio extraction started (video -> audio if needed)")
+                result = await transcribe_audio(file.storage_path)
+                logger.info(
+                    "[Stage 2] Audio extraction finished (transcript received) in %.1fs",
+                    _elapsed(),
+                )
+                await self._set_progress(interview_id, 30, "transcription")
 
-            logger.info("[Stage 3] Sending request to Deepgram (file=%s)", file.storage_path)
-            # The Deepgram request itself is made inside transcribe_audio; this
-            # boundary log is kept so the stage contract is explicit in logs.
-            logger.info(
-                "[Stage 3] Deepgram response received: length=%s source=%s",
-                len(result.get("full_text", "")),
-                result.get("source", "deepgram"),
-            )
+                logger.info("[Stage 3] Sending request to Deepgram (file=%s)", file.storage_path)
+                # The Deepgram request itself is made inside transcribe_audio; this
+                # boundary log is kept so the stage contract is explicit in logs.
+                logger.info(
+                    "[Stage 3] Deepgram response received: length=%s source=%s",
+                    len(result.get("full_text", "")),
+                    result.get("source", "deepgram"),
+                )
 
-            transcript = await self.transcripts.upsert(
-                interview_id,
-                {
-                    "full_text": result["full_text"],
-                    "segments": result["segments"],
-                    "speakers": result["speakers"],
-                    "language": result.get("language", "en"),
-                    "confidence": result.get("confidence", 0.0),
-                    "source": result.get("source", "deepgram"),
-                    "raw_response": result.get("raw_response"),
-                },
-            )
-            self._verify_row(transcript, "transcript", interview_id)
+                transcript = await self.transcripts.upsert(
+                    interview_id,
+                    {
+                        "full_text": result["full_text"],
+                        "segments": result["segments"],
+                        "speakers": result["speakers"],
+                        "language": result.get("language", "en"),
+                        "confidence": result.get("confidence", 0.0),
+                        "source": result.get("source", "deepgram"),
+                        "raw_response": result.get("raw_response"),
+                    },
+                )
+                self._verify_row(transcript, "transcript", interview_id)
 
-            # Interview duration: the source of truth is the transcription
-            # timestamps (last segment's end time). Only when segments carry
-            # no timestamps do we fall back to the media duration reported by
-            # Deepgram, and finally to the duration probed at upload time.
-            duration = _duration_from_segments(transcript.segments)
-            if not duration:
-                duration = int(result.get("duration") or 0)
-            if not duration:
-                duration = int(interview.duration_seconds or 0)
-            interview.duration_seconds = duration
-            interview.has_speech = bool(result.get("has_speech", True))
-            await self.db.commit()
-            logger.info(
-                "[Stage 4] Transcript saved: length=%s duration=%ss has_speech=%s",
-                len(transcript.full_text),
-                interview.duration_seconds,
-                interview.has_speech,
-            )
+                # Interview duration: the source of truth is the transcription
+                # timestamps (last segment's end time). Only when segments carry
+                # no timestamps do we fall back to the media duration reported by
+                # Deepgram, and finally to the duration probed at upload time.
+                duration = _duration_from_segments(transcript.segments)
+                if not duration:
+                    duration = int(result.get("duration") or 0)
+                if not duration:
+                    duration = int(interview.duration_seconds or 0)
+                interview.duration_seconds = duration
+                interview.has_speech = bool(result.get("has_speech", True))
+                await self.db.commit()
+                logger.info(
+                    "[Stage 4] Transcript saved: length=%s duration=%ss has_speech=%s",
+                    len(transcript.full_text),
+                    interview.duration_seconds,
+                    interview.has_speech,
+                )
         else:
             # Transcript already exists (regenerate path) — derive speech
             # presence from the stored text so we never evaluate silence.
