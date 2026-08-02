@@ -26,10 +26,15 @@ class LoginRequest(BaseModel):
     password: str = Field(min_length=1)
 
 
+class RefreshRequest(BaseModel):
+    refresh_token: str = Field(min_length=1)
+
+
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     expires_in: int = 3600
+    refresh_token: str = ""
 
 
 class UserOut(BaseModel):

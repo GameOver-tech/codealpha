@@ -175,6 +175,15 @@ export function AdminProcessing() {
                   </p>
                 </>
               )}
+              {progress.status === 'completed' ? (
+                <Button className="mt-6 w-full" onClick={() => navigate(`/admin/candidates/${interviewId}`)}>
+                  View report
+                </Button>
+              ) : (
+                <p className="mt-6 text-xs leading-relaxed text-muted-foreground">
+                  You can leave this page and come back later — processing continues in the background.
+                </p>
+              )}
             </CardContent>
           </Card>
         </div>

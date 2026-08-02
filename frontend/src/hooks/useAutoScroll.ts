@@ -1,15 +1,19 @@
 import { useEffect, useRef } from 'react'
 
 /**
- * Smart auto-scroll for the reading experience.
+ * Cooperative auto-scroll for the reading experience.
  *
- * - Scrolls ONLY when the active word is outside the viewport (or near the
- *   edges) — never fights the user's reading position.
- * - The moment the user scrolls manually, auto-scroll pauses and yields
- *   control; it resumes only when a word leaves the viewport again.
+ * - Scrolls ONLY when the active spoken word is outside the viewport — never
+ *   fights the user's reading position.
+ * - After the user scrolls manually, auto-scroll yields for a short grace
+ *   period (1.5s) so the user can read in peace, then re-engages only when
+ *   the next spoken word leaves the viewport again. It is never permanently
+ *   disabled.
  * - Stopping speech cancels every pending scroll instantly.
  * - Respects prefers-reduced-motion.
  */
+
+const USER_SCROLL_COOLDOWN_MS = 1500
 
 function isOutOfViewport(el: HTMLElement): boolean {
   const rect = el.getBoundingClientRect()
@@ -26,15 +30,14 @@ export function useAutoScroll(activeElement: HTMLElement | null, active: boolean
 
   const pendingRef = useRef<number | null>(null)
   const lastElementRef = useRef<HTMLElement | null>(null)
-
-  // Detect manual scrolling — the user takes control momentarily, but
-  // auto-scroll re-engages as soon as the next word leaves the viewport.
-  // (Previously it disabled permanently, which made the highlight stop
-  // following after any manual wheel/touch scroll.)
+  // Timestamp of the last manual scroll — auto-scroll yields briefly after it.
   const suppressUntilRef = useRef(0)
+
+  // Detect manual scrolling (wheel/touch). We only remember the time — the
+  // auto-scroll effect below checks it and gives the user a grace period.
   useEffect(() => {
     const onScroll = () => {
-      suppressUntilRef.current = Date.now() + 400
+      suppressUntilRef.current = Date.now() + USER_SCROLL_COOLDOWN_MS
       if (pendingRef.current !== null) {
         window.clearTimeout(pendingRef.current)
         pendingRef.current = null
@@ -72,9 +75,9 @@ export function useAutoScroll(activeElement: HTMLElement | null, active: boolean
       pendingRef.current = null
       if (!activeRef.current) return
 
-      // Skip auto-scroll only briefly after a manual wheel/touch scroll —
-      // the next word leaving the viewport re-engages it.
+      // Respect the grace period after a manual scroll — the user is reading.
       if (Date.now() < suppressUntilRef.current) return
+      // Only scroll when the word is actually out of view.
       if (!isOutOfViewport(activeElement)) return
 
       const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches

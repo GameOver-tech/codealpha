@@ -275,7 +275,19 @@ export function AdminCandidates() {
                   <EmptyState
                     icon={Users}
                     title="No candidates found"
-                    description={candidates?.length ? 'Try adjusting your search.' : 'Add a candidate or upload an interview to get started.'}
+                    description={candidates?.length ? 'Try adjusting your search.' : 'No candidates yet. Add a candidate or upload your first interview to get started.'}
+                    action={
+                      !candidates?.length ? (
+                        <div className="flex flex-wrap justify-center gap-2">
+                          <Button asChild>
+                            <Link to="/admin/upload">
+                              <Video />
+                              Upload interview
+                            </Link>
+                          </Button>
+                        </div>
+                      ) : undefined
+                    }
                   />
                 </div>
               ) : (

@@ -417,14 +417,6 @@ export function AdminCandidateDetail() {
         description={meta?.candidate_email ?? interviewId}
         actions={
           <div className="flex flex-wrap gap-2">
-            <Button
-              variant="outline"
-              onClick={() => downloadPdf.mutate({ id: interviewId!, url: adminApi.regenerateReportPdfUrl(interviewId!) })}
-              loading={downloadPdf.isPending}
-            >
-              <RefreshCw />
-              Regenerate PDF
-            </Button>
             {/* Sound-wave read button — no floating player, just clean word
                 highlighting while the report is spoken. */}
             <SoundWaveButton
