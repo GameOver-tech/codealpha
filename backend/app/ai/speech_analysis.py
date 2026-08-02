@@ -45,20 +45,40 @@ def _derive_metrics(segments: list[dict[str, Any]], duration: float) -> dict[str
 
 
 def _score_qualities(metrics: dict[str, float]) -> dict[str, Any]:
-    """Map derived metrics to 0-100 quality scores + qualitative labels."""
+    """Map derived metrics to 0-100 quality scores + qualitative labels.
+
+    The raw measurements (WPM, pause count, avg pause) are real and kept
+    as-is; these scores normalize them onto a 0-100 scale that reflects
+    typical conversational speech (~120-160 WPM, a handful of pauses per
+    minute of speech). All scores are bounded 0-100 so the UI never shows
+    degenerate values for genuinely long, natural multi-speaker recordings.
+    """
     wpm = metrics["wpm"]
     pauses = metrics["pauses"]
+    speech_seconds = metrics["speech_seconds"]
 
-    # Ideal conversational pace ~120-160 WPM.
-    if wpm == 0:
+    if wpm == 0 or speech_seconds == 0:
         clarity = fluency = energy = 60.0
         pace_note = "Could not determine pace"
     else:
-        pace_score = max(0.0, 100.0 - 2.5 * abs(wpm - 140))
+        # Ideal conversational pace ~120-160 WPM; 20 WPM off ideal = -5 pts.
+        pace_score = max(0.0, 100.0 - 5.0 * abs(wpm - 140) / 20.0)
         clarity = round(min(100.0, pace_score), 1)
-        # Too few pauses <-> rushed; too many <-> fragmented.
-        fluency = round(max(0.0, min(100.0, 100.0 - abs(pauses - 12) * 2.0)), 1)
-        energy = round(max(0.0, min(100.0, 60.0 + pace_score * 0.4)), 1)
+
+        # Pauses per minute of actual speech — 4-10/min is natural; fewer
+        # is rushed, more is fragmented.
+        pauses_per_min = pauses / max(speech_seconds / 60.0, 0.001)
+        if pauses_per_min <= 12:
+            fluency = round(min(100.0, 100.0 - abs(pauses_per_min - 6.0) * 4.0), 1)
+        else:
+            # Cap how much a very pause-dense transcript is penalized so a
+            # genuine long Q&A (hundreds of natural turn-taking pauses) does
+            # not collapse to 0.
+            fluency = round(max(55.0, 100.0 - (pauses_per_min - 6.0) * 2.5), 1)
+        fluency = round(max(0.0, min(100.0, fluency)), 1)
+
+        # Energy = base engagement + pace bonus, capped at 95.
+        energy = round(min(95.0, 62.0 + pace_score * 0.25), 1)
         pace_note = (
             "Good conversational pace" if 120 <= wpm <= 160
             else "Rapid delivery" if wpm > 160
