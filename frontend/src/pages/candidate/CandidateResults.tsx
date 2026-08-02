@@ -8,6 +8,7 @@ import {
   Clock,
   FileText,
   Calendar,
+  Video,
 } from 'lucide-react'
 import { Button, Card, CardContent, Skeleton } from '@/components/ui'
 import { EmptyState, PageHeader, StatusBadge, AdminStatusBadge, RecommendationBadge, SpeakButton } from '@/components/shared'
@@ -127,6 +128,12 @@ export function CandidateResults() {
                 <AdminStatusBadge status={result.admin_status} />
               )}
               {verdict && <RecommendationBadge verdict={verdict} />}
+              {result.interview_type === 'live' && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-semibold text-primary">
+                  <Video className="h-3 w-3" />
+                  Live AI Interview
+                </span>
+              )}
             </div>
 
             <h2 className="mt-6 font-display text-3xl font-bold text-foreground sm:text-4xl">

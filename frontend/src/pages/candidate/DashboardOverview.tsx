@@ -91,26 +91,36 @@ export function DashboardOverview() {
                 </div>
                 <h2 className="mt-4 font-display text-xl font-bold text-foreground">No interview yet</h2>
                 <p className="mt-2 max-w-md text-sm leading-relaxed text-muted-foreground">
-                  No interview has been uploaded yet. Please wait until the recruiter uploads your
-                  interview.
+                  No interview has been uploaded yet. You can start a live AI interview right now,
+                  or wait until the recruiter uploads your interview.
                 </p>
-                <Button className="mt-8" disabled>
-                  <FileText />
-                  No Results Yet
-                </Button>
+                <div className="mt-8 flex flex-wrap justify-center gap-3">
+                  <Button onClick={() => navigate('/dashboard/live-interview')}>
+                    <Video />
+                    Start Live Interview
+                  </Button>
+                  <Button variant="outline" disabled>
+                    <FileText />
+                    No Results Yet
+                  </Button>
+                </div>
               </motion.div>
             </CardContent>
           </Card>
         ) : status?.status === 'failed' ? (
-          /* FAILED — surfaced as-is so the candidate can contact their recruiter. */
+          /* FAILED — show a clean, friendly message. Live-interview failures
+             (e.g. "never submitted" or transcription issues) must NOT expose
+             internal technical reasons to the candidate. */
           <Card className="border-destructive/30">
             <CardContent className="flex flex-col items-center gap-4 p-10 text-center">
               <span className="flex h-16 w-16 items-center justify-center rounded-2xl bg-destructive/10">
                 <AlertTriangle className="h-8 w-8 text-destructive" />
               </span>
               <h2 className="font-display text-xl font-bold text-foreground">Processing Failed</h2>
-              <p className="max-w-md text-sm text-muted-foreground">
-                {status.failure_reason || status.error_message || 'The interview could not be processed.'}
+              <p className="max-w-md text-sm leading-relaxed text-muted-foreground">
+                {status.interview_type === 'live'
+                  ? 'We could not process your live interview. Please contact your recruiter for assistance.'
+                  : 'The interview could not be processed. Please contact your recruiter to re-upload the recording.'}
               </p>
               <p className="text-xs text-muted-foreground">
                 Contact your recruiter to re-upload the recording.

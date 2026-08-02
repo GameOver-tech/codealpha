@@ -32,6 +32,7 @@ class InterviewStatusOut(ORMModel):
     processing_finished_at: datetime | None = None
     recommendation: str | None = None
     has_speech: bool = True
+    interview_type: str = "recorded"
 
 
 class UploadResponse(BaseModel):
@@ -168,6 +169,7 @@ class CandidateSummary(BaseModel):
     recommendation: str | None = None
     message: str = ""
     has_speech: bool = True
+    interview_type: str = "recorded"
 
 
 class PdfMeta(BaseModel):

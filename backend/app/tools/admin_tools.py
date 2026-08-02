@@ -528,6 +528,115 @@ async def send_interview_result_email(db: AsyncSession, actor: User, **args) -> 
     }
 
 
+# --- Live AI Interview (admin) ----------------------------------------------
+
+
+async def count_pending_interviews(db: AsyncSession, actor: User, **args) -> dict:
+    """Count live AI interviews awaiting admin processing.
+
+    Pending = status in (uploaded, processing) and interview_type == "live".
+    """
+    _require_admin(actor)
+
+    from app.models.interview import Interview, InterviewStatus
+
+    from sqlalchemy import func
+
+    pending_statuses = (InterviewStatus.UPLOADED, InterviewStatus.PROCESSING)
+    total_stmt = select(func.count(Interview.id)).where(
+        Interview.status.in_(pending_statuses),
+    )
+    live_stmt = select(func.count(Interview.id)).where(
+        Interview.status.in_(pending_statuses),
+        Interview.interview_type == "live",
+    )
+    pending = int((await db.execute(total_stmt)).scalar() or 0)
+    pending_live = int((await db.execute(live_stmt)).scalar() or 0)
+    return {
+        "pending_live": pending_live,
+        "pending_total": pending,
+        "message": f"There {'is' if pending_live == 1 else 'are'} {pending_live} live AI interview(s) awaiting processing.",
+    }
+
+
+async def process_interview_by_email(db: AsyncSession, actor: User, **args) -> dict:
+    """Trigger processing for a candidate's latest interview (by email).
+
+    Reuses the exact pipeline dispatch the admin REST /process endpoint uses.
+    """
+    _require_admin(actor)
+    email = (args.get("email") or "").strip().lower()
+    if not email:
+        raise BadRequestError("email is required")
+
+    candidate = await UserRepository(db).get_by_email(email)
+    if candidate is None or candidate.role != UserRole.CANDIDATE:
+        raise NotFoundError(f"No candidate found with email '{email}'")
+
+    interviews = InterviewRepository(db)
+    latest = await interviews.latest_for_candidate(candidate.id)
+    if latest is None:
+        raise NotFoundError(f"Candidate '{email}' has no interviews yet.")
+
+    if latest.status.value not in ("uploaded", "failed"):
+        raise BadRequestError(
+            f"Interview {latest.id} is already {latest.status.value} — only 'uploaded' or 'failed' interviews can be processed."
+        )
+
+    from app.routers.admin import _run_pipeline_task
+    import asyncio
+
+    # Dispatch the SAME background pipeline task the admin REST /process
+    # endpoint uses — runs in its own DB session and guarantees the interview
+    # ends in COMPLETED or FAILED.
+    asyncio.create_task(_run_pipeline_task(str(latest.id)))
+
+    await ActivityLogRepository(db).log(
+        actor.id,
+        "interview_processing_started",
+        "interview",
+        str(latest.id),
+        {"email": email, "source": "admin_chat"},
+    )
+    await db.commit()
+    from app.routers.admin import invalidate_dashboard_cache
+
+    invalidate_dashboard_cache()
+    return {
+        "interview_id": str(latest.id),
+        "candidate_email": candidate.email,
+        "status": "processing",
+        "message": f"Processing started for {candidate.email}'s interview.",
+    }
+
+
+async def get_candidate_recommendation(db: AsyncSession, actor: User, **args) -> dict:
+    """Return the latest interview's recommendation verdict + reason for a candidate."""
+    _require_admin(actor)
+    email = (args.get("email") or "").strip().lower()
+    if not email:
+        raise BadRequestError("email is required")
+
+    candidate = await UserRepository(db).get_by_email(email)
+    if candidate is None or candidate.role != UserRole.CANDIDATE:
+        raise NotFoundError(f"No candidate found with email '{email}'")
+
+    interviews = InterviewRepository(db)
+    latest = await interviews.latest_for_candidate(candidate.id)
+    if latest is None:
+        raise NotFoundError(f"Candidate '{email}' has no interviews yet.")
+
+    rec = latest.recommendation
+    return {
+        "candidate_email": candidate.email,
+        "candidate_name": candidate.full_name,
+        "interview_id": str(latest.id),
+        "status": latest.status.value,
+        "recommendation": rec.verdict.value if rec else None,
+        "recommendation_reason": rec.reason if rec else None,
+    }
+
+
 # --- Analytics --------------------------------------------------------------
 
 

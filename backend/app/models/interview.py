@@ -62,6 +62,12 @@ class Interview(UUIDMixin, TimestampMixin, Base):
     # the pipeline completed without transcript/evaluation/PDF — the admin UI
     # shows a "no speech detected" state instead of empty analysis.
     has_speech: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    # How the interview was captured: "recorded" = admin-uploaded recording,
+    # "live" = candidate self-service live AI interview. The processing
+    # pipeline is identical for both.
+    interview_type: Mapped[str] = mapped_column(
+        String(20), default="recorded", nullable=False, server_default="recorded"
+    )
 
     files: Mapped[list["InterviewFile"]] = relationship(
         back_populates="interview", cascade="all, delete-orphan"
