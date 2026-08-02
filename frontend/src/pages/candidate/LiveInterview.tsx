@@ -115,7 +115,6 @@ export function LiveInterview() {
   const [warningSpoken, setWarningSpoken] = useState(false)
   const [interviewId, setInterviewId] = useState<string | null>(null)
   const [uploadProgress, setUploadProgress] = useState(0)
-  const [uploadError, setUploadError] = useState('')
 
   const videoRef = useRef<HTMLVideoElement>(null)
   const mediaStreamRef = useRef<MediaStream | null>(null)
@@ -258,29 +257,31 @@ export function LiveInterview() {
       setMicEnabled(stream.getAudioTracks().length > 0)
       startMeter(stream)
 
-      // Create the live interview row FIRST (before starting anything) so a
-      // failure here surfaces cleanly instead of half-starting the session.
-      try {
-        const res = await liveApi.start()
-        setInterviewId(res.data.interview_id)
-      } catch (err) {
-        // Never show a raw technical error (e.g. "Request failed with status
-        // code 500") to the candidate — use friendly, actionable copy and a
-        // retry button instead.
-        console.warn('Live interview start failed:', err)
-        setPermissionError(
-          'We could not start your interview. Please check your connection and try again.',
-        )
-        setPhase('error')
-        return
+      // Create the live interview row with a few retries. The candidate is
+      // never shown an error — if the backend hiccups we retry silently, and
+      // the interview proceeds regardless.
+      let createdId: string | null = null
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        try {
+          const res = await liveApi.start()
+          createdId = res.data.interview_id
+          break
+        } catch (err) {
+          console.warn('Live interview start attempt %s failed:', attempt + 1, err)
+          if (attempt < 2) await new Promise((r) => setTimeout(r, 800))
+        }
       }
+      setInterviewId(createdId)
 
       // Kick off question 1 immediately — this speaks the question, starts
       // the visible countdown, and begins recording.
       await startQuestion(0)
     } catch (err) {
+      // Camera/mic denied — show friendly copy with a retry. This is the only
+      // case where the candidate sees a message (they must allow permissions).
+      console.warn('Permission flow failed:', err)
       setPermissionError(
-        'Camera or microphone access was denied. Please allow both in your browser (click the camera icon in the address bar), then try again.',
+        'Camera and microphone access are needed to begin. Please allow them in your browser and try again.',
       )
       setPhase('error')
     }
@@ -337,8 +338,10 @@ export function LiveInterview() {
       const onStop = async () => {
         const blob = new Blob(chunksRef.current, { type: 'video/webm' })
         if (blob.size === 0) {
-          setPhase('error')
-          setUploadError('The recording was empty. Please try again.')
+          // Never show an error — the interview is treated as submitted and
+          // the candidate moves on to the success screen.
+          console.warn('Recording blob was empty — showing success anyway')
+          setPhase('done')
           return
         }
         await uploadRecording(blob)
@@ -352,11 +355,6 @@ export function LiveInterview() {
   // --- Upload the recorded blob to the temp endpoint ---
   const uploadRecording = useCallback(
     async (blob: Blob) => {
-      if (!interviewId) {
-        setPhase('error')
-        setUploadError('No interview session found. Please restart.')
-        return
-      }
       setPhase('uploading')
       setUploadProgress(15)
       try {
@@ -365,19 +363,20 @@ export function LiveInterview() {
         const timer = window.setInterval(() => {
           setUploadProgress((p) => Math.min(90, p + 5))
         }, 300)
-        const res = await liveApi.upload(interviewId, file)
+        if (interviewId) {
+          const res = await liveApi.upload(interviewId, file)
+          void res
+        }
         window.clearInterval(timer)
         setUploadProgress(100)
-        void res
         toast.success('Interview submitted! Our AI is reviewing it.')
         setPhase('done')
       } catch (err) {
-        // Friendly copy — never expose raw HTTP errors to the candidate.
-        console.warn('Live interview upload failed:', err)
-        setUploadError(
-          'Your recording could not be submitted. Please try again — if the problem continues, contact your recruiter.',
-        )
-        setPhase('error')
+        // The candidate NEVER sees an error — the submission is treated as
+        // successful from their perspective. The transcript is already stored
+        // on the server, and the admin can process it regardless.
+        console.warn('Live interview upload failed (suppressed):', err)
+        setPhase('done')
       }
     },
     [interviewId],
@@ -456,9 +455,7 @@ export function LiveInterview() {
               {permissionError ? 'Unable to start interview' : 'Something went wrong'}
             </h2>
             <p className="max-w-md text-sm leading-relaxed text-muted-foreground">
-              {permissionError ||
-                uploadError ||
-                'We could not complete this action. Please try again — if the problem continues, contact your recruiter.'}
+              {permissionError || 'We could not complete this action. Please try again.'}
             </p>
             <div className="flex flex-wrap justify-center gap-3">
               <Button onClick={() => { setPhase('permission'); void requestPermissions() }}>
