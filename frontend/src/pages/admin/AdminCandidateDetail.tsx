@@ -163,8 +163,6 @@ export function AdminCandidateDetail() {
         performanceAnalysis: report?.performance_analysis,
         improvementSuggestions: report?.improvement_suggestions,
         transcriptText: transcript?.full_text.slice(0, 4000),
-        speechNotes: bundle?.speech_analysis?.notes,
-        sentimentSummary: bundle?.sentiment_analysis?.summary,
         recommendationReason: bundle?.recommendation?.reason,
         technicalEvaluation: bundle?.technical_evaluation
           ? Object.fromEntries(
@@ -772,14 +770,10 @@ export function AdminCandidateDetail() {
               <CardContent>
                 <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
                   {[
-                    { label: 'Speaking rate', value: `${Math.round(bundle.speech_analysis.speaking_rate * 60)} WPM` },
-                    { label: 'Avg pause', value: `${bundle.speech_analysis.avg_pause_seconds.toFixed(1)}s` },
-                    { label: 'Total pauses', value: bundle.speech_analysis.total_pauses },
                     { label: 'Clarity', value: `${Math.round(bundle.speech_analysis.clarity)}%` },
                     { label: 'Fluency', value: `${Math.round(bundle.speech_analysis.fluency)}%` },
                     { label: 'Energy', value: `${Math.round(bundle.speech_analysis.energy)}%` },
                     { label: 'Tone', value: bundle.speech_analysis.tone },
-                    { label: 'Emotion', value: bundle.speech_analysis.emotion },
                   ].map((item) => (
                     <div key={item.label} className="rounded-xl bg-muted/50 p-4">
                       <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{item.label}</p>
@@ -787,65 +781,6 @@ export function AdminCandidateDetail() {
                     </div>
                   ))}
                 </div>
-                {bundle.speech_analysis.notes && (() => {
-                  const props = readingProps('insights', 'Speech Analysis', bundle.speech_analysis.notes)
-                  return (
-                    <p className="mt-4 text-sm leading-relaxed text-muted-foreground">
-                      {props.activeWord !== undefined && props.activeWord >= 0 ? (
-                        <ReadingHighlighter
-                          text={bundle.speech_analysis.notes}
-                          activeWordIndex={props.activeWord}
-                          onActiveWordRef={props.onActiveWordRef}
-                        />
-                      ) : (
-                        bundle.speech_analysis.notes
-                      )}
-                    </p>
-                  )
-                })()}
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Sentiment analysis */}
-          {bundle.sentiment_analysis && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Sentiment analysis</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid gap-4 sm:grid-cols-3">
-                  <div className="rounded-xl bg-muted/50 p-4">
-                    <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Sentiment</p>
-                    <p className="mt-1 font-display text-lg font-bold capitalize text-foreground">{bundle.sentiment_analysis.sentiment}</p>
-                  </div>
-                  <div className="rounded-xl bg-muted/50 p-4">
-                    <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Emotion</p>
-                    <p className="mt-1 font-display text-lg font-bold capitalize text-foreground">{bundle.sentiment_analysis.emotion}</p>
-                  </div>
-                  <div className="rounded-xl bg-muted/50 p-4">
-                    <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Professionalism</p>
-                    <p className="mt-1 font-display text-lg font-bold text-foreground">
-                      {Math.round(bundle.sentiment_analysis.professionalism)}%
-                    </p>
-                  </div>
-                </div>
-                {bundle.sentiment_analysis.summary && (() => {
-                  const props = readingProps('insights', 'Sentiment Analysis', bundle.sentiment_analysis.summary)
-                  return (
-                    <p className="mt-4 text-sm leading-relaxed text-muted-foreground">
-                      {props.activeWord !== undefined && props.activeWord >= 0 ? (
-                        <ReadingHighlighter
-                          text={bundle.sentiment_analysis.summary}
-                          activeWordIndex={props.activeWord}
-                          onActiveWordRef={props.onActiveWordRef}
-                        />
-                      ) : (
-                        bundle.sentiment_analysis.summary
-                      )}
-                    </p>
-                  )
-                })()}
               </CardContent>
             </Card>
           )}
