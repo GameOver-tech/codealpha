@@ -1,5 +1,12 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { authApi, clearAuthStorage, getToken, setToken, USER_KEY } from '@/services/api'
+import {
+  authApi,
+  clearAuthStorage,
+  getToken,
+  setToken,
+  setRefreshToken,
+  USER_KEY,
+} from '@/services/api'
 import type { User } from '@/types'
 
 interface AuthContextValue {
@@ -77,6 +84,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = useCallback(async (email: string, password: string) => {
     const res = await authApi.login({ email, password })
     setToken(res.data.access_token)
+    setRefreshToken(res.data.refresh_token)
     const me = await authApi.me()
     setUser(me.data)
     localStorage.setItem(USER_KEY, JSON.stringify(me.data))
@@ -95,6 +103,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const res = await authApi.register(payload)
       if (res.data.access_token) {
         setToken(res.data.access_token)
+        setRefreshToken(res.data.refresh_token)
         const me = await authApi.me()
         setUser(me.data)
         localStorage.setItem(USER_KEY, JSON.stringify(me.data))

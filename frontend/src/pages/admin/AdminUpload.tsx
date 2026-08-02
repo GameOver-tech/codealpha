@@ -199,6 +199,31 @@ export function AdminUpload() {
         description="Submit a recording — processing starts automatically."
       />
 
+      {/* How it works — friendly onboarding hint for first-time admins. */}
+      <div className="rounded-xl border border-border/60 bg-muted/40 p-4">
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          How it works
+        </p>
+        <ol className="mt-2 grid gap-1.5 text-sm text-muted-foreground sm:grid-cols-2">
+          <li className="flex items-start gap-2">
+            <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[10px] font-bold text-primary">1</span>
+            Pick the candidate
+          </li>
+          <li className="flex items-start gap-2">
+            <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[10px] font-bold text-primary">2</span>
+            Choose a recording (audio or video)
+          </li>
+          <li className="flex items-start gap-2">
+            <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[10px] font-bold text-primary">3</span>
+            Select which skills to evaluate
+          </li>
+          <li className="flex items-start gap-2">
+            <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[10px] font-bold text-primary">4</span>
+            Submit — AI processes it automatically
+          </li>
+        </ol>
+      </div>
+
       <Card>
         <CardContent className="p-6 sm:p-8">
           <div
