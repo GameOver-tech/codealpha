@@ -27,6 +27,7 @@ class InterviewRepository(BaseRepository[Interview]):
     model = Interview
 
     def _with_relations(self, stmt):
+        """Load all relations for a full interview."""
         return stmt.options(
             *_TO_ONE,
             selectinload(Interview.files),

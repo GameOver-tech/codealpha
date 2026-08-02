@@ -158,6 +158,68 @@ docker compose --profile queue up    # + Redis queue worker
 
 ---
 
+## Deployment Guide (VPS backend + Vercel frontend)
+
+This is the recommended production setup: the FastAPI backend runs on your
+VPS, and the React frontend is hosted on Vercel.
+
+### 1. Frontend → backend URL wiring
+
+Create the Vercel environment variable with the **public** URL of your
+backend (the IP/domain the frontend will call from the browser):
+
+```
+# Vercel → Settings → Environment Variables (Production)
+VITE_API_BASE_URL=http://YOUR_VPS_IP:8000   # or https://api.yourdomain.com
+```
+
+No trailing slash. This is baked into the build at deploy time, so re-deploy
+after changing it.
+
+### 2. Backend → frontend origin (CORS)
+
+The Vercel origin must be whitelisted or browsers will block every request
+(origin errors). In `backend/.env` set:
+
+```
+CORS_ORIGINS=https://your-app.vercel.app
+```
+
+`CORS_ORIGINS` is a comma-separated list (no trailing slash). With a real
+origin set, the backend sends proper credentials-allowed CORS headers. For
+local testing add dev origins too:
+`CORS_ORIGINS=http://localhost:5173,https://your-app.vercel.app`.
+
+### 3. VPS setup (uv + Python)
+
+```bash
+# Install uv, then:
+uv sync                       # installs everything from requirements.txt
+cp .env.example .env          # fill in real values (see table above)
+uv run alembic upgrade head   # apply database migrations
+```
+
+### 4. Run the backend
+
+Keep it alive with a process manager (e.g. `uv`/`systemd`/`tmux`):
+
+```bash
+uv run uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
+
+Open port `8000` in the VPS firewall. For a production URL you should put
+Nginx/Caddy in front with HTTPS — point it at `http://127.0.0.1:8000` and
+then set `VITE_API_BASE_URL` to the HTTPS domain. Remember to update
+`CORS_ORIGINS` whenever the frontend URL changes.
+
+### 5. System dependencies
+
+The image pipeline needs `ffmpeg` on the VPS for audio extraction from video
+files (see the Dockerfile for the package list). Audio-only uploads work
+without it.
+
+---
+
 ## API Endpoints
 
 ### Auth (public)

@@ -72,10 +72,21 @@ app = FastAPI(
     redoc_url=None,
 )
 
+# CORS is driven by CORS_ORIGINS (comma-separated list in .env). This is
+# required in production: with allow_credentials=True, browsers reject the
+# "*" wildcard, so the real Vercel origin must be listed explicitly.
+if settings.cors_origin_list:
+    allow_origins = settings.cors_origin_list
+    allow_credentials = True
+else:
+    # Dev fallback — no CORS_ORIGINS set: allow everything, no credentials.
+    allow_origins = ["*"]
+    allow_credentials = False
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=allow_origins,
+    allow_credentials=allow_credentials,
     allow_methods=["*"],
     allow_headers=["*"],
 )
