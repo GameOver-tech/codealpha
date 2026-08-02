@@ -41,6 +41,7 @@ from app.schemas.interview import (
     RegenerateRequest,
     TranscriptOut,
 )
+from app.schemas.auth import RegisterRequest
 from app.schemas.profile import RecommendationMessage
 from app.services.pipeline_service import enqueue_interview_processing, run_interview_pipeline
 from app.storage.service import LocalStorage
@@ -800,6 +801,31 @@ async def override_recommendation(
     return RecommendationMessage(
         verdict=rec.verdict.value,
         message=reason or "Recommendation updated.",
+    )
+
+
+@router.post("/candidates", status_code=201)
+async def create_candidate(
+    payload: RegisterRequest,
+    current_user: User = Depends(require_role("admin")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Create a candidate account (Supabase Auth + local users row).
+
+    Mirrors the AI assistant's create_candidate tool so the admin UI can
+    register candidates directly without the candidate signing up.
+    """
+    from app.tools.admin_tools import create_candidate as _create_candidate
+
+    return await _create_candidate(
+        db,
+        current_user,
+        email=payload.email,
+        password=payload.password,
+        first_name=payload.first_name,
+        last_name=payload.last_name,
+        phone=payload.phone,
+        gender=payload.gender,
     )
 
 

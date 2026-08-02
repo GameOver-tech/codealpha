@@ -5,6 +5,7 @@ import { motion } from 'framer-motion'
 import {
   Search,
   Users,
+  UserPlus,
   Trash2,
   ChevronLeft,
   ChevronRight,
@@ -14,7 +15,7 @@ import {
   Video,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
-import { Button, Card, CardContent, Input, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Skeleton, Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui'
+import { Button, Card, CardContent, Input, Label, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Skeleton, Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui'
 import { Avatar, AvatarFallback, AvatarImage, EmptyState, PageHeader, RecommendationBadge, StatusBadge } from '@/components/shared'
 import { useAdminInterviews, queryKeys, prefetchAdminAnalysis } from '@/hooks'
 import { adminApi, mediaUrl, getErrorMessage } from '@/services/api'
@@ -59,6 +60,33 @@ export function AdminCandidates() {
     },
     onError: (error) => toast.error(getErrorMessage(error)),
   })
+
+  // Add-candidate dialog state.
+  const [addOpen, setAddOpen] = useState(false)
+  const [addForm, setAddForm] = useState({
+    first_name: '',
+    last_name: '',
+    email: '',
+    password: '',
+    phone: '',
+    gender: '',
+  })
+  const createCandidateMutation = useMutation({
+    mutationFn: (payload: typeof addForm) => adminApi.createCandidate(payload),
+    onSuccess: (res) => {
+      toast.success(res.data.message || 'Candidate created')
+      setAddOpen(false)
+      setAddForm({ first_name: '', last_name: '', email: '', password: '', phone: '', gender: '' })
+      queryClient.invalidateQueries({ queryKey: ['admin', 'registered-candidates'] })
+    },
+    onError: (error) => toast.error(getErrorMessage(error)),
+  })
+
+  const canSubmitAdd =
+    addForm.first_name.trim() &&
+    addForm.last_name.trim() &&
+    addForm.email.trim().includes('@') &&
+    addForm.password.length >= 8
 
   const [pendingDelete, setPendingDelete] = useState<AdminInterview | null>(null)
 
@@ -140,12 +168,18 @@ export function AdminCandidates() {
         title="Candidates"
         description="All interview evaluations in one place."
         actions={
-          <Button asChild>
-            <Link to="/admin/upload">
-              <Video />
-              Upload interview
-            </Link>
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button variant="outline" onClick={() => setAddOpen(true)}>
+              <UserPlus />
+              Add Candidate
+            </Button>
+            <Button asChild>
+              <Link to="/admin/upload">
+                <Video />
+                Upload interview
+              </Link>
+            </Button>
+          </div>
         }
       />
 
@@ -375,6 +409,116 @@ export function AdminCandidates() {
               Cancel
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Candidate — full register-style form */}
+      <Dialog open={addOpen} onOpenChange={(open) => { if (!open) setAddOpen(false) }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add Candidate</DialogTitle>
+            <DialogDescription>
+              Create a candidate account. The candidate can log in with these credentials.
+            </DialogDescription>
+          </DialogHeader>
+          <form
+            className="grid gap-4"
+            onSubmit={(e) => {
+              e.preventDefault()
+              if (!canSubmitAdd || createCandidateMutation.isPending) return
+              createCandidateMutation.mutate(addForm)
+            }}
+          >
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="add_first_name">First name <span className="text-destructive">*</span></Label>
+                <Input
+                  id="add_first_name"
+                  value={addForm.first_name}
+                  onChange={(e) => setAddForm((f) => ({ ...f, first_name: e.target.value }))}
+                  placeholder="e.g. Ali"
+                  autoComplete="off"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="add_last_name">Last name <span className="text-destructive">*</span></Label>
+                <Input
+                  id="add_last_name"
+                  value={addForm.last_name}
+                  onChange={(e) => setAddForm((f) => ({ ...f, last_name: e.target.value }))}
+                  placeholder="e.g. Khan"
+                  autoComplete="off"
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="add_email">Email <span className="text-destructive">*</span></Label>
+              <Input
+                id="add_email"
+                type="email"
+                value={addForm.email}
+                onChange={(e) => setAddForm((f) => ({ ...f, email: e.target.value }))}
+                placeholder="candidate@example.com"
+                autoComplete="off"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="add_password">Password <span className="text-destructive">*</span></Label>
+              <Input
+                id="add_password"
+                type="password"
+                value={addForm.password}
+                onChange={(e) => setAddForm((f) => ({ ...f, password: e.target.value }))}
+                placeholder="Min 8 characters"
+                autoComplete="new-password"
+              />
+              {addForm.password && addForm.password.length < 8 && (
+                <p className="text-xs text-destructive">Password must be at least 8 characters.</p>
+              )}
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="add_phone">Phone</Label>
+                <Input
+                  id="add_phone"
+                  value={addForm.phone}
+                  onChange={(e) => setAddForm((f) => ({ ...f, phone: e.target.value }))}
+                  placeholder="+92 300 1234567"
+                  autoComplete="off"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="add_gender">Gender</Label>
+                <Select
+                  value={addForm.gender}
+                  onValueChange={(v) => setAddForm((f) => ({ ...f, gender: v }))}
+                >
+                  <SelectTrigger id="add_gender" className="w-full">
+                    <SelectValue placeholder="Select gender" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Male">Male</SelectItem>
+                    <SelectItem value="Female">Female</SelectItem>
+                    <SelectItem value="Other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <DialogFooter className="mt-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setAddOpen(false)}
+                disabled={createCandidateMutation.isPending}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={!canSubmitAdd} loading={createCandidateMutation.isPending}>
+                <UserPlus />
+                Create Candidate
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
     </div>

@@ -141,6 +141,12 @@ export const adminApi = {
 
   registeredCandidates: () => api.get<RegisteredCandidate[]>('/api/admin/candidates/registered'),
 
+  createCandidate: (payload: RegisterRequest) =>
+    api.post<{ id: string; email: string; name: string; message: string }>(
+      '/api/admin/candidates',
+      payload,
+    ),
+
   regenerate: (interviewId: string) =>
     api.post<ProcessResponse>('/api/admin/regenerate', { interview_id: interviewId }),
 
