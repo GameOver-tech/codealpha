@@ -178,6 +178,16 @@ export function HowItWorks() {
 
 const FEATURES = [
   {
+    icon: Upload,
+    title: 'Instant Uploads',
+    description: 'Drag and drop MP4, MOV, MP3, WAV and more. Processing starts automatically.',
+  },
+  {
+    icon: PlayCircle,
+    title: 'Full Transcripts',
+    description: 'Timestamped, speaker-labeled transcripts with every insight backed by evidence.',
+  },
+  {
     icon: Brain,
     title: 'Deep AI Analysis',
     description: 'Speech patterns, sentiment, tone and confidence are evaluated by advanced AI models.',
@@ -193,19 +203,9 @@ const FEATURES = [
     description: 'Beautiful, downloadable PDF reports with executive summaries and evidence.',
   },
   {
-    icon: Upload,
-    title: 'Instant Uploads',
-    description: 'Drag and drop MP4, MOV, MP3, WAV and more. Processing starts automatically.',
-  },
-  {
     icon: BadgeCheck,
     title: 'Hiring Recommendations',
     description: 'Clear verdicts: Recommended, Not Recommended, or Need Further Review.',
-  },
-  {
-    icon: PlayCircle,
-    title: 'Full Transcripts',
-    description: 'Timestamped, speaker-labeled transcripts with every insight backed by evidence.',
   },
 ]
 
