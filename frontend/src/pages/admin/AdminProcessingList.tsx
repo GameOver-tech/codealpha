@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Loader2, AlertTriangle, ArrowRight, Video, Play } from 'lucide-react'
+import { useState } from 'react'
+import { Loader2, ArrowRight, Video, Play } from 'lucide-react'
 import { Button, Card, CardContent, Progress, Skeleton } from '@/components/ui'
 import { Avatar, AvatarFallback, AvatarImage, EmptyState, PageHeader, StatusBadge } from '@/components/shared'
 import { useAdminInterviews } from '@/hooks'
@@ -13,14 +14,20 @@ import { queryKeys } from '@/hooks'
 export function AdminProcessingList() {
   const { data: interviews, isLoading, isError } = useAdminInterviews()
   const queryClient = useQueryClient()
+  // Track WHICH interview is currently being processed — each row keeps its
+  // own loading state so clicking one only shows a spinner on that row and
+  // never re-triggers the others.
+  const [processingId, setProcessingId] = useState<string | null>(null)
 
   const processMutation = useMutation({
     mutationFn: (id: string) => adminApi.process(id),
+    onMutate: (id) => setProcessingId(id),
     onSuccess: () => {
       toast.success('Processing started — the transcript is being evaluated.')
       queryClient.invalidateQueries({ queryKey: queryKeys.adminInterviews })
     },
     onError: (error) => toast.error(getErrorMessage(error)),
+    onSettled: () => setProcessingId(null),
   })
 
   if (isLoading) {
@@ -42,17 +49,17 @@ export function AdminProcessingList() {
     )
   }
 
-  const active = interviews.filter((i) => !['completed', 'failed'].includes(i.status))
-  const failed = interviews.filter((i) => i.status === 'failed')
-
-  const rows = [...active, ...failed]
+  // Show ONLY interviews that are genuinely pending/processing. Interviews
+  // that already completed or failed are NOT part of the live queue — they
+  // live on the Candidates page instead.
+  const rows = interviews.filter((i) => !['completed', 'failed'].includes(i.status))
 
   if (rows.length === 0) {
     return (
       <EmptyState
         icon={Loader2}
         title="Nothing processing right now"
-        description="Interviews that are being processed or have failed will show up here."
+        description="Live interviews that are awaiting or being processed will show up here."
       />
     )
   }
@@ -66,7 +73,6 @@ export function AdminProcessingList() {
 
       <div className="space-y-4">
         {rows.map((interview, i) => {
-          const failedStatus = interview.status === 'failed'
           return (
             <motion.div
               key={interview.id}
@@ -74,7 +80,7 @@ export function AdminProcessingList() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.05 }}
             >
-              <Card className={failedStatus ? 'border-destructive/30' : undefined}>
+              <Card>
                 <CardContent className="p-5">
                   <div className="flex items-center gap-4">
                     <Avatar className="h-10 w-10">
@@ -100,32 +106,23 @@ export function AdminProcessingList() {
                       </p>
                     </div>
                     <div className="w-40 shrink-0">
-                      {failedStatus ? (
-                        <span className="flex items-center gap-1.5 text-xs font-semibold text-destructive">
-                          <AlertTriangle className="h-4 w-4" />
-                          {interview.failure_stage || 'Failed'}
-                        </span>
-                      ) : (
-                        <>
-                          <Progress value={interview.progress} className="h-2" />
-                          <p className="mt-1 text-right text-xs text-muted-foreground">
-                            {Math.round(interview.progress)}%
-                          </p>
-                        </>
-                      )}
+                      <Progress value={interview.progress} className="h-2" />
+                      <p className="mt-1 text-right text-xs text-muted-foreground">
+                        {Math.round(interview.progress)}%
+                      </p>
                     </div>
                     <div className="flex items-center gap-2">
                       {interview.interview_type === 'live' &&
-                        !failedStatus &&
                         interview.status === 'uploaded' && (
                           <Button
                             variant="default"
                             size="sm"
                             onClick={() => processMutation.mutate(interview.id)}
-                            loading={processMutation.isPending}
+                            loading={processingId === interview.id}
+                            disabled={processingId !== null}
                           >
                             <Play />
-                            Process
+                            {processingId === interview.id ? 'Processing…' : 'Process'}
                           </Button>
                         )}
                       <Button variant="ghost" size="sm" asChild>

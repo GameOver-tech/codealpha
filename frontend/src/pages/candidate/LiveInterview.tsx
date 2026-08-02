@@ -24,7 +24,7 @@ import { useAuth } from '@/context'
 import { useInterviewStatus, useProfile } from '@/hooks'
 import { ttsService } from '@/services/api/tts'
 import { getAudioManager } from '@/services/audioManager'
-import { liveApi, getErrorMessage, mediaUrl } from '@/services/api'
+import { liveApi, mediaUrl } from '@/services/api'
 import { initials } from '@/lib/utils'
 
 type Phase = 'permission' | 'running' | 'uploading' | 'done' | 'error'
@@ -264,7 +264,13 @@ export function LiveInterview() {
         const res = await liveApi.start()
         setInterviewId(res.data.interview_id)
       } catch (err) {
-        setPermissionError(getErrorMessage(err))
+        // Never show a raw technical error (e.g. "Request failed with status
+        // code 500") to the candidate — use friendly, actionable copy and a
+        // retry button instead.
+        console.warn('Live interview start failed:', err)
+        setPermissionError(
+          'We could not start your interview. Please check your connection and try again.',
+        )
         setPhase('error')
         return
       }
@@ -366,7 +372,11 @@ export function LiveInterview() {
         toast.success('Interview submitted! Our AI is reviewing it.')
         setPhase('done')
       } catch (err) {
-        setUploadError(getErrorMessage(err))
+        // Friendly copy — never expose raw HTTP errors to the candidate.
+        console.warn('Live interview upload failed:', err)
+        setUploadError(
+          'Your recording could not be submitted. Please try again — if the problem continues, contact your recruiter.',
+        )
         setPhase('error')
       }
     },
@@ -443,18 +453,18 @@ export function LiveInterview() {
           <CardContent className="flex flex-col items-center gap-4 p-10 text-center">
             <AlertTriangle className="h-12 w-12 text-destructive" />
             <h2 className="font-display text-xl font-bold text-foreground">
-              {permissionError ? 'Permission needed' : 'Something went wrong'}
+              {permissionError ? 'Unable to start interview' : 'Something went wrong'}
             </h2>
             <p className="max-w-md text-sm leading-relaxed text-muted-foreground">
-              {permissionError || uploadError || 'Unable to continue. Please try again.'}
+              {permissionError ||
+                uploadError ||
+                'We could not complete this action. Please try again — if the problem continues, contact your recruiter.'}
             </p>
             <div className="flex flex-wrap justify-center gap-3">
-              {permissionError && (
-                <Button onClick={() => { setPhase('permission'); void requestPermissions() }}>
-                  <Camera />
-                  Try again
-                </Button>
-              )}
+              <Button onClick={() => { setPhase('permission'); void requestPermissions() }}>
+                <Camera />
+                Try again
+              </Button>
               <Button variant="outline" onClick={() => navigate('/dashboard')}>
                 Back to dashboard
               </Button>

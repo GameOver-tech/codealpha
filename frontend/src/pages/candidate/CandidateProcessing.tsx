@@ -9,7 +9,6 @@ import {
   Trophy,
   AlertTriangle,
   CheckCircle2,
-  Loader2,
   Clock,
   Inbox,
 } from 'lucide-react'
@@ -83,7 +82,7 @@ export function CandidateProcessing() {
         <PageHeader title="Interview Status" />
         <Card>
           <CardContent className="flex flex-col items-center gap-6 p-10">
-            <Loader2 className="h-12 w-12 animate-spin text-primary" />
+            <p className="text-sm text-muted-foreground">Loading your interview status…</p>
           </CardContent>
         </Card>
       </div>
@@ -281,9 +280,8 @@ export function CandidateProcessing() {
         <Card className="h-fit">
           <CardContent className="flex flex-col items-center p-8 text-center">
             <div className="relative">
-              <span className="absolute inset-0 animate-pulse-ring rounded-full bg-primary/30" />
-              <span className="relative flex h-20 w-20 items-center justify-center rounded-full bg-primary/10">
-                <Loader2 className="h-10 w-10 animate-spin text-primary" />
+              <span className="flex h-20 w-20 items-center justify-center rounded-full bg-primary/10 text-primary">
+                <FileText className="h-10 w-10" />
               </span>
             </div>
             <div className="mt-5 flex items-center gap-2">
