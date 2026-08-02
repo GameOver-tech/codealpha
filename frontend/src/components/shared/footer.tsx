@@ -2,11 +2,6 @@ import { Link } from 'react-router-dom'
 import { Github, ArrowRight } from 'lucide-react'
 import { Logo } from './logo'
 
-const COMPANY_LINKS = [
-  { label: 'Start Interview', href: '/register' },
-  { label: 'For Recruiters', href: '/login' },
-]
-
 const RESOURCE_LINKS = [
   { label: 'Sign In', href: '/login' },
   { label: 'Create Account', href: '/register' },
@@ -16,8 +11,8 @@ export function Footer() {
   return (
     <footer className="border-t border-border/60 bg-background">
       <div className="mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8">
-        <div className="grid gap-10 md:grid-cols-2 lg:grid-cols-4">
-          <div className="lg:col-span-2">
+        <div className="grid gap-10 md:grid-cols-2">
+          <div className="lg:col-span-1">
             <Logo />
             <p className="mt-4 max-w-sm text-sm leading-relaxed text-muted-foreground">
               AI-powered talent evaluation for modern hiring teams. Upload interviews, get
@@ -33,24 +28,6 @@ export function Footer() {
               <Github className="h-4 w-4" />
               View on GitHub
             </a>
-          </div>
-
-          {/* Company */}
-          <div>
-            <h3 className="text-sm font-semibold text-foreground">Company</h3>
-            <ul className="mt-4 space-y-2.5">
-              {COMPANY_LINKS.map((link) => (
-                <li key={link.label}>
-                  <Link
-                    to={link.href}
-                    className="group flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-primary"
-                  >
-                    {link.label}
-                    <ArrowRight className="h-3.5 w-3.5 opacity-0 transition-all group-hover:translate-x-1 group-hover:opacity-100" />
-                  </Link>
-                </li>
-              ))}
-            </ul>
           </div>
 
           {/* Resources */}

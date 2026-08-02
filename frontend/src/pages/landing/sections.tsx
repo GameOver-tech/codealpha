@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
-import { ArrowRight, BadgeCheck, PlayCircle, Sparkles, Upload, FileText, Brain, LineChart, Trophy, Plus, Star, Zap, ShieldCheck } from 'lucide-react'
+import { ArrowRight, BadgeCheck, PlayCircle, Sparkles, Upload, FileText, Brain, LineChart, Trophy, Plus } from 'lucide-react'
 import { CTAButton } from '@/components/shared'
 import { HologramVisual } from '@/components/hero/HologramVisual'
 
@@ -76,57 +76,6 @@ export function Hero() {
             Upload interview recordings and get deep, data-driven insights — speech analysis,
             sentiment detection, skill scoring, and hiring recommendations in minutes.
           </motion.p>
-
-          <motion.div
-            initial={{ opacity: 0, y: 24 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.3 }}
-            className="mt-7 flex flex-wrap items-center gap-4"
-          >
-            <CTAButton to="/register">Start Interview</CTAButton>
-            <CTAButton to="/login" variant="outline">
-              For Recruiters
-            </CTAButton>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.8, delay: 0.5 }}
-            className="mt-8 flex flex-wrap items-center gap-x-8 gap-y-3 text-sm text-muted-foreground"
-          >
-            <span className="inline-flex items-center gap-2">
-              <BadgeCheck className="h-4 w-4 text-success" /> Free to get started
-            </span>
-            <span className="inline-flex items-center gap-2">
-              <BadgeCheck className="h-4 w-4 text-success" /> 30-minute interviews
-            </span>
-            <span className="inline-flex items-center gap-2">
-              <BadgeCheck className="h-4 w-4 text-success" /> Instant AI reports
-            </span>
-          </motion.div>
-
-          {/* Proof bar: social proof to convert in the first seconds */}
-          <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.7 }}
-            className="mt-10 flex flex-wrap items-center gap-x-8 gap-y-4 border-t border-border/60 pt-6"
-          >
-            {[
-              { icon: Star, value: '4.9/5', label: 'Recruiter rating' },
-              { icon: Zap, value: '10×', label: 'Faster screening' },
-              { icon: ShieldCheck, value: '100%', label: 'Data secure' },
-            ].map((s) => (
-              <div key={s.label} className="flex items-center gap-2.5">
-                <s.icon className="h-5 w-5 text-primary" />
-                <div>
-                  <p className="font-display text-sm font-bold text-foreground">{s.value}</p>
-                  <p className="text-xs text-muted-foreground">{s.label}</p>
-                </div>
-              </div>
-            ))}
-          </motion.div>
         </div>
 
         {/* Hero visual: AI brain inside a premium floating glass frame */}
