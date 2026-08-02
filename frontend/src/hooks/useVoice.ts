@@ -94,6 +94,8 @@ const browserEngine = {
   timers: [] as number[],
   /** Calibration factor (actual vs estimated pace) — corrects drift. */
   paceFactor: 1,
+  /** Restarts word timers from a given word index (set during speech start). */
+  scheduleFrom: null as null | ((fromWord: number) => void),
 }
 
 function clearEngineTimers() {
@@ -210,15 +212,24 @@ export function useVoice(): UseVoiceResult {
         return Math.round((base * units + pause) * browserEngine.paceFactor)
       }
 
-      const startWordTimer = (idx: number) => {
+      /**
+       * Schedule word-advance timers for a chunk. When resuming from a pause,
+       * starts at `fromWord` so the highlight picks up where the audio does.
+       */
+      const startWordTimer = (idx: number, fromWord = 0) => {
         const sentence = browserEngine.chunks[idx] ?? ''
         const words = sentence.match(/\S+/g) ?? []
         let elapsed = 0
         words.forEach((word, wi) => {
-          const id = window.setTimeout(() => advanceWord(wi, idx), elapsed)
+          if (wi < fromWord) return
+          const id = window.setTimeout(() => advanceWord(wi, idx), Math.max(0, elapsed))
           browserEngine.timers.push(id)
           elapsed += wordDuration(word)
         })
+      }
+
+      browserEngine.scheduleFrom = (fromWord: number) => {
+        startWordTimer(browserEngine.index, fromWord)
       }
 
       const speakNext = (idx: number) => {
@@ -343,6 +354,9 @@ export function useVoice(): UseVoiceResult {
 
   const pause = useCallback(() => {
     if (browserEngine.status === 'playing') {
+      // Freeze the word timers along with the audio so the highlight stops
+      // exactly where the speech stops.
+      clearEngineTimers()
       window.speechSynthesis.pause()
       browserEngine.status = 'paused'
       setState('paused')
@@ -350,6 +364,9 @@ export function useVoice(): UseVoiceResult {
       window.speechSynthesis.resume()
       browserEngine.status = 'playing'
       setState('playing')
+      // Restart word timers from the current word so the highlight resumes.
+      const from = Math.max(0, browserEngine.wordIndex)
+      browserEngine.scheduleFrom?.(from)
     }
   }, [])
 
@@ -358,6 +375,9 @@ export function useVoice(): UseVoiceResult {
       window.speechSynthesis.resume()
       browserEngine.status = 'playing'
       setState('playing')
+      // Restart word timers from the current word so the highlight resumes.
+      const from = Math.max(0, browserEngine.wordIndex)
+      browserEngine.scheduleFrom?.(from)
       return
     }
     manager.resume()

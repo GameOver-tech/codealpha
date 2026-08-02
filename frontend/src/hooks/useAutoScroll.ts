@@ -24,21 +24,22 @@ export function useAutoScroll(activeElement: HTMLElement | null, active: boolean
   const activeRef = useRef(active)
   activeRef.current = active
 
-  const userScrollRef = useRef(false)
   const pendingRef = useRef<number | null>(null)
   const lastElementRef = useRef<HTMLElement | null>(null)
 
-  // Detect manual scrolling — the user takes control, auto-scroll yields.
+  // Detect manual scrolling — the user takes control momentarily, but
+  // auto-scroll re-engages as soon as the next word leaves the viewport.
+  // (Previously it disabled permanently, which made the highlight stop
+  // following after any manual wheel/touch scroll.)
+  const suppressUntilRef = useRef(0)
   useEffect(() => {
     const onScroll = () => {
-      userScrollRef.current = true
+      suppressUntilRef.current = Date.now() + 400
       if (pendingRef.current !== null) {
         window.clearTimeout(pendingRef.current)
         pendingRef.current = null
       }
     }
-    // wheel/touch = intentional manual scroll; plain scroll() from
-    // scrollIntoView also fires but userScrollRef resets on new words.
     window.addEventListener('wheel', onScroll, { passive: true })
     window.addEventListener('touchmove', onScroll, { passive: true })
     return () => {
@@ -54,7 +55,7 @@ export function useAutoScroll(activeElement: HTMLElement | null, active: boolean
         window.clearTimeout(pendingRef.current)
         pendingRef.current = null
       }
-      userScrollRef.current = false
+      suppressUntilRef.current = 0
       lastElementRef.current = null
       return
     }
@@ -71,9 +72,9 @@ export function useAutoScroll(activeElement: HTMLElement | null, active: boolean
       pendingRef.current = null
       if (!activeRef.current) return
 
-      // Only scroll when the word is actually out of view, and the user
-      // hasn't just taken manual control.
-      if (userScrollRef.current) return
+      // Skip auto-scroll only briefly after a manual wheel/touch scroll —
+      // the next word leaving the viewport re-engages it.
+      if (Date.now() < suppressUntilRef.current) return
       if (!isOutOfViewport(activeElement)) return
 
       const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -81,11 +82,6 @@ export function useAutoScroll(activeElement: HTMLElement | null, active: boolean
         behavior: reduceMotion ? 'auto' : 'smooth',
         block: 'center',
       })
-
-      // After an auto-scroll, re-allow the next user scroll to take control.
-      window.setTimeout(() => {
-        userScrollRef.current = false
-      }, 400)
     }, 60)
 
     return () => {
