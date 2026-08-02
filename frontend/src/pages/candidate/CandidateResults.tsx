@@ -123,7 +123,9 @@ export function CandidateResults() {
 
             <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
               <StatusBadge status={result.status} />
-              <AdminStatusBadge status={result.admin_status} />
+              {result.admin_status && result.admin_status !== 'Processing' && (
+                <AdminStatusBadge status={result.admin_status} />
+              )}
               {verdict && <RecommendationBadge verdict={verdict} />}
             </div>
 

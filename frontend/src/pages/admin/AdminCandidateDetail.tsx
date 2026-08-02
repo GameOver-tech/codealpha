@@ -380,7 +380,7 @@ export function AdminCandidateDetail() {
           </Button>
           {meta && <Badge variant="secondary">{meta.job_title}</Badge>}
           {meta && <StatusBadge status={meta.status} />}
-          {meta && <AdminStatusBadge status={meta.admin_status} />}
+          {meta && meta.admin_status !== 'Completed' && <AdminStatusBadge status={meta.admin_status} />}
           {meta?.duration_seconds ? (
             <Badge variant="outline">{formatDuration(meta.duration_seconds)}</Badge>
           ) : null}
@@ -452,7 +452,7 @@ export function AdminCandidateDetail() {
         </Button>
         {meta && <Badge variant="secondary">{meta.job_title}</Badge>}
         {meta && <StatusBadge status={meta.status} />}
-        {meta && <AdminStatusBadge status={meta.admin_status} />}
+        {meta && meta.admin_status !== 'Completed' && <AdminStatusBadge status={meta.admin_status} />}
         {bundle.recommendation && <RecommendationBadge verdict={bundle.recommendation.verdict} />}
         {meta?.duration_seconds ? (
           <Badge variant="outline">{formatDuration(meta.duration_seconds)}</Badge>
