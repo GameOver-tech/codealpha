@@ -97,6 +97,7 @@
 
 - Wants analytics charts chosen by data semantics: line charts for trends, bar charts for comparisons, pie/donut charts only for percentage distribution — every chart must have a clear title, axis labels, a legend, values on hover, a date range, and tooltips explaining each metric, so it is understandable even to non-technical users. Confidence: 0.9
 - Wants every statistic card to include an icon, title, main value, a small description underneath, a growth indicator (↑/↓), and a "last updated" line. Confidence: 0.9
+- Prefers stat-card trend badges to be icon-only and minimal: a single colored direction arrow (e.g., a red down arrow) with NO numeric digits displayed — explicitly asked for the numbers to be removed from the dashboard stat-card trend badges ("os ka arrow down karo aur os ka color red ho os mai koch digit b na leka ho"). Confidence: 0.6
 - Wants status badges to always pair color with readable text labels (e.g., "Completed", "Processing", "Failed") — never a colored badge alone. Confidence: 0.9
 - Wants icon-based data displays (upload cards, transcript sections, status chips) to always show visible text labels beside or below the icon; labels must never be conveyed by icons or colors alone, so each section is instantly identifiable. Confidence: 0.85
 - Wants professional empty states with an illustration, a friendly message, and an action button — never blank sections. Confidence: 0.85

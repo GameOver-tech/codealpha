@@ -69,8 +69,8 @@ function DashboardStatCard({
   sub,
   color,
   delay,
-  trend,
   trendLabel,
+  trendUp = true,
 }: {
   icon: typeof Users
   label: string
@@ -78,10 +78,9 @@ function DashboardStatCard({
   sub: string
   color: string
   delay: number
-  trend: number
   trendLabel: string
+  trendUp?: boolean
 }) {
-  const positive = trend >= 0
   return (
     <motion.div
       initial={{ opacity: 0, y: 16 }}
@@ -95,13 +94,12 @@ function DashboardStatCard({
               <Icon className="h-5 w-5" strokeWidth={1.75} />
             </span>
             <span
-              className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold ${
-                positive ? 'bg-success/10 text-success' : 'bg-destructive/10 text-destructive'
+              className={`inline-flex items-center rounded-full px-1.5 py-0.5 ${
+                trendUp ? 'bg-success/10 text-success' : 'bg-destructive/10 text-destructive'
               }`}
-              title={`${trendLabel}: ${positive ? '+' : ''}${trend}`}
+              title={trendLabel}
             >
-              {positive ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
-              {positive ? '+' : ''}{trend}
+              {trendUp ? <TrendingUp className="h-3.5 w-3.5" /> : <TrendingDown className="h-3.5 w-3.5" />}
             </span>
           </div>
           <p className="mt-4 font-display text-2xl font-bold tracking-tight text-foreground">{value}</p>
@@ -182,12 +180,6 @@ export function AdminDashboard() {
     ? Math.round((stats.interviewed_candidates / stats.total_interviews) * 100)
     : 0
 
-  // Weekly growth from the real recent list (this 7 days vs previous 7 days).
-  const now = Date.now()
-  const thisWeek = recent.filter((i) => i.created_at && now - new Date(i.created_at).getTime() < 7 * 86400_000).length
-  const prevWeek = recent.filter((i) => i.created_at && now - new Date(i.created_at).getTime() >= 7 * 86400_000 && now - new Date(i.created_at).getTime() < 14 * 86400_000).length
-  const weeklyGrowth = prevWeek > 0 ? Math.round(((thisWeek - prevWeek) / prevWeek) * 100) : thisWeek > 0 ? 100 : 0
-
   const statCards = [
     {
       icon: Users,
@@ -195,7 +187,6 @@ export function AdminDashboard() {
       value: stats.total_interviews,
       sub: `${stats.total_candidates} candidates registered`,
       color: '#2563EB',
-      trend: weeklyGrowth,
       trendLabel: 'vs last 7 days',
     },
     {
@@ -204,7 +195,6 @@ export function AdminDashboard() {
       value: stats.interviewed_candidates,
       sub: `${completionRate}% completion rate`,
       color: '#22C55E',
-      trend: 0,
       trendLabel: 'vs last 7 days',
     },
     {
@@ -213,7 +203,6 @@ export function AdminDashboard() {
       value: Math.round(stats.avg_score),
       sub: `${stats.recommended} recommended · ${stats.not_recommended} not recommended`,
       color: '#6366F1',
-      trend: 0,
       trendLabel: 'vs last 7 days',
     },
     {
@@ -222,8 +211,8 @@ export function AdminDashboard() {
       value: stats.failed,
       sub: `${stats.processing} still processing`,
       color: '#EF4444',
-      trend: 0,
       trendLabel: 'vs last 7 days',
+      trendUp: false,
     },
   ]
 
