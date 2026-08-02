@@ -380,7 +380,7 @@ export function AdminCandidateDetail() {
           </Button>
           {meta && <Badge variant="secondary">{meta.job_title}</Badge>}
           {meta && <StatusBadge status={meta.status} />}
-          {meta && meta.admin_status !== 'Completed' && <AdminStatusBadge status={meta.admin_status} />}
+          {meta && meta.admin_status !== 'Processing' && meta.admin_status !== 'Completed' && <AdminStatusBadge status={meta.admin_status} />}
           {meta?.duration_seconds ? (
             <Badge variant="outline">{formatDuration(meta.duration_seconds)}</Badge>
           ) : null}
@@ -452,7 +452,7 @@ export function AdminCandidateDetail() {
         </Button>
         {meta && <Badge variant="secondary">{meta.job_title}</Badge>}
         {meta && <StatusBadge status={meta.status} />}
-        {meta && meta.admin_status !== 'Completed' && <AdminStatusBadge status={meta.admin_status} />}
+        {meta && meta.admin_status !== 'Processing' && meta.admin_status !== 'Completed' && <AdminStatusBadge status={meta.admin_status} />}
         {bundle.recommendation && <RecommendationBadge verdict={bundle.recommendation.verdict} />}
         {meta?.duration_seconds ? (
           <Badge variant="outline">{formatDuration(meta.duration_seconds)}</Badge>
@@ -772,12 +772,12 @@ export function AdminCandidateDetail() {
               <CardContent>
                 <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
                   {[
-                    { label: 'Speaking rate', value: `${Math.round(bundle.speech_analysis.speaking_rate)} WPM` },
+                    { label: 'Speaking rate', value: `${Math.round(bundle.speech_analysis.speaking_rate * 60)} WPM` },
                     { label: 'Avg pause', value: `${bundle.speech_analysis.avg_pause_seconds.toFixed(1)}s` },
                     { label: 'Total pauses', value: bundle.speech_analysis.total_pauses },
-                    { label: 'Clarity', value: `${Math.round(bundle.speech_analysis.clarity * 100)}%` },
-                    { label: 'Fluency', value: `${Math.round(bundle.speech_analysis.fluency * 100)}%` },
-                    { label: 'Energy', value: `${Math.round(bundle.speech_analysis.energy * 100)}%` },
+                    { label: 'Clarity', value: `${Math.round(bundle.speech_analysis.clarity)}%` },
+                    { label: 'Fluency', value: `${Math.round(bundle.speech_analysis.fluency)}%` },
+                    { label: 'Energy', value: `${Math.round(bundle.speech_analysis.energy)}%` },
                     { label: 'Tone', value: bundle.speech_analysis.tone },
                     { label: 'Emotion', value: bundle.speech_analysis.emotion },
                   ].map((item) => (
@@ -826,7 +826,7 @@ export function AdminCandidateDetail() {
                   <div className="rounded-xl bg-muted/50 p-4">
                     <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Professionalism</p>
                     <p className="mt-1 font-display text-lg font-bold text-foreground">
-                      {Math.round(bundle.sentiment_analysis.professionalism * 100)}%
+                      {Math.round(bundle.sentiment_analysis.professionalism)}%
                     </p>
                   </div>
                 </div>
