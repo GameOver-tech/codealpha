@@ -13,9 +13,43 @@ from app.core.logging import get_logger
 
 logger = get_logger(__name__)
 
+# Filler words / hesitations — never counted as valid spoken words.
+FILLER_WORDS = {
+    "uh", "uhm", "um", "umm", "ummm", "mmm", "mm", "ah", "aah", "er", "erm",
+    "hmm", "huh", "mhmm", "mm-hmm", "like", "yaani", "yani", "matlab",
+    "matalab", "yeah", "yep", "okay", "ok", "hmm-mm", "uh-huh",
+}
+# Non-speech artifacts STT sometimes emits — brackets/parens tags like
+# [laughter], [music], [noise], (silence), (inaudible), (breath).
+ARTIFACT_PATTERNS = [
+    re.compile(r"\[[^\]]*\]"),
+    re.compile(r"\([^)]*\)"),
+]
+
+
+def _clean_tokens(text: str) -> list[str]:
+    """Extract individual spoken words from a segment, dropping non-speech
+    artifacts and filler/hesitation words.
+
+    Handles mixed English/Urdu (Hinglish) transcripts: every whitespace-
+    delimited unit is one word, and both English and Urdu words are kept as
+    standalone units. Only fillers and STT noise tags are removed.
+    """
+    cleaned = text or ""
+    for pattern in ARTIFACT_PATTERNS:
+        cleaned = pattern.sub(" ", cleaned)
+    tokens = re.findall(r"\S+", cleaned)
+    result: list[str] = []
+    for tok in tokens:
+        core = re.sub(r"^[\W_]+|[\W_]+$", "", tok).lower()
+        if not core or core in FILLER_WORDS:
+            continue
+        result.append(tok)
+    return result
+
 
 def _word_count(text: str) -> int:
-    return len(re.findall(r"\S+", text or ""))
+    return len(_clean_tokens(text))
 
 
 def _derive_metrics(segments: list[dict[str, Any]], duration: float) -> dict[str, float]:
