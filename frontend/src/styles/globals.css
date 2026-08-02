@@ -441,6 +441,40 @@
   animation: orbit 14s linear infinite;
 }
 
+/* Very slow, subtle floating for the hero glass frame (2-4px drift) */
+@keyframes float-soft {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+
+.animate-float-soft {
+  animation: float-soft 9s ease-in-out infinite;
+}
+
+/* Slow ambient glowing particles rising around the brain */
+@keyframes particle-slow {
+  0% {
+    transform: translateY(0);
+    opacity: 0.15;
+  }
+  50% {
+    opacity: 0.9;
+  }
+  100% {
+    transform: translateY(-46px);
+    opacity: 0;
+  }
+}
+
+.animate-particle-slow {
+  animation: particle-slow 11s ease-in-out infinite;
+}
+
 /* Respect reduced-motion preferences */
 @media (prefers-reduced-motion: reduce) {
   .animate-aurora,
@@ -454,7 +488,9 @@
   .animate-pulse-ring,
   .animate-spin-slow,
   .animate-breathe,
-  .animate-orbit {
+  .animate-orbit,
+  .animate-float-soft,
+  .animate-particle-slow {
     animation: none !important;
   }
   .nav-link::after {

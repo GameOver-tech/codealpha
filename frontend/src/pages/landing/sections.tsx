@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { ArrowRight, BadgeCheck, PlayCircle, Sparkles, Upload, FileText, Brain, LineChart, Trophy, Plus, Star, Zap, ShieldCheck } from 'lucide-react'
 import { CTAButton } from '@/components/shared'
+import { HologramVisual } from '@/components/hero/HologramVisual'
 
 /* Per-word headline reveal: rise with a crisp settle and gradient highlight on key words */
 function Word({ children, gradient }: { children: React.ReactNode; gradient?: boolean }) {
@@ -38,7 +39,7 @@ export function Hero() {
         <div className="absolute inset-0 bg-[linear-gradient(to_right,rgb(15_23_42/0.04)_1px,transparent_1px),linear-gradient(to_bottom,rgb(15_23_42/0.04)_1px,transparent_1px)] bg-[size:56px_56px] [mask-image:radial-gradient(ellipse_60%_60%_at_50%_0%,#000_70%,transparent_110%)] dark:bg-[linear-gradient(to_right,rgb(255_255_255/0.04)_1px,transparent_1px),linear-gradient(to_bottom,rgb(255_255_255/0.04)_1px,transparent_1px)]" />
       </div>
 
-      <div className="mx-auto grid max-w-7xl items-center gap-16 px-4 sm:px-6 lg:grid-cols-2 lg:px-8">
+      <div className="mx-auto grid max-w-7xl items-center gap-16 px-4 sm:px-6 lg:grid-cols-2 lg:gap-20 lg:px-8">
         <div>
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -128,71 +129,14 @@ export function Hero() {
           </motion.div>
         </div>
 
-        {/* Hero visual: AI holographic brain — fully animated stage around the exact image */}
+        {/* Hero visual: AI brain inside a premium floating glass frame */}
         <motion.div
           initial={{ opacity: 0, scale: 0.96 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.7, delay: 0.3, ease: [0.22, 1, 0.36, 1] }}
-          className="relative mx-auto flex w-full max-w-[640px] items-center justify-center"
+          className="relative mx-auto flex w-full max-w-[600px] items-center justify-center"
         >
-          <div className="relative w-full">
-            {/* Rotating conic light rays behind the image */}
-            <div
-              aria-hidden
-              className="absolute inset-0 -z-10 animate-spin-slow rounded-full"
-              style={{
-                background:
-                  'conic-gradient(from 0deg, transparent 0deg, rgba(59,130,246,0.1) 30deg, transparent 60deg, transparent 120deg, rgba(59,130,246,0.1) 150deg, transparent 180deg, transparent 240deg, rgba(59,130,246,0.1) 270deg, transparent 300deg)',
-                maskImage: 'radial-gradient(circle, black 0%, transparent 72%)',
-                WebkitMaskImage: 'radial-gradient(circle, black 0%, transparent 72%)',
-              }}
-            />
-            {/* Expanding pulse rings */}
-            <div className="pointer-events-none absolute inset-6 -z-10 animate-pulse-ring rounded-full bg-blue-500/10 blur-xl" />
-            <div className="pointer-events-none absolute inset-6 -z-10 animate-pulse-ring rounded-full bg-blue-500/10 blur-xl [animation-delay:1s]" />
-
-            {/* Rotating dashed orbit ring */}
-            <div
-              aria-hidden
-              className="pointer-events-none absolute inset-4 -z-10 animate-spin-slow rounded-full border-2 border-dashed border-blue-400/20"
-              style={{ animationDuration: '30s' }}
-            />
-
-            {/* Floating + breathing image */}
-            <div className="animate-float">
-              <div className="animate-breathe">
-                <img
-                  src="/ai-brain.jpg"
-                  alt="AI holographic brain"
-                  width={1200}
-                  height={939}
-                  loading="eager"
-                  fetchPriority="high"
-                  decoding="async"
-                  className="h-auto w-full object-contain"
-                />
-                {/* Scanline sweeping over the image */}
-                <div className="pointer-events-none absolute inset-x-10 h-28 animate-scanline rounded-full bg-gradient-to-b from-transparent via-blue-400/15 to-transparent" />
-              </div>
-            </div>
-
-            {/* Orbiting light particles */}
-            <div
-              aria-hidden
-              className="pointer-events-none absolute left-1/2 top-1/2 h-0 w-0"
-              style={{ ['--orbit-r' as string]: 'min(48%, 160px)' }}
-            >
-              <span className="absolute h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 animate-orbit rounded-full bg-blue-400/80 shadow-[0_0_12px_rgba(59,130,246,0.8)]" />
-              <span
-                className="absolute h-2 w-2 -translate-x-1/2 -translate-y-1/2 animate-orbit rounded-full bg-cyan-300/80 shadow-[0_0_10px_rgba(103,232,249,0.8)]"
-                style={{ animationDelay: '3.5s' }}
-              />
-              <span
-                className="absolute h-1.5 w-1.5 -translate-x-1/2 -translate-y-1/2 animate-orbit rounded-full bg-indigo-300/80 shadow-[0_0_8px_rgba(165,180,252,0.8)]"
-                style={{ animationDelay: '7s' }}
-              />
-            </div>
-          </div>
+          <HologramVisual />
         </motion.div>
       </div>
 
