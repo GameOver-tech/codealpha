@@ -1,3 +1,4 @@
+import asyncio
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -13,15 +14,34 @@ from app.utils.exceptions import TranscriptionError
 logger = get_logger(__name__)
 
 
+async def _run_migrations() -> None:
+    """Apply pending Alembic migrations before serving requests.
+
+    Runs in a thread so Alembic's sync/async entrypoint (``env.py`` uses
+    ``asyncio.run``) never collides with the app's running event loop.
+    """
+    from alembic import command
+    from alembic.config import Config
+    from pathlib import Path
+
+    backend_dir = Path(__file__).resolve().parent.parent
+    cfg = Config(str(backend_dir / "alembic.ini"))
+    cfg.set_main_option("script_location", str(backend_dir / "migrations"))
+    await asyncio.to_thread(command.upgrade, cfg, "head")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup/shutdown hooks.
 
-    On startup, sweep any interviews left stuck in 'processing' (e.g. from
-    a crashed worker) into the terminal FAILED state so nothing is ever
-    stuck forever.
+    On startup, ensure the database schema is up to date, then sweep any
+    interviews left stuck in 'processing' (e.g. from a crashed worker) into
+    the terminal FAILED state so nothing is ever stuck forever.
     """
     try:
+        await _run_migrations()
+        logger.info("Database migrations are up to date.")
+
         from app.core.database import AsyncSessionLocal
         from app.services.pipeline_service import (
             sweep_orphaned_media,
@@ -36,7 +56,7 @@ async def lifespan(app: FastAPI):
             if purged:
                 logger.info("Startup media sweep purged %s orphaned file(s)", purged)
     except Exception:  # noqa: BLE001
-        logger.exception("Startup stuck-interview sweep failed")
+        logger.exception("Startup initialization failed")
     yield
 
 

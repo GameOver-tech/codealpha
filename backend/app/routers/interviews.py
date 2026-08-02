@@ -49,6 +49,7 @@ def _status_out(interview) -> InterviewStatusOut:
         failure_stage=interview.failure_stage,
         processing_finished_at=interview.processing_finished_at,
         recommendation=rec.verdict.value if rec else None,
+        has_speech=interview.has_speech,
     )
 
 
@@ -116,6 +117,7 @@ async def get_interview_result(
         duration_seconds=duration,
         recommendation=verdict,
         message=message,
+        has_speech=interview.has_speech,
     )
 
 

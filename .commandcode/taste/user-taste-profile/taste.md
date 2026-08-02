@@ -29,7 +29,7 @@
 - Expects code-quality conventions in generated code: typed function signatures, docstrings, structured logging, error handling with retry mechanisms on external API calls, and reusable components. Confidence: 0.8
 - Expects API hardening beyond authentication: rate limiting, secure file upload validation (extension/MIME whitelist + size limits), input validation at every boundary, SQL injection protection, configurable CORS, and no hardcoded secrets. Confidence: 0.8
 - Writes detailed master specs (exact endpoint paths, DB table names, status enums, progress percentages, retry counts, and exact UI copy) and expects exact adherence to those details without deviation or simplification. Confidence: 0.85
-- When the app is configured against a database, considers fixing the actual DB connection (real credentials, running the migration) part of resolving API failures — a misconfigured/unmigrated database is a root cause to fix, not a limitation to report. Confidence: 0.7
+- When the app is configured against a database, considers fixing the actual DB connection (real credentials, running the migration) part of resolving API failures — a misconfigured/unmigrated database is a root cause to fix, not a limitation to report (e.g., a backend startup crash where the app model queries a column the DB doesn't have because `alembic upgrade head` was never applied is fixed by applying the migration and verifying the data actually fetches). Confidence: 0.8
 - Values catching subtle framework pitfalls that only surface at runtime (e.g., Pydantic v2 not coercing UUID→str in response models, SQLAlchemy async lazy-loading causing MissingGreenlet) and expects them to be fixed at the root rather than worked around in tests. Confidence: 0.75
 - Demands strict data provenance and anti-fabrication guarantees in AI pipelines: transcripts, scores, reports, and PDFs must be generated ONLY from the real uploaded input, and the LLM must only analyze (never invent, rewrite, expand, or replace) source content — gated by validations (non-empty, minimum length, source check) before any downstream step. Confidence: 0.95
 - Prefers fail-fast pipeline behavior on upstream failures (e.g., speech-to-text): stop processing, never continue to downstream AI evaluation, mark the job failed, and return a structured HTTP 500 with the exact error contract rather than degrading gracefully with fabricated data. Confidence: 0.95
@@ -41,7 +41,7 @@
 - Wants job status to propagate to the UI immediately and never contradict the terminal state: once an interview fails (or completes), no UI surface (notifications bell, candidates page, status badges) may keep showing it as "Processing" — stale TTL-cached statuses are the bug and must be fixed at the root by invalidating caches on every pipeline status transition (`_set_status`, `_fail`), not just on admin mutations. Confidence: 0.85
 - Expects SPA-aware navigation in React Router apps: nav/dropdown links must route through the router (smooth-scroll to the section when already on the landing page, navigate to `/` with router state when coming from another route) instead of raw `<a href="/#...">` anchors that cause full-page reloads; a `scroll-padding-top` offset must be set on `html` so fixed navbars don't cover anchored section headings. Confidence: 0.8
 - When fixing a component's state bug (e.g., a dropdown that never closes), expects all stale leftover code from the edit (orphaned markup, wrong-state close handlers, redundant double navigation) to be cleaned up in the same change and the result verified with a typecheck and production build. Confidence: 0.8
-- Runs the backend dev server himself via `uvicorn app.main:app --reload` on port 8000 (also tried `fastapi dev`); expects the environment to be left clean — leftover background servers holding port 8000 must be stopped (not worked around by changing ports), and a port-in-use `[WinError 10013]` should be diagnosed as a stale process and resolved by freeing the port. Confidence: 0.9
+- Runs the backend dev server himself — both `uvicorn app.main:app --reload` and `fastapi dev` on port 8000; expects the environment to be left clean — leftover background servers holding port 8000 must be stopped (not worked around by changing ports), and a port-in-use `[WinError 10013]` should be diagnosed as a stale process and resolved by freeing the port. Confidence: 0.9
 - Wants a 0–100% processing progress tracker with a current-stage label persisted at every stage transition and exposed through a dedicated API endpoint (e.g., `GET /api/admin/interview/{id}/progress`) so clients can poll live status. Confidence: 0.8
 - Requires explicit retry contracts for external services — Deepgram, LLM, and storage upload each retried 3 times with backoff, and the job marked Failed if retries are exhausted. Confidence: 0.8
 - Expects explicit performance targets for background pipelines (start within ~1s of upload, upload endpoint responds in <2s) and wants blocking operations avoided via async/await throughout. Confidence: 0.7
@@ -80,7 +80,7 @@
 - When merging a collaborator's branch, executes the merge selectively via `git checkout <remote> -- <files>` (cherry-picking only the good files) rather than a raw `git merge` that would create conflicts and risk losing the user's better implementations — and validates the selective merge with backend tests, frontend typecheck, and a production build. Confidence: 0.85
 - Prefers adopting a trusted collaborator's coherent new feature files wholesale (e.g., their entire new voice/TTS system: `useVoice`, `audioManager`, `readingEngine`, `reading/` components, updated consumers) over hand-porting piecemeal — while still swapping in the user's own better hook/endpoint (e.g., `useAdminInterviewMeta`) inside the adopted file rather than regressing to the collaborator's heavier approach. Confidence: 0.75
 - Prefers fetch-and-analyze-before-merging: on a collaborator merge request, first `git fetch`, inspect the remote's new commits (`git log HEAD..origin/branch`), check the working tree is clean, and diff each file (backend + frontend) to judge per-file quality before deciding what to adopt — not just blindly pulling. Confidence: 0.75
-- Communicates in Roman Urdu (Hinglish) mixed with English, using colloquial phrasing for feature/copy-change requests ("us ki achi chzain... add karo", ""Your AI-powered talent evaluation partner" is ko replace karo is say ...", "blurness ko khatam kr do mokamil tor per... aur enhance karo"); expects the assistant to interpret the intent and act on it directly. Confidence: 0.8
+- Communicates in Roman Urdu (Hinglish) mixed with English, using colloquial phrasing for feature/copy-change requests ("us ki achi chzain... add karo", ""Your AI-powered talent evaluation partner" is ko replace karo is say ...", "blurness ko khatam kr do mokamil tor per... aur enhance karo"); expects the assistant to interpret the intent and act on it directly. Confidence: 0.85
 - Prefers reusing proven, working code from trusted sources (e.g., a friend's integration branch) over reimplementing features from scratch — instructs the assistant to run `git pull`/merge directly and cherry-pick only the good, working functionality (e.g., chatbot, fast loading) into the current codebase while leaving the rest. Confidence: 0.7
 - When the user reports the system "loading slowly" / wants everything faster, expects the assistant to first diagnose performance empirically (bundle chunk audit, polling/duplicate-fetch audit, render-blocking resources, DB query hotspots) before changing anything, and to fix only what the evidence shows — verifying wins with measured chunk sizes and passing tests. Confidence: 0.8
 - Expects deferrable UI work (heavy or rarely-used components such as an AI chat sidebar pulling in markdown/voice deps) to be lazy-loaded with `React.lazy` + `Suspense` so it never blocks the initial paint of every page, and heavy vendor libs (charts, forms, dropzone) to be code-split via Vite `manualChunks` so they only download on the pages that need them. Confidence: 0.85
@@ -119,6 +119,30 @@
  while leaving the rest. Confidence: 0.7
 
 - Believes the first impression decides the final outcome ("first impression ... winning audience attraction and attention in nano second") — the above-the-fold hero must win attention within the first seconds, so landing pages should lead with high-impact visuals, motion, and instant credibility signals (proof stats, ratings, live-status chips) before any secondary content. Confidence: 0.8
+
+ while leaving the rest. Confidence: 0.7
+
+re any secondary content. Confidence: 0.8
+
+ while leaving the rest. Confidence: 0.7
+
+ls, motion, and instant credibility signals (proof stats, ratings, live-status chips) before any secondary content. Confidence: 0.8
+
+ while leaving the rest. Confidence: 0.7
+
+re any secondary content. Confidence: 0.8
+
+ while leaving the rest. Confidence: 0.7
+
+dence: 0.7
+
+re any secondary content. Confidence: 0.8
+
+ while leaving the rest. Confidence: 0.7
+
+ while leaving the rest. Confidence: 0.7
+
+g pages should lead with high-impact visuals, motion, and instant credibility signals (proof stats, ratings, live-status chips) before any secondary content. Confidence: 0.8
 
  while leaving the rest. Confidence: 0.7
 

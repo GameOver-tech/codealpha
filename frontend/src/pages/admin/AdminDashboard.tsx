@@ -429,7 +429,11 @@ export function AdminDashboard() {
                         {Math.round(interview.overall_score)}
                       </span>
                     )}
-                    <RecommendationBadge verdict={interview.recommendation} />
+                    {interview.has_speech === false ? (
+                      <span className="text-xs font-semibold text-muted-foreground">No speech</span>
+                    ) : (
+                      <RecommendationBadge verdict={interview.recommendation} />
+                    )}
                     <StatusBadge status={interview.status} />
                   </div>
                 </Link>

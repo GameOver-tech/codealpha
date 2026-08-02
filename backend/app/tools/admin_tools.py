@@ -27,7 +27,7 @@ from app.utils.exceptions import BadRequestError, NotFoundError
 logger = get_logger(__name__)
 
 VALID_ADMIN_STATUSES = {
-    "Pending", "Processing", "Completed", "Recommended",
+    "Processing", "Completed", "Recommended",
     "Not Recommended", "Need Further Review", "Rejected", "Selected",
 }
 
@@ -73,6 +73,7 @@ def _serialize_interview(interview) -> dict:
         "duration_seconds": interview.duration_seconds,
         "created_at": interview.created_at.isoformat() if interview.created_at else None,
         "completed_at": interview.completed_at.isoformat() if interview.completed_at else None,
+        "has_speech": interview.has_speech,
     }
 
 
@@ -390,6 +391,7 @@ async def get_interview_details(db: AsyncSession, actor: User, **args) -> dict:
     return {
         "interview": _serialize_interview(interview),
         "transcript": interview.transcript.full_text if interview.transcript else None,
+        "has_speech": interview.has_speech,
         "technical_evaluation": tech_dict,
         "sentiment_analysis": {
             "sentiment": interview.sentiment_analysis.sentiment,

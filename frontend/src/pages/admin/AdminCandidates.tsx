@@ -265,6 +265,8 @@ export function AdminCandidates() {
                           <span className="font-display text-base font-bold text-foreground">
                             {Math.round(interview.overall_score)}
                           </span>
+                        ) : interview.has_speech === false ? (
+                          <span className="text-xs font-semibold text-muted-foreground">No speech</span>
                         ) : (
                           <span className="text-muted-foreground">—</span>
                         )}

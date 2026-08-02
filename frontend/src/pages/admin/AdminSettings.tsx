@@ -2,13 +2,12 @@ import { useMutation } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { KeyRound, ShieldCheck, Bell, Palette, UserRound } from 'lucide-react'
+import { KeyRound, ShieldCheck, UserRound } from 'lucide-react'
 import toast from 'react-hot-toast'
-import { Button, Card, CardContent, Input, Label, Switch } from '@/components/ui'
+import { Button, Card, CardContent, Input, Label } from '@/components/ui'
 import { PageHeader } from '@/components/shared'
 import { authApi, getErrorMessage } from '@/services/api'
 import { useAuth } from '@/context'
-import { useState } from 'react'
 
 const passwordSchema = z
   .object({
@@ -32,37 +31,8 @@ const personalSchema = z.object({
 
 type PersonalForm = z.infer<typeof personalSchema>
 
-const SETTINGS_CATEGORIES = [
-  {
-    id: 'general',
-    label: 'General',
-    description: 'Account, profile and workspace preferences.',
-    icon: KeyRound,
-  },
-  {
-    id: 'security',
-    label: 'Security',
-    description: 'Password and sign-in security.',
-    icon: ShieldCheck,
-  },
-  {
-    id: 'notifications',
-    label: 'Notifications',
-    description: 'Email and platform notifications.',
-    icon: Bell,
-  },
-  {
-    id: 'appearance',
-    label: 'Appearance',
-    description: 'Theme and display preferences.',
-    icon: Palette,
-  },
-]
-
 export function AdminSettings() {
   const { user, refreshUser } = useAuth()
-  const [notifications, setNotifications] = useState(true)
-  const [securityAlerts, setSecurityAlerts] = useState(true)
 
   const passwordForm = useForm<PasswordForm>({ resolver: zodResolver(passwordSchema) })
 
@@ -101,21 +71,6 @@ export function AdminSettings() {
   return (
     <div className="space-y-6">
       <PageHeader title="Settings" description="Manage your admin account and workspace preferences." />
-
-      {/* Settings categories */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {SETTINGS_CATEGORIES.map((cat) => (
-          <Card key={cat.id} className="card-hover">
-            <CardContent className="p-5">
-              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                <cat.icon className="h-5 w-5" />
-              </span>
-              <h3 className="mt-3 font-display text-sm font-bold text-foreground">{cat.label}</h3>
-              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{cat.description}</p>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
 
       {/* Personal information */}
       <Card>
@@ -270,44 +225,6 @@ export function AdminSettings() {
               Update password
             </Button>
           </form>
-        </CardContent>
-      </Card>
-
-      {/* Notifications */}
-      <Card>
-        <CardContent className="space-y-5 p-6">
-          <div className="flex items-start gap-4">
-            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-              <Bell className="h-5 w-5" />
-            </span>
-            <div className="flex-1">
-              <h3 className="font-display text-base font-bold text-foreground">Notifications</h3>
-              <p className="mt-0.5 text-sm text-muted-foreground">
-                Choose what updates you want to receive.
-              </p>
-            </div>
-          </div>
-
-          <div className="space-y-4">
-            <div className="flex items-center justify-between rounded-xl border border-border/60 p-4">
-              <div>
-                <p className="text-sm font-semibold text-foreground">Email notifications</p>
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                  Receive an email when a report is ready.
-                </p>
-              </div>
-              <Switch checked={notifications} onCheckedChange={setNotifications} aria-label="Toggle email notifications" />
-            </div>
-            <div className="flex items-center justify-between rounded-xl border border-border/60 p-4">
-              <div>
-                <p className="text-sm font-semibold text-foreground">Security alerts</p>
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                  Get notified about sign-ins and password changes.
-                </p>
-              </div>
-              <Switch checked={securityAlerts} onCheckedChange={setSecurityAlerts} aria-label="Toggle security alerts" />
-            </div>
-          </div>
         </CardContent>
       </Card>
     </div>

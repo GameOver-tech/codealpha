@@ -359,6 +359,7 @@ async def get_analysis(
         weaknesses=weaknesses,
         recommendation=interview.recommendation,
         report=report,
+        has_speech=interview.has_speech,
     ).model_dump(mode="json")
 
     _analysis_cache[interview_id] = (now, bundle)
@@ -544,6 +545,7 @@ async def get_admin_dashboard(
                     else None
                 ),
                 "created_at": interview.created_at.isoformat() if interview.created_at else None,
+                "has_speech": interview.has_speech,
             }
         )
 
@@ -615,6 +617,7 @@ async def list_interviews(
                     else None
                 ),
                 "created_at": interview.created_at.isoformat() if interview.created_at else None,
+                "has_speech": interview.has_speech,
             }
         )
 
@@ -672,6 +675,7 @@ async def get_interview_meta(
             else None
         ),
         "created_at": interview.created_at.isoformat() if interview.created_at else None,
+        "has_speech": interview.has_speech,
     }
 
 
@@ -710,7 +714,7 @@ async def regenerate_result(
 
 
 VALID_ADMIN_STATUSES = {
-    "Pending", "Processing", "Completed", "Recommended",
+    "Processing", "Completed", "Recommended",
     "Not Recommended", "Need Further Review", "Rejected", "Selected",
 }
 
@@ -724,7 +728,7 @@ async def update_interview_status(
 ):
     """Update the admin review status of an interview.
 
-    Allowed values: Pending, Processing, Completed, Recommended,
+    Allowed values: Processing, Completed, Recommended,
     Not Recommended, Need Further Review, Rejected, Selected.
     Saved immediately; the candidate sees it on their next refresh.
     """

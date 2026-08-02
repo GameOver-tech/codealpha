@@ -41,7 +41,7 @@ def send_result_email(
             ),
         }
 
-    verdict_line = verdict or "Pending"
+    verdict_line = verdict or "No verdict yet"
     subject = f"Your interview result — {job_title}"
 
     body = (

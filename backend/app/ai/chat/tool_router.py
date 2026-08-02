@@ -104,7 +104,7 @@ ADMIN_TOOLS: dict = {
         admin_tools.list_interviews,
     ),
     "update_interview_status": (
-        "Update an interview's admin review status. Valid values: Pending, Processing, "
+        "Update an interview's admin review status. Valid values: Processing, "
         "Completed, Recommended, Not Recommended, Need Further Review, Rejected, Selected.",
         _params(
             interview_id=_str("The interview UUID", required=True),

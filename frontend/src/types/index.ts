@@ -78,6 +78,7 @@ export interface InterviewStatus {
   failure_stage: string
   processing_finished_at: string | null
   recommendation: string | null
+  has_speech: boolean
 }
 
 export type RecommendationVerdict = 'Recommended' | 'Not Recommended' | 'Need Further Review'
@@ -182,6 +183,7 @@ export interface CandidateSummary {
   duration_seconds: number
   recommendation: string | null
   message: string
+  has_speech: boolean
 }
 
 export interface TranscriptSegment {
@@ -217,6 +219,7 @@ export interface AnalysisBundle {
   weaknesses: string[]
   recommendation: Recommendation | null
   report: Report | null
+  has_speech: boolean
 }
 
 export interface Profile {
@@ -291,6 +294,7 @@ export interface AdminInterview {
   failure_stage: string
   processing_finished_at: string | null
   created_at: string | null
+  has_speech: boolean
 }
 
 export interface RecommendationMessage {
@@ -322,6 +326,7 @@ export interface AdminDashboardRecent {
   recommendation: RecommendationVerdict | null
   profile_picture_url: string | null
   created_at: string | null
+  has_speech: boolean
 }
 
 export interface AdminDashboard {

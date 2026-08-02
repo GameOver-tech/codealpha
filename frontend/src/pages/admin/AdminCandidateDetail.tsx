@@ -131,6 +131,7 @@ export function AdminCandidateDetail() {
   const report = bundle?.report
   const transcript = bundle?.transcript
   const scores = bundle?.scores
+  const hasSpeech = bundle?.has_speech ?? true
 
   const radarData = SCORE_LABELS.filter((s) => scores && scores[s.key as keyof typeof scores] !== undefined).map((s) => ({
     axis: s.label,
@@ -350,6 +351,54 @@ export function AdminCandidateDetail() {
           </Button>
         }
       />
+    )
+  }
+
+  // No speech in the recording — there is no transcript, evaluation or AI
+  // analysis to show. Present a clean "no speech detected" state instead of
+  // empty/meaningless tabs.
+  if (!hasSpeech) {
+    return (
+      <div className="space-y-6">
+        <PageHeader
+          title={meta?.candidate_name ?? 'Candidate Report'}
+          description={meta?.candidate_email ?? interviewId}
+          actions={
+            <Button asChild variant="outline">
+              <Link to="/admin/candidates">Back to candidates</Link>
+            </Button>
+          }
+        />
+
+        {/* Meta strip */}
+        <div className="flex flex-wrap items-center gap-3">
+          <Button variant="ghost" size="sm" asChild>
+            <Link to="/admin/candidates">
+              <ArrowLeft />
+              Back to candidates
+            </Link>
+          </Button>
+          {meta && <Badge variant="secondary">{meta.job_title}</Badge>}
+          {meta && <StatusBadge status={meta.status} />}
+          {meta && <AdminStatusBadge status={meta.admin_status} />}
+          {meta?.duration_seconds ? (
+            <Badge variant="outline">{formatDuration(meta.duration_seconds)}</Badge>
+          ) : null}
+        </div>
+
+        <Card className="border-warning/30">
+          <CardContent className="flex flex-col items-center gap-4 p-12 text-center">
+            <span className="flex h-16 w-16 items-center justify-center rounded-2xl bg-warning/10 text-warning">
+              <AlertTriangle className="h-8 w-8" />
+            </span>
+            <h2 className="font-display text-xl font-bold text-foreground">No speech detected</h2>
+            <p className="max-w-md text-sm leading-relaxed text-muted-foreground">
+              This recording contains no audible speech, so no transcript, evaluation or AI
+              analysis could be generated. Check the uploaded file and re-upload if needed.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
     )
   }
 

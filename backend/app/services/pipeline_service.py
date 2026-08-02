@@ -77,6 +77,17 @@ def _duration_from_segments(segments: list[dict[str, Any]] | None) -> int:
     return duration_from_segments(segments)
 
 
+def _has_usable_speech_text(full_text: str | None) -> bool:
+    """Whether a stored transcript contains enough speech to evaluate.
+
+    Mirrors the Deepgram-side heuristic: empty/whitespace-only or trivially
+    short (≤ 20 chars) text means the recording had no audible speech.
+    """
+    if not full_text or not full_text.strip():
+        return False
+    return len(full_text.strip()) > 20
+
+
 class InterviewPipeline:
     """Runs the multi-stage evaluation pipeline for one interview."""
 
@@ -297,14 +308,42 @@ class InterviewPipeline:
             if not duration:
                 duration = int(interview.duration_seconds or 0)
             interview.duration_seconds = duration
+            interview.has_speech = bool(result.get("has_speech", True))
             await self.db.commit()
             logger.info(
-                "[Stage 4] Transcript saved: length=%s duration=%ss",
+                "[Stage 4] Transcript saved: length=%s duration=%ss has_speech=%s",
                 len(transcript.full_text),
                 interview.duration_seconds,
+                interview.has_speech,
             )
+        else:
+            # Transcript already exists (regenerate path) — derive speech
+            # presence from the stored text so we never evaluate silence.
+            interview.has_speech = _has_usable_speech_text(transcript.full_text)
+            await self.db.commit()
 
-        # Validate before ANY downstream step.
+        # Validate before ANY downstream step. When the recording contained
+        # no audible speech, complete the interview WITHOUT generating any
+        # evaluation artifacts — the admin UI shows a "no speech detected"
+        # state instead of meaningless analysis.
+        if not interview.has_speech:
+            logger.info(
+                "No speech detected for interview %s — completing without evaluation.",
+                interview_id,
+            )
+            interview.has_speech = False
+            await self._set_status(interview_id, InterviewStatus.COMPLETED)
+            await self.activity.log(
+                interview.candidate_id,
+                "interview_processed",
+                "interview",
+                str(interview_id),
+                {"status": "completed", "has_speech": False},
+            )
+            await self.db.commit()
+            await self._cleanup_media(interview_id)
+            return interview
+
         self._validate_transcript_source(transcript)
         logger.info(
             "Transcript source=%s length=%s preview=%r",

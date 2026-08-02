@@ -21,7 +21,7 @@ class InterviewStatusOut(ORMModel):
     id: uuid.UUID
     title: str
     status: str
-    admin_status: str = "Pending"
+    admin_status: str = "Processing"
     job_title: str
     created_at: datetime | None = None
     updated_at: datetime | None = None
@@ -31,6 +31,7 @@ class InterviewStatusOut(ORMModel):
     failure_stage: str = ""
     processing_finished_at: datetime | None = None
     recommendation: str | None = None
+    has_speech: bool = True
 
 
 class UploadResponse(BaseModel):
@@ -159,13 +160,14 @@ class CandidateSummary(BaseModel):
 
     interview_id: str
     status: str
-    admin_status: str = "Pending"
+    admin_status: str = "Processing"
     candidate_name: str
     candidate_email: str
     interview_date: datetime | None = None
     duration_seconds: int = 0
     recommendation: str | None = None
     message: str = ""
+    has_speech: bool = True
 
 
 class PdfMeta(BaseModel):
@@ -189,3 +191,4 @@ class AnalysisBundle(BaseModel):
     weaknesses: list[str] = []
     recommendation: RecommendationOut | None = None
     report: ReportOut | None = None
+    has_speech: bool = True

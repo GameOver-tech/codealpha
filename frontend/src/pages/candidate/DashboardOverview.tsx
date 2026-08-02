@@ -24,10 +24,10 @@ export function DashboardOverview() {
   const isLoading = statusQuery.isLoading || statusQuery.isFetching
 
   // Derive the candidate-visible state strictly from backend data.
-  //  - no interview record -> Pending
+  //  - no interview record -> No interview yet
   //  - interview exists, not completed -> In Review
   //  - backend status completed -> Completed
-  const isPending = !status && !statusQuery.isLoading
+  const hasNoInterview = !status && !statusQuery.isLoading
   const isCompleted = status?.status === 'completed'
 
   const handleRefresh = async () => {
@@ -73,8 +73,8 @@ export function DashboardOverview() {
               </div>
             </CardContent>
           </Card>
-        ) : isPending ? (
-          /* PENDING — no interview record exists yet. */
+        ) : hasNoInterview ? (
+          /* NO INTERVIEW — no interview record exists yet. */
           <Card>
             <CardContent className="flex flex-col items-center p-10 text-center">
               <motion.div
@@ -87,9 +87,9 @@ export function DashboardOverview() {
                   <Inbox className="h-8 w-8" />
                 </span>
                 <div className="mt-5">
-                  <StatusBadge status="pending" />
+                  <StatusBadge status="uploaded" />
                 </div>
-                <h2 className="mt-4 font-display text-xl font-bold text-foreground">Interview Pending</h2>
+                <h2 className="mt-4 font-display text-xl font-bold text-foreground">No interview yet</h2>
                 <p className="mt-2 max-w-md text-sm leading-relaxed text-muted-foreground">
                   No interview has been uploaded yet. Please wait until the recruiter uploads your
                   interview.
@@ -134,12 +134,21 @@ export function DashboardOverview() {
                   Duration: {formatDuration(status.duration_seconds)}
                 </p>
 
-                <div className="mt-6 flex flex-wrap gap-3">
-                  <Button onClick={() => navigate('/dashboard/results')}>
-                    <FileText />
-                    View Results
-                  </Button>
-                </div>
+                {status.has_speech === false ? (
+                  <div className="mt-6">
+                    <p className="text-sm leading-relaxed text-muted-foreground">
+                      No speech was detected in your recording, so no evaluation could be
+                      generated. Please contact your recruiter to re-upload.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="mt-6 flex flex-wrap gap-3">
+                    <Button onClick={() => navigate('/dashboard/results')}>
+                      <FileText />
+                      View Results
+                    </Button>
+                  </div>
+                )}
               </CardContent>
 
               <div className="flex flex-col items-center justify-center gap-3 border-t border-border/60 bg-gradient-to-br from-success/10 to-transparent p-6 md:border-l md:border-t-0 md:p-10">
@@ -148,7 +157,9 @@ export function DashboardOverview() {
                 </span>
                 <p className="text-center text-sm font-semibold text-foreground">Evaluation complete</p>
                 <p className="max-w-[220px] text-center text-xs text-muted-foreground">
-                  Your full AI evaluation is ready on the Results page.
+                  {status.has_speech === false
+                    ? 'The recording contained no audible speech.'
+                    : 'Your full AI evaluation is ready on the Results page.'}
                 </p>
               </div>
             </div>
@@ -207,7 +218,7 @@ export function DashboardOverview() {
             <div className="min-w-0">
               <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Interview status</p>
               <p className="mt-0.5 truncate font-display text-lg font-bold capitalize text-foreground">
-                {isPending ? 'Pending' : isCompleted ? 'Completed' : status?.status === 'failed' ? 'Failed' : 'In Review'}
+                {hasNoInterview ? 'No Interview' : isCompleted ? 'Completed' : status?.status === 'failed' ? 'Failed' : 'In Review'}
               </p>
               <p className="truncate text-xs text-muted-foreground">
                 {status?.job_title || 'No interview yet'}
