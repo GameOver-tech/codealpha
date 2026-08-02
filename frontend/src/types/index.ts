@@ -341,6 +341,39 @@ export interface RegisteredCandidate {
   email: string
 }
 
+export interface AdminCandidateLatestInterview {
+  id: string
+  job_title: string
+  status: InterviewStatusValue
+  admin_status: string
+  overall_score: number | null
+  recommendation: RecommendationVerdict | null
+  created_at: string | null
+}
+
+/** One row per registered candidate (with or without interviews). */
+export interface AdminCandidate {
+  id: string
+  full_name: string
+  email: string
+  phone: string | null
+  gender: string | null
+  is_active: boolean
+  created_at: string | null
+  profile_picture_url: string | null
+  interview_count: number
+  has_interview: boolean
+  latest_interview: AdminCandidateLatestInterview | null
+}
+
+export interface CandidateUpdatePayload {
+  first_name?: string
+  last_name?: string
+  phone?: string
+  gender?: string
+  is_active?: boolean
+}
+
 export type ScoreMap = Partial<Record<keyof Scores, number>>
 
 export interface ApiError {

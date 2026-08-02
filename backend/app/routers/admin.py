@@ -41,7 +41,7 @@ from app.schemas.interview import (
     RegenerateRequest,
     TranscriptOut,
 )
-from app.schemas.auth import RegisterRequest
+from app.schemas.auth import CandidateUpdate, RegisterRequest
 from app.schemas.profile import RecommendationMessage
 from app.services.pipeline_service import enqueue_interview_processing, run_interview_pipeline
 from app.storage.service import LocalStorage
@@ -850,6 +850,124 @@ async def list_registered_candidates(
         }
         for c in candidates
     ]
+
+
+@router.get("/candidates")
+async def list_candidates_with_interviews(
+    current_user: User = Depends(require_role("admin")),
+    db: AsyncSession = Depends(get_db),
+):
+    """List every active candidate with their interview summary.
+
+    Unlike ``/interviews`` (one row per interview), this returns one row per
+    candidate — including candidates who have never had an interview — so the
+    admin Candidates page can show the full pool and mark who has/hasn't been
+    interviewed yet.
+    """
+    from sqlalchemy import select
+    from sqlalchemy.orm import joinedload, selectinload
+
+    stmt = (
+        select(User)
+        .where(User.role == UserRole.CANDIDATE, User.is_active.is_(True))
+        .options(
+            joinedload(User.profile),
+            selectinload(User.interviews).joinedload(Interview.recommendation),
+            selectinload(User.interviews).joinedload(Interview.scores),
+        )
+        .order_by(User.first_name.asc(), User.last_name.asc())
+    )
+    result = await db.execute(stmt)
+    users = list(result.scalars().all())
+
+    items = []
+    for user in users:
+        interviews = sorted(
+            user.interviews,
+            key=lambda i: i.created_at or datetime.min,
+            reverse=True,
+        )
+        latest = interviews[0] if interviews else None
+        items.append(
+            {
+                "id": str(user.id),
+                "full_name": user.full_name,
+                "email": user.email,
+                "phone": user.phone,
+                "gender": user.gender,
+                "is_active": user.is_active,
+                "created_at": user.created_at.isoformat() if user.created_at else None,
+                "profile_picture_url": (
+                    user.profile.profile_picture_url if user.profile else None
+                ),
+                "interview_count": len(interviews),
+                "has_interview": len(interviews) > 0,
+                "latest_interview": (
+                    {
+                        "id": str(latest.id),
+                        "job_title": latest.job_title,
+                        "status": latest.status.value,
+                        "admin_status": latest.admin_status,
+                        "overall_score": (
+                            latest.scores.overall_score if latest.scores else None
+                        ),
+                        "recommendation": (
+                            latest.recommendation.verdict.value
+                            if latest.recommendation
+                            else None
+                        ),
+                        "created_at": (
+                            latest.created_at.isoformat() if latest.created_at else None
+                        ),
+                    }
+                    if latest
+                    else None
+                ),
+            }
+        )
+    return items
+
+
+@router.put("/candidate/{candidate_id}")
+async def update_candidate_by_id(
+    candidate_id: str,
+    payload: CandidateUpdate,
+    current_user: User = Depends(require_role("admin")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Update a candidate account's basic fields (name, phone, gender, active).
+
+    Mirrors the AI assistant's ``update_candidate`` tool as a REST endpoint,
+    keyed by candidate id to match ``DELETE /api/admin/candidate/{candidate_id}``.
+    """
+    repo = UserRepository(db)
+    user = await repo.get(str(candidate_id))
+    if user is None or user.role != UserRole.CANDIDATE:
+        raise NotFoundError("Candidate not found")
+
+    updated = {}
+    if payload.first_name is not None:
+        user.first_name = payload.first_name
+        updated["first_name"] = payload.first_name
+    if payload.last_name is not None:
+        user.last_name = payload.last_name
+        updated["last_name"] = payload.last_name
+    if payload.phone is not None:
+        user.phone = payload.phone
+        updated["phone"] = payload.phone
+    if payload.gender is not None:
+        user.gender = payload.gender
+        updated["gender"] = payload.gender
+    if payload.is_active is not None:
+        user.is_active = payload.is_active
+        updated["is_active"] = user.is_active
+        if user.auth_uid:
+            from app.dependencies.auth import invalidate_user_cache
+
+            invalidate_user_cache(str(user.auth_uid))
+
+    await db.commit()
+    return {"id": str(user.id), "updated": updated}
 
 
 @router.delete("/interview/{interview_id}", status_code=200)

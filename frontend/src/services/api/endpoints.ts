@@ -1,10 +1,12 @@
 import { api, API_BASE_URL, getToken } from './client'
 import type {
+  AdminCandidate,
   AdminDashboard,
   AdminInterview,
   AdminUploadResponse,
   AnalysisBundle,
   CandidateSummary,
+  CandidateUpdatePayload,
   ChangePasswordRequest,
   ChatRequest,
   InterviewProgress,
@@ -140,6 +142,14 @@ export const adminApi = {
   dashboard: () => api.get<AdminDashboard>('/api/admin/dashboard'),
 
   registeredCandidates: () => api.get<RegisteredCandidate[]>('/api/admin/candidates/registered'),
+
+  candidates: () => api.get<AdminCandidate[]>('/api/admin/candidates'),
+
+  updateCandidate: (candidateId: string, payload: CandidateUpdatePayload) =>
+    api.put<{ id: string; updated: Partial<CandidateUpdatePayload> }>(
+      `/api/admin/candidate/${candidateId}`,
+      payload,
+    ),
 
   createCandidate: (payload: RegisterRequest) =>
     api.post<{ id: string; email: string; name: string; message: string }>(

@@ -11,6 +11,16 @@ class RegisterRequest(BaseModel):
     gender: str = Field(default="", max_length=30)
 
 
+class CandidateUpdate(BaseModel):
+    """Admin edits to a candidate account (all fields optional)."""
+
+    first_name: str | None = Field(default=None, min_length=1, max_length=100)
+    last_name: str | None = Field(default=None, min_length=1, max_length=100)
+    phone: str | None = Field(default=None, max_length=30)
+    gender: str | None = Field(default=None, max_length=30)
+    is_active: bool | None = None
+
+
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=1)

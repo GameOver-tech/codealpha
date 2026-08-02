@@ -9,6 +9,7 @@ export const queryKeys = {
   interviewStatus: ['interview', 'status'] as const,
   interviewResult: ['interview', 'result'] as const,
   adminInterviews: ['admin', 'interviews'] as const,
+  adminCandidates: ['admin', 'candidates'] as const,
   adminInterviewMeta: (id: string) => ['admin', 'interview', 'meta', id] as const,
   adminDashboard: ['admin', 'dashboard'] as const,
   adminProgress: (id: string) => ['admin', 'progress', id] as const,
@@ -78,6 +79,15 @@ export function useAdminInterviews(enabled = true) {
       query.state.data && query.state.data.some((i) => ['uploaded', 'processing', 'transcript_ready', 'ai_evaluation', 'pdf_generated'].includes(i.status))
         ? 15 * 1000
         : 60 * 1000,
+  })
+}
+
+export function useAdminCandidates(enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.adminCandidates,
+    queryFn: async () => (await adminApi.candidates()).data,
+    enabled,
+    staleTime: 30 * 1000,
   })
 }
 

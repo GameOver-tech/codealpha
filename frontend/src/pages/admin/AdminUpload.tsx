@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useDropzone } from 'react-dropzone'
 import { useQuery } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -16,6 +16,7 @@ const MAX_SIZE = 200 * 1024 * 1024 // 200 MB
 
 export function AdminUpload() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const [file, setFile] = useState<File | null>(null)
   const [selected, setSelected] = useState<RegisteredCandidate | null>(null)
   const [query, setQuery] = useState('')
@@ -36,6 +37,19 @@ export function AdminUpload() {
     queryFn: async () => (await adminApi.registeredCandidates()).data,
     staleTime: 5 * 60 * 1000,
   })
+
+  // Preselect a candidate arriving via ?candidate=<email> (from the All
+  // Candidates view). Only auto-selects once — a manual pick wins afterwards.
+  const preselectedEmail = searchParams.get('candidate')
+  const appliedPreselection = useRef(false)
+  useEffect(() => {
+    if (appliedPreselection.current || !preselectedEmail || selected) return
+    const match = candidates.find((c) => c.email.toLowerCase() === preselectedEmail.toLowerCase())
+    if (match) {
+      setSelected(match)
+      appliedPreselection.current = true
+    }
+  }, [candidates, preselectedEmail, selected])
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
