@@ -4,6 +4,7 @@ regenerate results from a stored transcript, and delete interviews.
 from __future__ import annotations
 
 import asyncio
+import json
 import time
 import traceback
 import uuid
@@ -105,6 +106,7 @@ async def upload_interview(
     candidate_email: str = Form(...),
     job_title: str = Form(default="Interview"),
     job_description: str = Form(default=""),
+    evaluation_criteria: str = Form(default=""),
     background_tasks: BackgroundTasks = BackgroundTasks(),
     current_user: User = Depends(require_role("admin")),
     db: AsyncSession = Depends(get_db),
@@ -136,11 +138,22 @@ async def upload_interview(
             f"'{candidate_email}' is not a candidate account — only candidates can be evaluated."
         )
 
+    # Parse the selected evaluation criteria (JSON array string from the form).
+    # Empty/invalid → [] = evaluate all 10 competencies (backward compatible).
+    try:
+        parsed_criteria = json.loads(evaluation_criteria) if evaluation_criteria.strip() else []
+        if not isinstance(parsed_criteria, list):
+            parsed_criteria = []
+        criteria = [str(c) for c in parsed_criteria]
+    except (ValueError, TypeError):
+        criteria = []
+
     interviews = InterviewRepository(db)
     interview = await interviews.create(
         candidate_id=candidate.id,
         job_title=job_title,
         job_description=job_description,
+        evaluation_criteria=criteria,
     )
     await db.flush()
 
@@ -178,6 +191,7 @@ async def upload_interview(
             "size_bytes": size_bytes,
             "candidate_id": str(candidate.id),
             "duration_seconds": duration,
+            "evaluation_criteria": criteria,
         },
     )
     await db.commit()
@@ -361,6 +375,7 @@ async def get_analysis(
         recommendation=interview.recommendation,
         report=report,
         has_speech=interview.has_speech,
+        evaluation_criteria=interview.evaluation_criteria or [],
     ).model_dump(mode="json")
 
     _analysis_cache[interview_id] = (now, bundle)
@@ -603,6 +618,7 @@ async def list_interviews(
                 "candidate_email": candidate.email if candidate else "—",
                 "candidate_profile": profile,
                 "admin_status": interview.admin_status,
+                "evaluation_criteria": interview.evaluation_criteria or [],
                 "job_title": interview.job_title,
                 "status": interview.status.value,
                 "progress": interview.processing_progress,
@@ -661,6 +677,7 @@ async def get_interview_meta(
         "candidate_email": candidate.email if candidate else "—",
         "candidate_profile": profile,
         "admin_status": interview.admin_status,
+        "evaluation_criteria": interview.evaluation_criteria or [],
         "job_title": interview.job_title,
         "status": interview.status.value,
         "progress": interview.processing_progress,

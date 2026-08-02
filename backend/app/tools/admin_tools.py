@@ -63,6 +63,7 @@ def _serialize_interview(interview) -> dict:
         "job_title": interview.job_title,
         "status": interview.status.value,
         "admin_status": interview.admin_status,
+        "evaluation_criteria": interview.evaluation_criteria or [],
         "overall_score": scores.overall_score if scores else None,
         "scores": scores.score_map if scores else None,
         "recommendation": rec.verdict.value if rec else None,

@@ -220,6 +220,7 @@ export interface AnalysisBundle {
   recommendation: Recommendation | null
   report: Report | null
   has_speech: boolean
+  evaluation_criteria: string[]
 }
 
 export interface Profile {

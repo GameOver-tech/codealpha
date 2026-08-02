@@ -58,12 +58,35 @@ def test_validate_evaluation_normalizes_scores():
         "report": {"executive_summary": "Good candidate"},
         "recommendation": {"verdict": "Recommended", "reason": "Meets criteria"},
     }
-    result = _validate_evaluation(payload)
+    result = _validate_evaluation(payload, {})
     assert result["scores"]["technical_skills"] == 95.0
-    assert result["scores"]["overall_score"] == 85.0
+    # With no criteria selected, all 10 are evaluated and overall = their avg.
+    assert result["scores"]["overall_score"] == 9.5
     # Missing score keys default to 0.
     assert result["scores"]["communication"] == 0.0
     assert result["strengths"] == ["Strong communication"]
+
+
+def test_validate_evaluation_overall_is_average_of_selected():
+    """overall_score must be the average of ONLY the selected criteria."""
+    payload = {
+        "scores": {"technical_skills": 90, "leadership": 70, "teamwork": 80, "overall_score": 99},
+        "technical_evaluation": {},
+        "strengths": [],
+        "weaknesses": [],
+        "report": {},
+        "recommendation": {"verdict": "Recommended", "reason": "ok"},
+    }
+    result = _validate_evaluation(
+        payload, {"evaluation_criteria": ["technical_skills", "leadership", "teamwork"]}
+    )
+    assert result["scores"]["technical_skills"] == 90.0
+    assert result["scores"]["leadership"] == 70.0
+    assert result["scores"]["teamwork"] == 80.0
+    # LLM-invented overall (99) is overwritten by the real average.
+    assert result["scores"]["overall_score"] == 80.0
+    # Unselected criteria are absent from the scores payload.
+    assert "communication" not in result["scores"]
 
 
 def test_validate_evaluation_falls_back_to_threshold_verdict():
@@ -75,7 +98,7 @@ def test_validate_evaluation_falls_back_to_threshold_verdict():
         "report": {},
         "recommendation": {"verdict": "Not Sure"},
     }
-    result = _validate_evaluation(payload)
+    result = _validate_evaluation(payload, {})
     assert result["recommendation"]["verdict"] == "Recommended"
 
 
@@ -88,7 +111,7 @@ def test_validate_evaluation_low_score_verdict():
         "report": {},
         "recommendation": {"verdict": ""},
     }
-    result = _validate_evaluation(payload)
+    result = _validate_evaluation(payload, {})
     assert result["recommendation"]["verdict"] == "Not Recommended"
 
 
@@ -135,6 +158,31 @@ def test_build_prompt_contains_only_expected_inputs():
     assert "Job Context" not in prompt
     assert "Speech Signals" not in prompt
     assert "Sentiment Signals" not in prompt
+
+
+def test_build_prompt_respects_selected_criteria():
+    """Only the selected competencies appear in the rubric and scores schema."""
+    llm_input = {
+        "candidate_name": "Alice",
+        "transcript": "Some real transcript content here for the interview.",
+        "segments": [],
+        "duration": "120s",
+        "language": "en",
+        "speakers": ["0"],
+        "evaluation_criteria": ["technical_skills", "leadership", "teamwork"],
+    }
+    prompt = _build_prompt(llm_input)
+    assert "technical_skills" in prompt
+    assert "leadership" in prompt
+    assert "teamwork" in prompt
+    # The criteria list must name only the selected competencies.
+    assert "Do NOT score or discuss competencies outside this list." in prompt
+    assert "Technical, Leadership, Teamwork" in prompt
+    # The scores JSON schema contains only the selected keys + overall.
+    assert '"technical_skills": 0, "leadership": 0, "teamwork": 0, "overall_score": 0' in prompt
+    # Unselected criterion keys are absent from the scores schema.
+    assert '"communication": 0' not in prompt
+    assert '"critical_thinking": 0' not in prompt
 
 
 def test_insufficient_content_evaluation():

@@ -46,6 +46,7 @@ export {
 } from './select'
 export { Progress } from './progress'
 export { Badge, badgeVariants, type BadgeProps } from './badge'
+export { MultiSelect, type MultiSelectOption } from './multi-select'
 export { Skeleton } from './skeleton'
 export { Switch } from './switch'
 export { PageTransition, StaggerContainer, StaggerItem, FadeIn, AnimatedOutlet } from './motion'

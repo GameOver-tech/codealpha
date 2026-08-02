@@ -68,12 +68,21 @@ export function mediaUrl(path: string | null | undefined): string | undefined {
 }
 
 export const adminApi = {
-  upload: async (file: File, candidateEmail: string, jobTitle: string, jobDescription: string) => {
+  upload: async (
+    file: File,
+    candidateEmail: string,
+    jobTitle: string,
+    jobDescription: string,
+    evaluationCriteria: string[] = [],
+  ) => {
     const form = new FormData()
     form.append('file', file)
     form.append('candidate_email', candidateEmail)
     form.append('job_title', jobTitle)
     if (jobDescription) form.append('job_description', jobDescription)
+    if (evaluationCriteria.length) {
+      form.append('evaluation_criteria', JSON.stringify(evaluationCriteria))
+    }
     const res = await api.post<AdminUploadResponse>('/api/admin/upload', form, {
       headers: { 'Content-Type': 'multipart/form-data' },
       timeout: 0,

@@ -390,6 +390,7 @@ class InterviewPipeline:
             "duration": f"{interview.duration_seconds}s",
             "language": transcript.language or "unknown",
             "speakers": transcript.speakers or [],
+            "evaluation_criteria": interview.evaluation_criteria or [],
         }
         evaluation = await evaluate_transcript(llm_input)
         logger.info("[Stage 6] LLM evaluation completed")

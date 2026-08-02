@@ -133,10 +133,18 @@ export function AdminCandidateDetail() {
   const scores = bundle?.scores
   const hasSpeech = bundle?.has_speech ?? true
 
-  const radarData = SCORE_LABELS.filter((s) => scores && scores[s.key as keyof typeof scores] !== undefined).map((s) => ({
-    axis: s.label,
-    score: Math.round((scores?.[s.key as keyof typeof scores] as number) ?? 0),
-  }))
+  const activeCriteria =
+    bundle?.evaluation_criteria?.length
+      ? bundle.evaluation_criteria
+      : SCORE_LABELS.map((s) => s.key)
+  const activeScoreLabels = SCORE_LABELS.filter((s) => activeCriteria.includes(s.key))
+
+  const radarData = activeScoreLabels
+    .filter((s) => scores && scores[s.key as keyof typeof scores] !== undefined)
+    .map((s) => ({
+      axis: s.label,
+      score: Math.round((scores?.[s.key as keyof typeof scores] as number) ?? 0),
+    }))
 
   // Structured reading document — sections + words for synchronized reading.
   const readingDoc = useMemo(

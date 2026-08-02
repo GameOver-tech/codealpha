@@ -192,3 +192,4 @@ class AnalysisBundle(BaseModel):
     recommendation: RecommendationOut | None = None
     report: ReportOut | None = None
     has_speech: bool = True
+    evaluation_criteria: list[str] = []

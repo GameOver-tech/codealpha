@@ -335,11 +335,13 @@ class InterviewRepository(BaseRepository[Interview]):
         candidate_id: uuid.UUID,
         job_title: str = "",
         job_description: str = "",
+        evaluation_criteria: list[str] | None = None,
     ) -> Interview:
         interview = Interview(
             candidate_id=candidate_id,
             job_title=job_title,
             job_description=job_description,
+            evaluation_criteria=evaluation_criteria or [],
             status=InterviewStatus.UPLOADED,
         )
         return await self.add(interview)

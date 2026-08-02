@@ -248,6 +248,7 @@ def _build_story(payload: dict[str, Any]) -> list[Any]:
     report = payload.get("report") or {}
     strengths = payload.get("strengths") or []
     weaknesses = payload.get("weaknesses") or []
+    criteria = [str(c) for c in (payload.get("evaluation_criteria") or [])]
 
     story: list[Any] = []
 
@@ -315,14 +316,18 @@ def _build_story(payload: dict[str, Any]) -> list[Any]:
         )
 
     # ---- Sections 4-8: Evaluations ----
+    # Each report section maps to an evaluation criterion. Only sections for
+    # the selected criteria are rendered (empty criteria = all default ones).
     section_map = [
-        ("4. Technical Evaluation", "technical_assessment"),
-        ("5. Communication Evaluation", "communication_assessment"),
-        ("6. Confidence Analysis", "confidence_assessment"),
-        ("7. Problem Solving Evaluation", "problem_solving_assessment"),
-        ("8. Relevant Experience", "experience_assessment"),
+        ("4. Technical Evaluation", "technical_assessment", "technical_skills"),
+        ("5. Communication Evaluation", "communication_assessment", "communication"),
+        ("6. Confidence Analysis", "confidence_assessment", "confidence"),
+        ("7. Problem Solving Evaluation", "problem_solving_assessment", "problem_solving"),
+        ("8. Relevant Experience", "experience_assessment", "relevant_experience"),
     ]
-    for title, key in section_map:
+    for title, key, criterion in section_map:
+        if criteria and criterion not in criteria:
+            continue
         story.append(Paragraph(title, styles.h1))
         story.append(Paragraph(_safe(report.get(key)) or "Not assessed.", styles.body))
 
@@ -343,16 +348,34 @@ def _build_story(payload: dict[str, Any]) -> list[Any]:
     story.append(PageBreak())
     story.append(Paragraph("12. Final Score Table", styles.h1))
 
-    score_labels = [
-        ("Technical", "technical_skills"),
-        ("Communication", "communication"),
-        ("Confidence", "confidence"),
-        ("Problem Solving", "problem_solving"),
-        ("Experience", "relevant_experience"),
-        ("Leadership", "leadership"),
-        ("Critical Thinking", "critical_thinking"),
-        ("Professionalism", "professionalism"),
-    ]
+    criterion_labels = {
+        "technical_skills": "Technical",
+        "communication": "Communication",
+        "confidence": "Confidence",
+        "problem_solving": "Problem Solving",
+        "relevant_experience": "Experience",
+        "leadership": "Leadership",
+        "teamwork": "Teamwork",
+        "critical_thinking": "Critical Thinking",
+        "behavior": "Behavior",
+        "professionalism": "Professionalism",
+    }
+    if criteria:
+        score_labels = [
+            (criterion_labels.get(k, k.replace("_", " ").title()), k)
+            for k in criteria
+        ]
+    else:
+        score_labels = [
+            ("Technical", "technical_skills"),
+            ("Communication", "communication"),
+            ("Confidence", "confidence"),
+            ("Problem Solving", "problem_solving"),
+            ("Experience", "relevant_experience"),
+            ("Leadership", "leadership"),
+            ("Critical Thinking", "critical_thinking"),
+            ("Professionalism", "professionalism"),
+        ]
     score_rows = [["Dimension", "Score"]] + [
         [label, f"{_safe(scores.get(key, 0))}/100"] for label, key in score_labels
     ]
@@ -491,6 +514,7 @@ def _build_payload(interview, *, transcript_text: str = "") -> dict[str, Any]:
         "report": report_payload,
         "strengths": strengths,
         "weaknesses": weaknesses,
+        "evaluation_criteria": interview.evaluation_criteria or [],
     }
 
 

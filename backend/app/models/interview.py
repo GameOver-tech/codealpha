@@ -3,7 +3,7 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, String
+from sqlalchemy import JSON, Boolean, DateTime, Enum, ForeignKey, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -38,6 +38,11 @@ class Interview(UUIDMixin, TimestampMixin, Base):
     )
     job_title: Mapped[str] = mapped_column(String(255), default="", nullable=False)
     job_description: Mapped[str] = mapped_column(String(1000), default="", nullable=False)
+    # Competencies the AI should evaluate (technical_skills, communication, …).
+    # Empty list = evaluate all 10 criteria (backward compatible).
+    evaluation_criteria: Mapped[list[str]] = mapped_column(
+        JSON, default=list, nullable=False
+    )
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     processing_finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

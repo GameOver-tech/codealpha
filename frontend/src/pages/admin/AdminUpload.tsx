@@ -5,10 +5,11 @@ import { useQuery } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'framer-motion'
 import { UploadCloud, FileVideo, X, AlertTriangle, CheckCircle2, Mail, Search, Users } from 'lucide-react'
 import toast from 'react-hot-toast'
-import { Button, Card, CardContent, Input, Label, Textarea, Progress } from '@/components/ui'
+import { Button, Card, CardContent, Input, Label, Textarea, Progress, MultiSelect } from '@/components/ui'
 import { PageHeader } from '@/components/shared'
 import { adminApi, getErrorMessage } from '@/services/api'
 import { formatBytes, cn } from '@/lib/utils'
+import { EVALUATION_CRITERIA, DEFAULT_EVALUATION_CRITERIA } from '@/lib/evaluationCriteria'
 import type { RegisteredCandidate } from '@/types'
 
 const ACCEPTED_EXTENSIONS = ['mp4', 'mov', 'avi', 'mkv', 'mp3', 'wav', 'm4a', 'flac', 'aac']
@@ -24,6 +25,7 @@ export function AdminUpload() {
   const [highlighted, setHighlighted] = useState(0)
   const [jobTitle, setJobTitle] = useState('')
   const [jobDescription, setJobDescription] = useState('')
+  const [criteria, setCriteria] = useState<string[]>(DEFAULT_EVALUATION_CRITERIA)
   const [uploading, setUploading] = useState(false)
   const [progress, setProgress] = useState(0)
   const [error, setError] = useState<string | null>(null)
@@ -170,7 +172,13 @@ export function AdminUpload() {
     try {
       // The upload flow is unchanged — the selected candidate's email is
       // passed straight to the existing endpoint.
-      const res = await adminApi.upload(file, selected.email, jobTitle || 'Interview', jobDescription)
+      const res = await adminApi.upload(
+        file,
+        selected.email,
+        jobTitle || 'Interview',
+        jobDescription,
+        criteria,
+      )
       window.clearInterval(timer)
       setProgress(100)
       toast.success(`Upload successful! Processing started for ${res.candidate_email}.`)
@@ -378,6 +386,20 @@ export function AdminUpload() {
               placeholder="Paste the job description so the AI can evaluate responses against it…"
               rows={5}
             />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="evaluation_criteria">Evaluation Criteria</Label>
+            <MultiSelect
+              id="evaluation_criteria"
+              options={EVALUATION_CRITERIA}
+              selected={criteria}
+              onChange={setCriteria}
+              placeholder="Select competencies…"
+            />
+            <p className="text-xs text-muted-foreground">
+              Select the competencies that should be evaluated for this interview. The AI, charts,
+              scores, reports, and PDF will be generated only for the selected criteria.
+            </p>
           </div>
           <Button
             size="lg"
