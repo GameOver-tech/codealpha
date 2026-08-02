@@ -17,6 +17,7 @@ from app.ai.deepgram import probe_media_duration
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.logging import get_logger
+from app.core.supabase_client import get_supabase_service
 from app.dependencies.auth import require_role
 from app.models.interview import Interview, InterviewStatus
 from app.models.user import User, UserRole
@@ -863,3 +864,72 @@ async def delete_interview(
 
     invalidate_dashboard_cache()
     return {"message": f"Interview {interview_id} deleted successfully."}
+
+
+@router.delete("/candidate/{candidate_id}", status_code=200)
+async def delete_candidate_by_id(
+    candidate_id: str,
+    current_user: User = Depends(require_role("admin")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Delete a candidate account and ALL of their interviews (cascade).
+
+    The admin Candidates table shows one row per interview, so a candidate
+    can appear multiple times. This endpoint removes the whole candidate —
+    account, profile and every interview with its artifacts — instead of a
+    single interview row.
+    """
+    repo = UserRepository(db)
+    candidate = await repo.get(str(candidate_id))
+    if candidate is None or candidate.role != UserRole.CANDIDATE:
+        raise NotFoundError("Candidate not found")
+
+    # Collect every interview owned by this candidate so we can clean up
+    # stored files (local + Supabase Storage) before the DB cascade.
+    interview_repo = InterviewRepository(db)
+    interviews = await interview_repo.list_by_candidate_full(candidate.id)
+
+    storage = LocalStorage()
+    for interview in interviews:
+        for file in interview.files:
+            if file.storage_path:
+                storage.delete(file.storage_path)
+    if settings.SUPABASE_URL:
+        try:
+            from app.storage.service import SupabaseStorage
+
+            remote = SupabaseStorage()
+            for interview in interviews:
+                for file in interview.files:
+                    if file.storage_path:
+                        remote.delete(file.storage_path)
+                for pdf in interview.pdfs:
+                    if pdf.storage_path:
+                        remote.delete(pdf.storage_path)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Remote file cleanup failed for candidate %s: %s", candidate_id, exc)
+
+    # Best-effort cleanup of the Supabase Auth account so the candidate
+    # can no longer sign in (the local users row is just our mirror; the
+    # actual credentials live in Supabase Auth).
+    if candidate.auth_uid:
+        try:
+            get_supabase_service().auth.admin.delete_user(str(candidate.auth_uid))
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Supabase auth user cleanup failed for %s: %s", candidate_id, exc)
+
+    # Deletes cascade to candidate_profiles and interviews (with their artifacts).
+    await repo.delete(candidate.id)
+    await db.commit()
+
+    await ActivityLogRepository(db).log(
+        current_user.id,
+        "candidate_deleted",
+        "user",
+        str(candidate.id),
+        {"email": candidate.email},
+    )
+    await db.commit()
+
+    invalidate_dashboard_cache()
+    return {"message": f"Candidate '{candidate.email}' and all interviews deleted successfully."}

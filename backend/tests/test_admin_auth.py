@@ -156,6 +156,19 @@ def test_admin_delete_missing_404(client):
     assert r.status_code == 404, r.text
 
 
+def test_admin_delete_candidate(client):
+    ids = asyncio.run(_seed_candidate(database.AsyncSessionLocal))
+    _authed_admin(client)
+    r = client.delete(f"/api/admin/candidate/{ids['user_id']}")
+    assert r.status_code == 200, r.text
+
+
+def test_admin_delete_candidate_missing_404(client):
+    _authed_admin(client)
+    r = client.delete(f"/api/admin/candidate/{uuid.uuid4()}")
+    assert r.status_code == 404, r.text
+
+
 def test_auth_endpoints_do_not_500(client):
     """Supabase-dependent endpoints must never return a 500.
 

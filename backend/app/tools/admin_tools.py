@@ -223,6 +223,15 @@ async def delete_candidate(db: AsyncSession, actor: User, **args) -> dict:
     if user is None or user.role != UserRole.CANDIDATE:
         raise NotFoundError(f"No candidate found with email '{email}'")
 
+    # Best-effort cleanup of the Supabase Auth account so the candidate
+    # can no longer sign in (the local users row is just our mirror; the
+    # actual credentials live in Supabase Auth).
+    if user.auth_uid:
+        try:
+            get_supabase_service().auth.admin.delete_user(str(user.auth_uid))
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Supabase auth user cleanup failed for %s: %s", user.email, exc)
+
     # Deletes cascade to candidate_profiles and interviews (with their artifacts).
     await repo.delete(user.id)
     await ActivityLogRepository(db).log(

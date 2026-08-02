@@ -14,12 +14,12 @@ import {
   Video,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
-import { Button, Card, CardContent, Input, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Skeleton, Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui'
+import { Button, Card, CardContent, Input, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Skeleton, Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui'
 import { Avatar, AvatarFallback, AvatarImage, EmptyState, PageHeader, RecommendationBadge, StatusBadge } from '@/components/shared'
 import { useAdminInterviews, queryKeys, prefetchAdminAnalysis } from '@/hooks'
 import { adminApi, mediaUrl, getErrorMessage } from '@/services/api'
 import { formatDuration, initials } from '@/lib/utils'
-import type { InterviewStatusValue, RecommendationVerdict } from '@/types'
+import type { AdminInterview, InterviewStatusValue, RecommendationVerdict } from '@/types'
 
 type SortKey = 'candidate_name' | 'job_title' | 'overall_score' | 'status' | 'created_at'
 type SortDir = 'asc' | 'desc'
@@ -50,6 +50,17 @@ export function AdminCandidates() {
     },
     onError: (error) => toast.error(getErrorMessage(error)),
   })
+
+  const deleteCandidateMutation = useMutation({
+    mutationFn: (id: string) => adminApi.deleteCandidate(id),
+    onSuccess: () => {
+      toast.success('Candidate and all interviews deleted')
+      queryClient.invalidateQueries({ queryKey: queryKeys.adminInterviews })
+    },
+    onError: (error) => toast.error(getErrorMessage(error)),
+  })
+
+  const [pendingDelete, setPendingDelete] = useState<AdminInterview | null>(null)
 
   const filtered = useMemo(() => {
     if (!interviews) return []
@@ -277,34 +288,15 @@ export function AdminCandidates() {
                         )}
                       </td>
                       <td className="px-5 py-4 text-right" onClick={(e) => e.stopPropagation()}>
-                        <Dialog>
-                          <DialogTrigger asChild>
-                            <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-destructive" aria-label={`Delete ${interview.candidate_name}`}>
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </DialogTrigger>
-                          <DialogContent>
-                            <DialogHeader>
-                              <DialogTitle>Delete interview?</DialogTitle>
-                              <DialogDescription>
-                                This will permanently delete the interview for{' '}
-                                <span className="font-semibold text-foreground">{interview.candidate_name}</span> and
-                                all of its artifacts — transcript, analysis, report and PDF. This action cannot be undone.
-                              </DialogDescription>
-                            </DialogHeader>
-                            <DialogFooter>
-                              <Button variant="outline">Cancel</Button>
-                              <Button
-                                variant="destructive"
-                                loading={deleteMutation.isPending}
-                                onClick={() => deleteMutation.mutate(interview.id)}
-                              >
-                                <Trash2 />
-                                Delete
-                              </Button>
-                            </DialogFooter>
-                          </DialogContent>
-                        </Dialog>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="text-muted-foreground hover:text-destructive"
+                          aria-label={`Delete ${interview.candidate_name}`}
+                          onClick={() => setPendingDelete(interview)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
                       </td>
                     </motion.tr>
                   ))}
@@ -333,6 +325,56 @@ export function AdminCandidates() {
           )}
         </CardContent>
       </Card>
+
+      {/* Delete options: interview only, or the whole candidate */}
+      <Dialog open={pendingDelete !== null} onOpenChange={(open) => { if (!open) setPendingDelete(null) }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete options</DialogTitle>
+            <DialogDescription>
+              Choose what to delete for{' '}
+              <span className="font-semibold text-foreground">{pendingDelete?.candidate_name}</span>.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-3">
+            <Button
+              variant="destructive"
+              className="justify-start"
+              disabled={deleteMutation.isPending || deleteCandidateMutation.isPending}
+              loading={deleteMutation.isPending}
+              onClick={() => {
+                if (!pendingDelete) return
+                deleteMutation.mutate(pendingDelete.id, {
+                  onSettled: () => setPendingDelete(null),
+                })
+              }}
+            >
+              <Trash2 />
+              Delete Interview Only
+            </Button>
+            <Button
+              variant="destructive"
+              className="justify-start"
+              disabled={deleteMutation.isPending || deleteCandidateMutation.isPending}
+              loading={deleteCandidateMutation.isPending}
+              onClick={() => {
+                if (!pendingDelete) return
+                deleteCandidateMutation.mutate(pendingDelete.candidate_id, {
+                  onSettled: () => setPendingDelete(null),
+                })
+              }}
+            >
+              <Trash2 />
+              Delete Candidate (all interviews)
+            </Button>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPendingDelete(null)}>
+              Cancel
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

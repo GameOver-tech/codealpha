@@ -96,6 +96,21 @@ class InterviewRepository(BaseRepository[Interview]):
         result = await self.db.execute(stmt)
         return list(result.scalars().all())
 
+    async def list_by_candidate_full(self, candidate_id: uuid.UUID | str) -> list[Interview]:
+        """Load every interview a candidate owns with file/PDF relations.
+
+        Used by the admin delete-candidate flow so stored files (local and
+        Supabase Storage) can be cleaned up before the DB cascade removes
+        the rows.
+        """
+        stmt = (
+            select(Interview)
+            .where(Interview.candidate_id == _coerce_uuid(candidate_id))
+            .options(selectinload(Interview.files), selectinload(Interview.pdfs))
+        )
+        result = await self.db.execute(stmt)
+        return list(result.scalars().all())
+
     async def latest_for_candidate(self, candidate_id: uuid.UUID | str) -> Interview | None:
         """Fetch the candidate's most recent interview with relations loaded.
 

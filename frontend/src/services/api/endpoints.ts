@@ -151,6 +151,9 @@ export const adminApi = {
 
   deleteInterview: (interviewId: string) =>
     api.delete<MessageResponse>(`/api/admin/interview/${interviewId}`),
+
+  deleteCandidate: (candidateId: string) =>
+    api.delete<MessageResponse>(`/api/admin/candidate/${candidateId}`),
 }
 
 // --- Chat assistant (stateless widget) ---
