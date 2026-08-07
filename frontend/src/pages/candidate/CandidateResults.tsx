@@ -8,9 +8,10 @@ import {
   Clock,
   FileText,
   Calendar,
+  Video,
 } from 'lucide-react'
-import { Button, Card, Skeleton } from '@/components/ui'
-import { EmptyState, PageHeader, StatusBadge, AdminStatusBadge, RecommendationBadge, SpeakButton } from '@/components/shared'
+import { Button, Card, CardContent, Skeleton } from '@/components/ui'
+import { EmptyState, PageHeader, RecommendationBadge, SpeakButton } from '@/components/shared'
 import { useInterviewResult, useInterviewStatus } from '@/hooks'
 import { formatDuration } from '@/lib/utils'
 import type { RecommendationVerdict } from '@/types'
@@ -42,6 +43,32 @@ export function CandidateResults() {
           </Button>
         }
       />
+    )
+  }
+
+  // No speech in the recording — no evaluation was generated. Show a neutral,
+  // professional "under review" state rather than exposing recording issues.
+  if (result.has_speech === false) {
+    return (
+      <div className="space-y-6">
+        <PageHeader title="Your Result" description="Your interview outcome." />
+        <Card>
+          <CardContent className="flex flex-col items-center gap-4 p-10 text-center">
+            <span className="flex h-16 w-16 items-center justify-center rounded-full bg-primary/10 text-primary">
+              <RefreshCw className="h-8 w-8" />
+            </span>
+            <h2 className="font-display text-xl font-bold text-foreground">Your result is being prepared</h2>
+            <p className="max-w-md text-sm leading-relaxed text-muted-foreground">
+              Your interview is being reviewed. Your hiring recommendation will appear here once
+              the evaluation is complete.
+            </p>
+            <Button variant="outline" onClick={() => navigate('/dashboard')}>
+              <Clock />
+              Back to dashboard
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
     )
   }
 
@@ -99,20 +126,36 @@ export function CandidateResults() {
             </span>
 
             <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
-              <StatusBadge status={result.status} />
-              <AdminStatusBadge status={result.admin_status} />
-              {verdict && <RecommendationBadge verdict={verdict} />}
+              {verdict ? (
+                <RecommendationBadge verdict={verdict} />
+              ) : (
+                <span className="inline-flex items-center rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-semibold text-primary">
+                  Under Review
+                </span>
+              )}
+              {result.interview_type === 'live' && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-semibold text-primary">
+                  <Video className="h-3 w-3" />
+                  Live AI Interview
+                </span>
+              )}
             </div>
 
             <h2 className="mt-6 font-display text-3xl font-bold text-foreground sm:text-4xl">
-              {verdict ?? 'Pending evaluation'}
+              {verdict ?? 'Your result is being prepared'}
             </h2>
 
-            {result.message && (
+            {verdict && result.message && (
               <div className="mt-3 flex max-w-lg items-start gap-2">
                 <p className="text-sm leading-relaxed text-muted-foreground">{result.message}</p>
                 <SpeakButton text={result.message} className="mt-0.5 shrink-0" />
               </div>
+            )}
+            {!verdict && (
+              <p className="mt-3 max-w-md text-sm leading-relaxed text-muted-foreground">
+                Your interview is being reviewed by our AI. Your hiring recommendation will
+                appear here once the evaluation is complete.
+              </p>
             )}
 
             {/* Interview metadata */}

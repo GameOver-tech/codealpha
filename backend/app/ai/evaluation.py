@@ -26,6 +26,51 @@ SCORE_KEYS = [
     "behavior", "professionalism", "overall_score",
 ]
 
+# The 10 selectable evaluation criteria — canonical order. Each maps 1:1 to a
+# score key and a column on InterviewScores.
+CRITERIA = SCORE_KEYS[:-1]
+
+CRITERION_LABELS = {
+    "technical_skills": "Technical",
+    "communication": "Communication",
+    "confidence": "Confidence",
+    "problem_solving": "Problem Solving",
+    "relevant_experience": "Experience",
+    "leadership": "Leadership",
+    "teamwork": "Teamwork",
+    "critical_thinking": "Critical Thinking",
+    "behavior": "Behavior",
+    "professionalism": "Professionalism",
+}
+
+CRITERION_DESCRIPTIONS = {
+    "technical_skills": "accuracy, depth, and relevance of technical responses.",
+    "communication": "clarity, structure, articulation.",
+    "confidence": "inferred from language patterns (hedging, filler words, directness).",
+    "problem_solving": "reasoning process, structured approach, edge-case awareness.",
+    "relevant_experience": "match between the candidate's background and the job.",
+    "leadership": "examples of ownership, direction, and influence.",
+    "teamwork": "evidence of collaboration and working with others.",
+    "critical_thinking": "trade-off analysis and depth of reasoning.",
+    "behavior": "professionalism of conduct and responsiveness.",
+    "professionalism": "overall professional tone and presentation.",
+}
+
+
+def _resolve_criteria(llm_input: dict[str, Any]) -> list[str]:
+    """Return the criteria to evaluate for this interview.
+
+    Empty/absent selection means evaluate all 10 (backward compatible). Only
+    valid keys are kept, in canonical order, deduplicated.
+    """
+    selected = llm_input.get("evaluation_criteria") or []
+    if not isinstance(selected, (list, tuple)):
+        selected = []
+    wanted = {str(s) for s in selected}
+    resolved = [k for k in CRITERIA if k in wanted]
+    return resolved or list(CRITERIA)
+
+
 TECHNICAL_EVAL_KEYS = [
     "technical_knowledge", "communication_skills", "confidence_level",
     "problem_solving", "relevant_experience", "leadership", "teamwork",
@@ -52,9 +97,20 @@ def _build_prompt(llm_input: dict[str, Any]) -> str:
     """Assemble the evaluation prompt from the restricted LLM input.
 
     The transcript is embedded exactly as received from Deepgram. The prompt
-    forbids inventing questions, answers, or content of any kind.
+    forbids inventing questions, answers, or content of any kind. Only the
+    selected evaluation criteria are scored and discussed.
     """
     transcript = llm_input["transcript"]
+    criteria = _resolve_criteria(llm_input)
+    criteria_labels = [CRITERION_LABELS.get(k, k.replace("_", " ").title()) for k in criteria]
+    criteria_list = ", ".join(criteria_labels)
+
+    rubric_lines = "\n".join(
+        f"{i}. {key} — {CRITERION_DESCRIPTIONS.get(key, '')}"
+        for i, key in enumerate(criteria, start=1)
+    )
+    scores_schema = ", ".join(f'"{key}": 0' for key in criteria) + ', "overall_score": 0'
+
     return f"""You are an expert technical interviewer and talent evaluator. You will analyze a REAL interview transcript produced by an automatic speech recognition system (Deepgram).
 
 ## STRICT RULES — READ CAREFULLY
@@ -67,6 +123,12 @@ def _build_prompt(llm_input: dict[str, Any]) -> str:
 ## Candidate
 - Name: {llm_input.get("candidate_name") or "Candidate"}
 
+## Evaluation Criteria
+The recruiter selected ONLY these competencies to evaluate:
+{criteria_list}
+
+Do NOT score or discuss competencies outside this list.
+
 ## Transcript (verbatim from Deepgram — do not alter)
 {transcript}
 
@@ -76,19 +138,10 @@ def _build_prompt(llm_input: dict[str, Any]) -> str:
 - Detected speakers: {", ".join(llm_input.get("speakers") or []) or "unknown"}
 
 ## Scoring Rubric
-Score each of these 10 dimensions from 0 to 100, based ONLY on the transcript:
-1. technical_skills — accuracy, depth, and relevance of technical responses.
-2. communication — clarity, structure, articulation.
-3. confidence — inferred from language patterns (hedging, filler words, directness).
-4. problem_solving — reasoning process, structured approach, edge-case awareness.
-5. relevant_experience — match between the candidate's background and the job.
-6. leadership — examples of ownership, direction, and influence.
-7. teamwork — evidence of collaboration and working with others.
-8. critical_thinking — trade-off analysis and depth of reasoning.
-9. behavior — professionalism of conduct and responsiveness.
-10. professionalism — overall professional tone and presentation.
+Score each of these {len(criteria)} dimensions from 0 to 100, based ONLY on the transcript:
+{rubric_lines}
 
-The overall_score is the weighted average of all 10 dimensions (out of 100).
+The overall_score is the average of the selected dimensions ({criteria_list}), out of 100.
 
 ## Hiring Recommendation
 Pick exactly one of these three verdicts:
@@ -100,9 +153,7 @@ Pick exactly one of these three verdicts:
 Return ONLY valid JSON — no preamble, no markdown fences. Use this exact schema:
 {{
   "scores": {{
-    "technical_skills": 0, "communication": 0, "confidence": 0, "problem_solving": 0,
-    "relevant_experience": 0, "leadership": 0, "teamwork": 0, "critical_thinking": 0,
-    "behavior": 0, "professionalism": 0, "overall_score": 0
+    {scores_schema}
   }},
   "technical_evaluation": {{
     "technical_knowledge": "...", "communication_skills": "...", "confidence_level": "...",
@@ -124,22 +175,38 @@ Return ONLY valid JSON — no preamble, no markdown fences. Use this exact schem
     "reason": "..."
   }}
 }}
-Strengths and weaknesses must be 3-5 concise bullets grounded in specific things the candidate said. Every string field must be substantive (no empty strings)."""
+The "technical_evaluation", "report", "strengths", and "weaknesses" must focus ONLY on the selected competencies ({criteria_list}). Strengths and weaknesses must be 3-5 concise bullets grounded in specific things the candidate said. Every string field must be substantive (no empty strings)."""
 
 
-def _validate_evaluation(data: dict[str, Any]) -> dict[str, Any]:
-    """Normalize and validate the parsed LLM payload."""
+def _validate_evaluation(data: dict[str, Any], llm_input: dict[str, Any]) -> dict[str, Any]:
+    """Normalize and validate the parsed LLM payload.
+
+    Only the selected evaluation criteria are kept as live scores. The
+    overall_score is recomputed server-side as the average of the selected
+    dimensions so it never depends on the LLM's own arithmetic.
+    """
+    criteria = _resolve_criteria(llm_input)
+    score_keys = [*criteria, "overall_score"]
+
     scores = data.get("scores") or {}
     if not isinstance(scores, dict):
         raise BadRequestError("LLM evaluation missing 'scores' object")
 
     normalized_scores: dict[str, float] = {}
-    for key in SCORE_KEYS:
+    for key in score_keys:
         raw = scores.get(key, 0)
         try:
             normalized_scores[key] = float(clamp_score(raw))
         except (TypeError, ValueError):
             normalized_scores[key] = 0.0
+
+    # Deterministic overall score = average of the selected dimensions only.
+    # If the LLM supplied no usable dimension scores (all 0/missing), fall
+    # back to the LLM's own overall so threshold verdicts stay meaningful.
+    if criteria:
+        dims = [normalized_scores[k] for k in criteria]
+        if any(d > 0 for d in dims):
+            normalized_scores["overall_score"] = round(sum(dims) / len(criteria), 1)
 
     tech = data.get("technical_evaluation") or {}
     if not isinstance(tech, dict):
@@ -252,7 +319,7 @@ async def evaluate_transcript(llm_input: dict[str, Any]) -> dict[str, Any]:
         raw = await with_retries(_call)
         logger.info("LLM output preview: %s", raw[:300])
         parsed = extract_json(raw)
-        return _validate_evaluation(parsed)
+        return _validate_evaluation(parsed, llm_input)
     except BadRequestError:
         raise
     except Exception as exc:  # noqa: BLE001

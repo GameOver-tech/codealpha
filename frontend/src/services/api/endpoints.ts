@@ -1,10 +1,12 @@
 import { api, API_BASE_URL, getToken } from './client'
 import type {
+  AdminCandidate,
   AdminDashboard,
   AdminInterview,
   AdminUploadResponse,
   AnalysisBundle,
   CandidateSummary,
+  CandidateUpdatePayload,
   ChangePasswordRequest,
   ChatRequest,
   InterviewProgress,
@@ -58,6 +60,33 @@ export const candidateApi = {
   interviewResult: () => api.get<CandidateSummary>('/api/interview/result'),
 }
 
+/** Live AI Interview — candidate self-service session. */
+export const liveApi = {
+  start: () =>
+    api.post<{ interview_id: string; status: string }>(
+      '/api/live-interview/start',
+      { job_title: 'Live AI Interview' },
+    ),
+  upload: async (interviewId: string, file: File) => {
+    const form = new FormData()
+    form.append('file', file)
+    const res = await api.post<{ interview_id: string; status: string; admin_status: string }>(
+      `/api/live-interview/${interviewId}/upload`,
+      form,
+      {
+        // Do NOT set Content-Type manually — axios must generate the
+        // multipart boundary itself, otherwise the server can't parse it.
+        timeout: 0,
+      },
+    )
+    return res.data
+  },
+  status: (interviewId: string) =>
+    api.get<{ interview_id: string; status: string; admin_status: string }>(
+      `/api/live-interview/${interviewId}/status`,
+    ),
+}
+
 /** Build a public URL for a locally-stored upload (avatars, etc.). */
 export function mediaUrl(path: string | null | undefined): string | undefined {
   if (!path) return undefined
@@ -66,12 +95,21 @@ export function mediaUrl(path: string | null | undefined): string | undefined {
 }
 
 export const adminApi = {
-  upload: async (file: File, candidateEmail: string, jobTitle: string, jobDescription: string) => {
+  upload: async (
+    file: File,
+    candidateEmail: string,
+    jobTitle: string,
+    jobDescription: string,
+    evaluationCriteria: string[] = [],
+  ) => {
     const form = new FormData()
     form.append('file', file)
     form.append('candidate_email', candidateEmail)
     form.append('job_title', jobTitle)
     if (jobDescription) form.append('job_description', jobDescription)
+    if (evaluationCriteria.length) {
+      form.append('evaluation_criteria', JSON.stringify(evaluationCriteria))
+    }
     const res = await api.post<AdminUploadResponse>('/api/admin/upload', form, {
       headers: { 'Content-Type': 'multipart/form-data' },
       timeout: 0,
@@ -111,11 +149,12 @@ export const adminApi = {
   },
 
   // POST-based download — download managers (IDM etc.) only hijack GET
-  // requests, so POST is never intercepted.
+  // requests, so POST is never intercepted. The full backend origin is
+  // prefixed so the request targets FastAPI Cloud, not the Vercel origin.
   reportPdfUrl: (interviewId: string) =>
-    `/api/admin/report/pdf/download?interview_id=${encodeURIComponent(interviewId)}`,
+    `${API_BASE_URL}/api/admin/report/pdf/download?interview_id=${encodeURIComponent(interviewId)}`,
   regenerateReportPdfUrl: (interviewId: string) =>
-    `/api/admin/report/pdf/regenerate?interview_id=${encodeURIComponent(interviewId)}`,
+    `${API_BASE_URL}/api/admin/report/pdf/regenerate?interview_id=${encodeURIComponent(interviewId)}`,
 
   regenerateReportPdf: async (interviewId: string) => {
     const res = await api.get<Blob>('/api/admin/report/pdf/regenerate', {
@@ -141,6 +180,20 @@ export const adminApi = {
 
   registeredCandidates: () => api.get<RegisteredCandidate[]>('/api/admin/candidates/registered'),
 
+  candidates: () => api.get<AdminCandidate[]>('/api/admin/candidates'),
+
+  updateCandidate: (candidateId: string, payload: CandidateUpdatePayload) =>
+    api.put<{ id: string; updated: Partial<CandidateUpdatePayload> }>(
+      `/api/admin/candidate/${candidateId}`,
+      payload,
+    ),
+
+  createCandidate: (payload: RegisterRequest) =>
+    api.post<{ id: string; email: string; name: string; message: string }>(
+      '/api/admin/candidates',
+      payload,
+    ),
+
   regenerate: (interviewId: string) =>
     api.post<ProcessResponse>('/api/admin/regenerate', { interview_id: interviewId }),
 
@@ -151,6 +204,9 @@ export const adminApi = {
 
   deleteInterview: (interviewId: string) =>
     api.delete<MessageResponse>(`/api/admin/interview/${interviewId}`),
+
+  deleteCandidate: (candidateId: string) =>
+    api.delete<MessageResponse>(`/api/admin/candidate/${candidateId}`),
 }
 
 // --- Chat assistant (stateless widget) ---

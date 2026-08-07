@@ -104,7 +104,7 @@ ADMIN_TOOLS: dict = {
         admin_tools.list_interviews,
     ),
     "update_interview_status": (
-        "Update an interview's admin review status. Valid values: Pending, Processing, "
+        "Update an interview's admin review status. Valid values: Processing, "
         "Completed, Recommended, Not Recommended, Need Further Review, Rejected, Selected.",
         _params(
             interview_id=_str("The interview UUID", required=True),
@@ -180,6 +180,26 @@ ADMIN_TOOLS: dict = {
         ),
         admin_tools.get_system_logs,
     ),
+    "count_pending_interviews": (
+        "Count live AI interviews awaiting admin processing (status uploaded or "
+        "processing, interview_type live). Use when the admin asks how many live "
+        "interviews are pending.",
+        _params(),
+        admin_tools.count_pending_interviews,
+    ),
+    "process_interview_by_email": (
+        "Start processing a candidate's latest interview by their email address. "
+        "The interview must be in 'uploaded' or 'failed' status. Use when the "
+        "admin asks to process an interview for a specific candidate.",
+        _params(email=_str("The candidate's email address", required=True)),
+        admin_tools.process_interview_by_email,
+    ),
+    "get_candidate_recommendation": (
+        "Get the hiring recommendation verdict and reason for a candidate's latest "
+        "interview by email.",
+        _params(email=_str("The candidate's email address", required=True)),
+        admin_tools.get_candidate_recommendation,
+    ),
 }
 
 CANDIDATE_TOOLS: dict = {
@@ -196,6 +216,14 @@ CANDIDATE_TOOLS: dict = {
         "are shared by the recruiter, not shown here.",
         _params(),
         candidate_tools.get_my_result,
+    ),
+    "can_start_live_interview": (
+        "Check whether the signed-in candidate can start a new live AI interview. "
+        "Returns true when they have no pending interview (a pending interview "
+        "blocks a new session). Use when the candidate asks to start or begin an "
+        "interview.",
+        _params(),
+        candidate_tools.can_start_live_interview,
     ),
     "faq_search": (
         "Search the platform FAQ for an answer (interviews, results, rescheduling, "

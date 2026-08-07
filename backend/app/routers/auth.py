@@ -18,6 +18,7 @@ from app.schemas.auth import (
     ChangePasswordRequest,
     LoginRequest,
     MessageResponse,
+    RefreshRequest,
     RegisterRequest,
     TokenResponse,
     UpdateMeRequest,
@@ -104,6 +105,7 @@ async def register(payload: RegisterRequest, db: AsyncSession = Depends(get_db))
         return TokenResponse(
             access_token=session.session.access_token,
             expires_in=session.session.expires_in or 3600,
+            refresh_token=session.session.refresh_token or "",
         )
     except Exception:  # noqa: BLE001
         # Account created but token exchange failed — login later works.
@@ -133,6 +135,36 @@ async def login(payload: LoginRequest):
     return TokenResponse(
         access_token=session.session.access_token,
         expires_in=session.session.expires_in or 3600,
+        refresh_token=session.session.refresh_token or "",
+    )
+
+
+@router.post("/refresh", response_model=TokenResponse)
+async def refresh(payload: RefreshRequest):
+    """Exchange a Supabase refresh token for a fresh access token.
+
+    The frontend calls this when an API request returns 401 so long-running
+    sessions (e.g. interview processing) never force the admin to log back in.
+    """
+    sb = get_supabase_anon()
+    try:
+        session = sb.auth.refresh_session(payload.refresh_token)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired refresh token",
+        ) from exc
+
+    if not session.session:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired refresh token",
+        )
+
+    return TokenResponse(
+        access_token=session.session.access_token,
+        expires_in=session.session.expires_in or 3600,
+        refresh_token=session.session.refresh_token or payload.refresh_token,
     )
 
 

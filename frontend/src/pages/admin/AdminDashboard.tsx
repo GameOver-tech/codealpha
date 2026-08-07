@@ -69,8 +69,8 @@ function DashboardStatCard({
   sub,
   color,
   delay,
-  trend,
   trendLabel,
+  trendUp = true,
 }: {
   icon: typeof Users
   label: string
@@ -78,10 +78,9 @@ function DashboardStatCard({
   sub: string
   color: string
   delay: number
-  trend: number
   trendLabel: string
+  trendUp?: boolean
 }) {
-  const positive = trend >= 0
   return (
     <motion.div
       initial={{ opacity: 0, y: 16 }}
@@ -95,13 +94,12 @@ function DashboardStatCard({
               <Icon className="h-5 w-5" strokeWidth={1.75} />
             </span>
             <span
-              className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold ${
-                positive ? 'bg-success/10 text-success' : 'bg-destructive/10 text-destructive'
+              className={`inline-flex items-center rounded-full px-1.5 py-0.5 ${
+                trendUp ? 'bg-success/10 text-success' : 'bg-destructive/10 text-destructive'
               }`}
-              title={`${trendLabel}: ${positive ? '+' : ''}${trend}`}
+              title={trendLabel}
             >
-              {positive ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
-              {positive ? '+' : ''}{trend}
+              {trendUp ? <TrendingUp className="h-3.5 w-3.5" /> : <TrendingDown className="h-3.5 w-3.5" />}
             </span>
           </div>
           <p className="mt-4 font-display text-2xl font-bold tracking-tight text-foreground">{value}</p>
@@ -138,14 +136,36 @@ export function AdminDashboard() {
 
   const volumeByDay = useMemo(() => {
     const buckets = new Map<string, number>()
+    const days: Date[] = []
     recent.forEach((i) => {
       if (!i.created_at) return
-      const day = new Date(i.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+      const d = new Date(i.created_at)
+      days.push(d)
+      const day = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
       buckets.set(day, (buckets.get(day) ?? 0) + 1)
     })
-    return [...buckets.entries()]
-      .sort((a, b) => new Date(a[0]).getTime() - new Date(b[0]).getTime())
-      .map(([date, count]) => ({ date, count }))
+    if (buckets.size === 0) return []
+
+    // Build a continuous daily timeline: every day from the earliest to the
+    // latest interview, filling missing days with 0 so the trend reads as a
+    // real series instead of sparse disconnected points.
+    const first = new Date(Math.min(...days.map((d) => d.getTime())))
+    const last = new Date(Math.max(...days.map((d) => d.getTime())))
+    first.setHours(0, 0, 0, 0)
+    last.setHours(0, 0, 0, 0)
+
+    const series: { date: string; fullDate: string; count: number }[] = []
+    const cursor = new Date(first)
+    while (cursor <= last) {
+      const label = cursor.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+      series.push({
+        date: label,
+        fullDate: cursor.toISOString().slice(0, 10),
+        count: buckets.get(label) ?? 0,
+      })
+      cursor.setDate(cursor.getDate() + 1)
+    }
+    return series
   }, [recent])
 
   if (isLoading) {
@@ -182,12 +202,6 @@ export function AdminDashboard() {
     ? Math.round((stats.interviewed_candidates / stats.total_interviews) * 100)
     : 0
 
-  // Weekly growth from the real recent list (this 7 days vs previous 7 days).
-  const now = Date.now()
-  const thisWeek = recent.filter((i) => i.created_at && now - new Date(i.created_at).getTime() < 7 * 86400_000).length
-  const prevWeek = recent.filter((i) => i.created_at && now - new Date(i.created_at).getTime() >= 7 * 86400_000 && now - new Date(i.created_at).getTime() < 14 * 86400_000).length
-  const weeklyGrowth = prevWeek > 0 ? Math.round(((thisWeek - prevWeek) / prevWeek) * 100) : thisWeek > 0 ? 100 : 0
-
   const statCards = [
     {
       icon: Users,
@@ -195,7 +209,6 @@ export function AdminDashboard() {
       value: stats.total_interviews,
       sub: `${stats.total_candidates} candidates registered`,
       color: '#2563EB',
-      trend: weeklyGrowth,
       trendLabel: 'vs last 7 days',
     },
     {
@@ -204,7 +217,6 @@ export function AdminDashboard() {
       value: stats.interviewed_candidates,
       sub: `${completionRate}% completion rate`,
       color: '#22C55E',
-      trend: 0,
       trendLabel: 'vs last 7 days',
     },
     {
@@ -213,7 +225,6 @@ export function AdminDashboard() {
       value: Math.round(stats.avg_score),
       sub: `${stats.recommended} recommended · ${stats.not_recommended} not recommended`,
       color: '#6366F1',
-      trend: 0,
       trendLabel: 'vs last 7 days',
     },
     {
@@ -222,8 +233,8 @@ export function AdminDashboard() {
       value: stats.failed,
       sub: `${stats.processing} still processing`,
       color: '#EF4444',
-      trend: 0,
       trendLabel: 'vs last 7 days',
+      trendUp: false,
     },
   ]
 
@@ -259,19 +270,45 @@ export function AdminDashboard() {
                 <AreaChart data={volumeByDay} margin={{ top: 10, right: 16, left: 0, bottom: 0 }}>
                   <defs>
                     <linearGradient id="volumeGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#2563EB" stopOpacity={0.3} />
-                      <stop offset="95%" stopColor="#2563EB" stopOpacity={0} />
+                      <stop offset="0%" stopColor="rgba(59, 130, 246, 0.35)" />
+                      <stop offset="50%" stopColor="rgba(59, 130, 246, 0.18)" />
+                      <stop offset="100%" stopColor="rgba(59, 130, 246, 0.03)" />
                     </linearGradient>
                   </defs>
-                  <CartesianGrid strokeDasharray="3 3" className="text-slate-200 dark:text-slate-700" stroke="currentColor" vertical={false} />
-                  <XAxis dataKey="date" tick={{ fill: '#94a3b8', fontSize: 11 }} tickLine={false} axisLine={{ stroke: 'var(--border)' }} />
-                  <YAxis allowDecimals={false} tick={{ fill: '#94a3b8', fontSize: 11 }} tickLine={false} axisLine={false} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                  <XAxis
+                    dataKey="date"
+                    tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }}
+                    tickLine={false}
+                    axisLine={{ stroke: 'var(--border)' }}
+                    interval="preserveStartEnd"
+                    minTickGap={24}
+                  />
+                  <YAxis
+                    allowDecimals={false}
+                    tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }}
+                    tickLine={false}
+                    axisLine={false}
+                  />
                   <Tooltip
                     contentStyle={CHART_TOOLTIP_STYLE}
                     formatter={(value: number | string) => [value, 'Interviews']}
                     labelFormatter={(label) => `Date: ${label}`}
                   />
-                  <Area type="monotone" dataKey="count" name="Interviews" stroke="#2563EB" fill="url(#volumeGradient)" strokeWidth={2} />
+                  <Area
+                    type="monotone"
+                    dataKey="count"
+                    name="Interviews"
+                    stroke="#3B82F6"
+                    strokeWidth={3}
+                    fill="url(#volumeGradient)"
+                    baseValue={0}
+                    dot={{ r: 5, fill: '#3B82F6', strokeWidth: 2, stroke: 'var(--card)' }}
+                    activeDot={{ r: 7, fill: '#3B82F6', strokeWidth: 2.5, stroke: 'var(--card)' }}
+                    animationDuration={900}
+                    animationEasing="ease-out"
+                    animationBegin={120}
+                  />
                 </AreaChart>
               </ResponsiveContainer>
             )}
@@ -429,7 +466,11 @@ export function AdminDashboard() {
                         {Math.round(interview.overall_score)}
                       </span>
                     )}
-                    <RecommendationBadge verdict={interview.recommendation} />
+                    {interview.has_speech === false ? (
+                      <span className="text-xs font-semibold text-muted-foreground">No speech</span>
+                    ) : (
+                      <RecommendationBadge verdict={interview.recommendation} />
+                    )}
                     <StatusBadge status={interview.status} />
                   </div>
                 </Link>

@@ -131,11 +131,20 @@ export function AdminCandidateDetail() {
   const report = bundle?.report
   const transcript = bundle?.transcript
   const scores = bundle?.scores
+  const hasSpeech = bundle?.has_speech ?? true
 
-  const radarData = SCORE_LABELS.filter((s) => scores && scores[s.key as keyof typeof scores] !== undefined).map((s) => ({
-    axis: s.label,
-    score: Math.round((scores?.[s.key as keyof typeof scores] as number) ?? 0),
-  }))
+  const activeCriteria =
+    bundle?.evaluation_criteria?.length
+      ? bundle.evaluation_criteria
+      : SCORE_LABELS.map((s) => s.key)
+  const activeScoreLabels = SCORE_LABELS.filter((s) => activeCriteria.includes(s.key))
+
+  const radarData = activeScoreLabels
+    .filter((s) => scores && scores[s.key as keyof typeof scores] !== undefined)
+    .map((s) => ({
+      axis: s.label,
+      score: Math.round((scores?.[s.key as keyof typeof scores] as number) ?? 0),
+    }))
 
   // Structured reading document — sections + words for synchronized reading.
   const readingDoc = useMemo(
@@ -154,8 +163,6 @@ export function AdminCandidateDetail() {
         performanceAnalysis: report?.performance_analysis,
         improvementSuggestions: report?.improvement_suggestions,
         transcriptText: transcript?.full_text.slice(0, 4000),
-        speechNotes: bundle?.speech_analysis?.notes,
-        sentimentSummary: bundle?.sentiment_analysis?.summary,
         recommendationReason: bundle?.recommendation?.reason,
         technicalEvaluation: bundle?.technical_evaluation
           ? Object.fromEntries(
@@ -353,6 +360,54 @@ export function AdminCandidateDetail() {
     )
   }
 
+  // No speech in the recording — there is no transcript, evaluation or AI
+  // analysis to show. Present a clean "no speech detected" state instead of
+  // empty/meaningless tabs.
+  if (!hasSpeech) {
+    return (
+      <div className="space-y-6">
+        <PageHeader
+          title={meta?.candidate_name ?? 'Candidate Report'}
+          description={meta?.candidate_email ?? interviewId}
+          actions={
+            <Button asChild variant="outline">
+              <Link to="/admin/candidates">Back to candidates</Link>
+            </Button>
+          }
+        />
+
+        {/* Meta strip */}
+        <div className="flex flex-wrap items-center gap-3">
+          <Button variant="ghost" size="sm" asChild>
+            <Link to="/admin/candidates">
+              <ArrowLeft />
+              Back to candidates
+            </Link>
+          </Button>
+          {meta && <Badge variant="secondary">{meta.job_title}</Badge>}
+          {meta && <StatusBadge status={meta.status} />}
+          {meta && meta.admin_status !== 'Processing' && meta.admin_status !== 'Completed' && <AdminStatusBadge status={meta.admin_status} />}
+          {meta?.duration_seconds ? (
+            <Badge variant="outline">{formatDuration(meta.duration_seconds)}</Badge>
+          ) : null}
+        </div>
+
+        <Card className="border-warning/30">
+          <CardContent className="flex flex-col items-center gap-4 p-12 text-center">
+            <span className="flex h-16 w-16 items-center justify-center rounded-2xl bg-warning/10 text-warning">
+              <AlertTriangle className="h-8 w-8" />
+            </span>
+            <h2 className="font-display text-xl font-bold text-foreground">No speech detected</h2>
+            <p className="max-w-md text-sm leading-relaxed text-muted-foreground">
+              This recording contains no audible speech, so no transcript, evaluation or AI
+              analysis could be generated. Check the uploaded file and re-upload if needed.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -360,14 +415,6 @@ export function AdminCandidateDetail() {
         description={meta?.candidate_email ?? interviewId}
         actions={
           <div className="flex flex-wrap gap-2">
-            <Button
-              variant="outline"
-              onClick={() => downloadPdf.mutate({ id: interviewId!, url: adminApi.regenerateReportPdfUrl(interviewId!) })}
-              loading={downloadPdf.isPending}
-            >
-              <RefreshCw />
-              Regenerate PDF
-            </Button>
             {/* Sound-wave read button — no floating player, just clean word
                 highlighting while the report is spoken. */}
             <SoundWaveButton
@@ -403,7 +450,7 @@ export function AdminCandidateDetail() {
         </Button>
         {meta && <Badge variant="secondary">{meta.job_title}</Badge>}
         {meta && <StatusBadge status={meta.status} />}
-        {meta && <AdminStatusBadge status={meta.admin_status} />}
+        {meta && meta.admin_status !== 'Processing' && meta.admin_status !== 'Completed' && <AdminStatusBadge status={meta.admin_status} />}
         {bundle.recommendation && <RecommendationBadge verdict={bundle.recommendation.verdict} />}
         {meta?.duration_seconds ? (
           <Badge variant="outline">{formatDuration(meta.duration_seconds)}</Badge>
@@ -723,14 +770,10 @@ export function AdminCandidateDetail() {
               <CardContent>
                 <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
                   {[
-                    { label: 'Speaking rate', value: `${Math.round(bundle.speech_analysis.speaking_rate)} WPM` },
-                    { label: 'Avg pause', value: `${bundle.speech_analysis.avg_pause_seconds.toFixed(1)}s` },
-                    { label: 'Total pauses', value: bundle.speech_analysis.total_pauses },
-                    { label: 'Clarity', value: `${Math.round(bundle.speech_analysis.clarity * 100)}%` },
-                    { label: 'Fluency', value: `${Math.round(bundle.speech_analysis.fluency * 100)}%` },
-                    { label: 'Energy', value: `${Math.round(bundle.speech_analysis.energy * 100)}%` },
+                    { label: 'Clarity', value: `${Math.round(bundle.speech_analysis.clarity)}%` },
+                    { label: 'Fluency', value: `${Math.round(bundle.speech_analysis.fluency)}%` },
+                    { label: 'Energy', value: `${Math.round(bundle.speech_analysis.energy)}%` },
                     { label: 'Tone', value: bundle.speech_analysis.tone },
-                    { label: 'Emotion', value: bundle.speech_analysis.emotion },
                   ].map((item) => (
                     <div key={item.label} className="rounded-xl bg-muted/50 p-4">
                       <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{item.label}</p>
@@ -738,65 +781,6 @@ export function AdminCandidateDetail() {
                     </div>
                   ))}
                 </div>
-                {bundle.speech_analysis.notes && (() => {
-                  const props = readingProps('insights', 'Speech Analysis', bundle.speech_analysis.notes)
-                  return (
-                    <p className="mt-4 text-sm leading-relaxed text-muted-foreground">
-                      {props.activeWord !== undefined && props.activeWord >= 0 ? (
-                        <ReadingHighlighter
-                          text={bundle.speech_analysis.notes}
-                          activeWordIndex={props.activeWord}
-                          onActiveWordRef={props.onActiveWordRef}
-                        />
-                      ) : (
-                        bundle.speech_analysis.notes
-                      )}
-                    </p>
-                  )
-                })()}
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Sentiment analysis */}
-          {bundle.sentiment_analysis && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Sentiment analysis</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid gap-4 sm:grid-cols-3">
-                  <div className="rounded-xl bg-muted/50 p-4">
-                    <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Sentiment</p>
-                    <p className="mt-1 font-display text-lg font-bold capitalize text-foreground">{bundle.sentiment_analysis.sentiment}</p>
-                  </div>
-                  <div className="rounded-xl bg-muted/50 p-4">
-                    <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Emotion</p>
-                    <p className="mt-1 font-display text-lg font-bold capitalize text-foreground">{bundle.sentiment_analysis.emotion}</p>
-                  </div>
-                  <div className="rounded-xl bg-muted/50 p-4">
-                    <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Professionalism</p>
-                    <p className="mt-1 font-display text-lg font-bold text-foreground">
-                      {Math.round(bundle.sentiment_analysis.professionalism * 100)}%
-                    </p>
-                  </div>
-                </div>
-                {bundle.sentiment_analysis.summary && (() => {
-                  const props = readingProps('insights', 'Sentiment Analysis', bundle.sentiment_analysis.summary)
-                  return (
-                    <p className="mt-4 text-sm leading-relaxed text-muted-foreground">
-                      {props.activeWord !== undefined && props.activeWord >= 0 ? (
-                        <ReadingHighlighter
-                          text={bundle.sentiment_analysis.summary}
-                          activeWordIndex={props.activeWord}
-                          onActiveWordRef={props.onActiveWordRef}
-                        />
-                      ) : (
-                        bundle.sentiment_analysis.summary
-                      )}
-                    </p>
-                  )
-                })()}
               </CardContent>
             </Card>
           )}

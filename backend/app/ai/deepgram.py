@@ -385,22 +385,18 @@ def _guess_mimetype(file_path: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _validate_transcript(full_text: str) -> None:
-    """Validate the transcript before it can be used downstream.
+def _has_usable_speech(full_text: str) -> bool:
+    """Return whether a transcript contains enough speech to evaluate.
 
-    Raises TranscriptionError when the transcript is empty or trivially
-    short — processing must never continue with unusable content.
+    Empty/whitespace-only transcripts and trivially short ones (≤ 20 chars)
+    are treated as "no speech" — the pipeline completes the interview but
+    skips transcript/evaluation/PDF generation.
     """
     if not full_text or not full_text.strip():
-        raise TranscriptionError(
-            "No speech was detected in the recording. Make sure the file "
-            "contains audible speech (not silence, music, or a video without "
-            "an audio track), then upload it again."
-        )
+        return False
     if len(full_text.strip()) <= 20:
-        raise TranscriptionError(
-            "Insufficient speech detected (transcript is too short to evaluate)."
-        )
+        return False
+    return True
 
 
 async def transcribe_audio(file_path: str) -> dict[str, Any]:
@@ -415,9 +411,12 @@ async def transcribe_audio(file_path: str) -> dict[str, Any]:
       - confidence: overall transcript confidence
       - source: "deepgram"
       - raw_response: the complete Deepgram results payload
+      - has_speech: whether the recording contained usable audible speech
 
-    Raises TranscriptionError when transcription fails or the transcript
-    fails validation. ``file_path`` may be relative to the uploads dir.
+    Raises TranscriptionError when transcription fails. ``file_path`` may
+    be relative to the uploads dir. Empty/too-short transcripts do NOT raise
+    — they are reported via ``has_speech=False`` so the pipeline can skip
+    evaluation instead of failing.
     """
     path = Path(file_path)
     if not path.is_absolute():
@@ -465,7 +464,7 @@ async def transcribe_audio(file_path: str) -> dict[str, Any]:
             ]
 
     full_text = _build_full_text(segments)
-    _validate_transcript(full_text)
+    has_speech = _has_usable_speech(full_text)
 
     metadata = results.get("metadata", {}) or {}
     duration = round(float(metadata.get("duration", 0) or 0), 2)
@@ -486,11 +485,12 @@ async def transcribe_audio(file_path: str) -> dict[str, Any]:
     overall_confidence = round(sum(confidences) / len(confidences), 4) if confidences else 0.0
 
     logger.info(
-        "Transcript ready: length=%s preview=%r language=%s duration=%ss",
+        "Transcript ready: length=%s preview=%r language=%s duration=%ss has_speech=%s",
         len(full_text),
         full_text[:300],
         language,
         duration,
+        has_speech,
     )
 
     return {
@@ -502,4 +502,5 @@ async def transcribe_audio(file_path: str) -> dict[str, Any]:
         "confidence": overall_confidence,
         "source": "deepgram",
         "raw_response": results,
+        "has_speech": has_speech,
     }

@@ -8,11 +8,12 @@ from app.core.config import settings
 from app.utils.exceptions import BadRequestError
 
 ALLOWED_EXTENSIONS = {
-    ".mp4", ".mov", ".avi", ".mkv",   # video
+    ".mp4", ".mov", ".avi", ".mkv", ".webm",   # video (webm = MediaRecorder)
     ".mp3", ".wav", ".m4a", ".flac", ".aac",  # audio
 }
 ALLOWED_MIME_TYPES = {
     "video/mp4", "video/quicktime", "video/x-msvideo", "video/x-matroska",
+    "video/webm", "audio/webm",
     "audio/mpeg", "audio/wav", "audio/x-wav", "audio/mp4", "audio/x-m4a",
     "audio/flac", "audio/aac", "audio/aacp",
 }
@@ -33,7 +34,10 @@ def validate_upload(file: UploadFile) -> None:
         )
 
     content_type = (file.content_type or "").lower()
-    if content_type and content_type not in ALLOWED_MIME_TYPES:
+    # Strip MIME parameters (e.g. "video/webm;codecs=vp8,opus") — MediaRecorder
+    # blobs frequently include codec params that must not fail validation.
+    base_type = content_type.split(";")[0].strip()
+    if content_type and base_type not in ALLOWED_MIME_TYPES:
         raise BadRequestError(f"Content type '{content_type}' not allowed.")
 
     file.file.seek(0, 2)  # SEEK_END

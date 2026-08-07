@@ -4,6 +4,7 @@ regenerate results from a stored transcript, and delete interviews.
 from __future__ import annotations
 
 import asyncio
+import json
 import time
 import traceback
 import uuid
@@ -17,6 +18,7 @@ from app.ai.deepgram import probe_media_duration
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.logging import get_logger
+from app.core.supabase_client import get_supabase_service
 from app.dependencies.auth import require_role
 from app.models.interview import Interview, InterviewStatus
 from app.models.user import User, UserRole
@@ -40,6 +42,7 @@ from app.schemas.interview import (
     RegenerateRequest,
     TranscriptOut,
 )
+from app.schemas.auth import CandidateUpdate, RegisterRequest
 from app.schemas.profile import RecommendationMessage
 from app.services.pipeline_service import enqueue_interview_processing, run_interview_pipeline
 from app.storage.service import LocalStorage
@@ -103,6 +106,7 @@ async def upload_interview(
     candidate_email: str = Form(...),
     job_title: str = Form(default="Interview"),
     job_description: str = Form(default=""),
+    evaluation_criteria: str = Form(default=""),
     background_tasks: BackgroundTasks = BackgroundTasks(),
     current_user: User = Depends(require_role("admin")),
     db: AsyncSession = Depends(get_db),
@@ -134,11 +138,22 @@ async def upload_interview(
             f"'{candidate_email}' is not a candidate account — only candidates can be evaluated."
         )
 
+    # Parse the selected evaluation criteria (JSON array string from the form).
+    # Empty/invalid → [] = evaluate all 10 competencies (backward compatible).
+    try:
+        parsed_criteria = json.loads(evaluation_criteria) if evaluation_criteria.strip() else []
+        if not isinstance(parsed_criteria, list):
+            parsed_criteria = []
+        criteria = [str(c) for c in parsed_criteria]
+    except (ValueError, TypeError):
+        criteria = []
+
     interviews = InterviewRepository(db)
     interview = await interviews.create(
         candidate_id=candidate.id,
         job_title=job_title,
         job_description=job_description,
+        evaluation_criteria=criteria,
     )
     await db.flush()
 
@@ -176,6 +191,7 @@ async def upload_interview(
             "size_bytes": size_bytes,
             "candidate_id": str(candidate.id),
             "duration_seconds": duration,
+            "evaluation_criteria": criteria,
         },
     )
     await db.commit()
@@ -358,6 +374,8 @@ async def get_analysis(
         weaknesses=weaknesses,
         recommendation=interview.recommendation,
         report=report,
+        has_speech=interview.has_speech,
+        evaluation_criteria=interview.evaluation_criteria or [],
     ).model_dump(mode="json")
 
     _analysis_cache[interview_id] = (now, bundle)
@@ -543,6 +561,8 @@ async def get_admin_dashboard(
                     else None
                 ),
                 "created_at": interview.created_at.isoformat() if interview.created_at else None,
+                "has_speech": interview.has_speech,
+                "interview_type": interview.interview_type or "recorded",
             }
         )
 
@@ -599,6 +619,7 @@ async def list_interviews(
                 "candidate_email": candidate.email if candidate else "—",
                 "candidate_profile": profile,
                 "admin_status": interview.admin_status,
+                "evaluation_criteria": interview.evaluation_criteria or [],
                 "job_title": interview.job_title,
                 "status": interview.status.value,
                 "progress": interview.processing_progress,
@@ -614,6 +635,8 @@ async def list_interviews(
                     else None
                 ),
                 "created_at": interview.created_at.isoformat() if interview.created_at else None,
+                "has_speech": interview.has_speech,
+                "interview_type": interview.interview_type or "recorded",
             }
         )
 
@@ -656,6 +679,7 @@ async def get_interview_meta(
         "candidate_email": candidate.email if candidate else "—",
         "candidate_profile": profile,
         "admin_status": interview.admin_status,
+        "evaluation_criteria": interview.evaluation_criteria or [],
         "job_title": interview.job_title,
         "status": interview.status.value,
         "progress": interview.processing_progress,
@@ -671,6 +695,8 @@ async def get_interview_meta(
             else None
         ),
         "created_at": interview.created_at.isoformat() if interview.created_at else None,
+        "has_speech": interview.has_speech,
+        "interview_type": interview.interview_type or "recorded",
     }
 
 
@@ -709,7 +735,7 @@ async def regenerate_result(
 
 
 VALID_ADMIN_STATUSES = {
-    "Pending", "Processing", "Completed", "Recommended",
+    "Processing", "Completed", "Recommended",
     "Not Recommended", "Need Further Review", "Rejected", "Selected",
 }
 
@@ -723,7 +749,7 @@ async def update_interview_status(
 ):
     """Update the admin review status of an interview.
 
-    Allowed values: Pending, Processing, Completed, Recommended,
+    Allowed values: Processing, Completed, Recommended,
     Not Recommended, Need Further Review, Rejected, Selected.
     Saved immediately; the candidate sees it on their next refresh.
     """
@@ -798,6 +824,31 @@ async def override_recommendation(
     )
 
 
+@router.post("/candidates", status_code=201)
+async def create_candidate(
+    payload: RegisterRequest,
+    current_user: User = Depends(require_role("admin")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Create a candidate account (Supabase Auth + local users row).
+
+    Mirrors the AI assistant's create_candidate tool so the admin UI can
+    register candidates directly without the candidate signing up.
+    """
+    from app.tools.admin_tools import create_candidate as _create_candidate
+
+    return await _create_candidate(
+        db,
+        current_user,
+        email=payload.email,
+        password=payload.password,
+        first_name=payload.first_name,
+        last_name=payload.last_name,
+        phone=payload.phone,
+        gender=payload.gender,
+    )
+
+
 @router.get("/candidates/registered")
 async def list_registered_candidates(
     current_user: User = Depends(require_role("admin")),
@@ -819,6 +870,124 @@ async def list_registered_candidates(
         }
         for c in candidates
     ]
+
+
+@router.get("/candidates")
+async def list_candidates_with_interviews(
+    current_user: User = Depends(require_role("admin")),
+    db: AsyncSession = Depends(get_db),
+):
+    """List every active candidate with their interview summary.
+
+    Unlike ``/interviews`` (one row per interview), this returns one row per
+    candidate — including candidates who have never had an interview — so the
+    admin Candidates page can show the full pool and mark who has/hasn't been
+    interviewed yet.
+    """
+    from sqlalchemy import select
+    from sqlalchemy.orm import joinedload, selectinload
+
+    stmt = (
+        select(User)
+        .where(User.role == UserRole.CANDIDATE, User.is_active.is_(True))
+        .options(
+            joinedload(User.profile),
+            selectinload(User.interviews).joinedload(Interview.recommendation),
+            selectinload(User.interviews).joinedload(Interview.scores),
+        )
+        .order_by(User.first_name.asc(), User.last_name.asc())
+    )
+    result = await db.execute(stmt)
+    users = list(result.scalars().all())
+
+    items = []
+    for user in users:
+        interviews = sorted(
+            user.interviews,
+            key=lambda i: i.created_at or datetime.min,
+            reverse=True,
+        )
+        latest = interviews[0] if interviews else None
+        items.append(
+            {
+                "id": str(user.id),
+                "full_name": user.full_name,
+                "email": user.email,
+                "phone": user.phone,
+                "gender": user.gender,
+                "is_active": user.is_active,
+                "created_at": user.created_at.isoformat() if user.created_at else None,
+                "profile_picture_url": (
+                    user.profile.profile_picture_url if user.profile else None
+                ),
+                "interview_count": len(interviews),
+                "has_interview": len(interviews) > 0,
+                "latest_interview": (
+                    {
+                        "id": str(latest.id),
+                        "job_title": latest.job_title,
+                        "status": latest.status.value,
+                        "admin_status": latest.admin_status,
+                        "overall_score": (
+                            latest.scores.overall_score if latest.scores else None
+                        ),
+                        "recommendation": (
+                            latest.recommendation.verdict.value
+                            if latest.recommendation
+                            else None
+                        ),
+                        "created_at": (
+                            latest.created_at.isoformat() if latest.created_at else None
+                        ),
+                    }
+                    if latest
+                    else None
+                ),
+            }
+        )
+    return items
+
+
+@router.put("/candidate/{candidate_id}")
+async def update_candidate_by_id(
+    candidate_id: str,
+    payload: CandidateUpdate,
+    current_user: User = Depends(require_role("admin")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Update a candidate account's basic fields (name, phone, gender, active).
+
+    Mirrors the AI assistant's ``update_candidate`` tool as a REST endpoint,
+    keyed by candidate id to match ``DELETE /api/admin/candidate/{candidate_id}``.
+    """
+    repo = UserRepository(db)
+    user = await repo.get(str(candidate_id))
+    if user is None or user.role != UserRole.CANDIDATE:
+        raise NotFoundError("Candidate not found")
+
+    updated = {}
+    if payload.first_name is not None:
+        user.first_name = payload.first_name
+        updated["first_name"] = payload.first_name
+    if payload.last_name is not None:
+        user.last_name = payload.last_name
+        updated["last_name"] = payload.last_name
+    if payload.phone is not None:
+        user.phone = payload.phone
+        updated["phone"] = payload.phone
+    if payload.gender is not None:
+        user.gender = payload.gender
+        updated["gender"] = payload.gender
+    if payload.is_active is not None:
+        user.is_active = payload.is_active
+        updated["is_active"] = user.is_active
+        if user.auth_uid:
+            from app.dependencies.auth import invalidate_user_cache
+
+            invalidate_user_cache(str(user.auth_uid))
+
+    await db.commit()
+    return {"id": str(user.id), "updated": updated}
 
 
 @router.delete("/interview/{interview_id}", status_code=200)
@@ -863,3 +1032,72 @@ async def delete_interview(
 
     invalidate_dashboard_cache()
     return {"message": f"Interview {interview_id} deleted successfully."}
+
+
+@router.delete("/candidate/{candidate_id}", status_code=200)
+async def delete_candidate_by_id(
+    candidate_id: str,
+    current_user: User = Depends(require_role("admin")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Delete a candidate account and ALL of their interviews (cascade).
+
+    The admin Candidates table shows one row per interview, so a candidate
+    can appear multiple times. This endpoint removes the whole candidate —
+    account, profile and every interview with its artifacts — instead of a
+    single interview row.
+    """
+    repo = UserRepository(db)
+    candidate = await repo.get(str(candidate_id))
+    if candidate is None or candidate.role != UserRole.CANDIDATE:
+        raise NotFoundError("Candidate not found")
+
+    # Collect every interview owned by this candidate so we can clean up
+    # stored files (local + Supabase Storage) before the DB cascade.
+    interview_repo = InterviewRepository(db)
+    interviews = await interview_repo.list_by_candidate_full(candidate.id)
+
+    storage = LocalStorage()
+    for interview in interviews:
+        for file in interview.files:
+            if file.storage_path:
+                storage.delete(file.storage_path)
+    if settings.SUPABASE_URL:
+        try:
+            from app.storage.service import SupabaseStorage
+
+            remote = SupabaseStorage()
+            for interview in interviews:
+                for file in interview.files:
+                    if file.storage_path:
+                        remote.delete(file.storage_path)
+                for pdf in interview.pdfs:
+                    if pdf.storage_path:
+                        remote.delete(pdf.storage_path)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Remote file cleanup failed for candidate %s: %s", candidate_id, exc)
+
+    # Best-effort cleanup of the Supabase Auth account so the candidate
+    # can no longer sign in (the local users row is just our mirror; the
+    # actual credentials live in Supabase Auth).
+    if candidate.auth_uid:
+        try:
+            get_supabase_service().auth.admin.delete_user(str(candidate.auth_uid))
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Supabase auth user cleanup failed for %s: %s", candidate_id, exc)
+
+    # Deletes cascade to candidate_profiles and interviews (with their artifacts).
+    await repo.delete(candidate.id)
+    await db.commit()
+
+    await ActivityLogRepository(db).log(
+        current_user.id,
+        "candidate_deleted",
+        "user",
+        str(candidate.id),
+        {"email": candidate.email},
+    )
+    await db.commit()
+
+    invalidate_dashboard_cache()
+    return {"message": f"Candidate '{candidate.email}' and all interviews deleted successfully."}

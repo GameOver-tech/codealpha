@@ -2,7 +2,7 @@
 import { useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
-import { FileText, Clock, AlertTriangle, Loader2, Video, Inbox } from 'lucide-react'
+import { FileText, Clock, Video, Inbox } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { Button, Card, CardContent, Skeleton } from '@/components/ui'
 import { PageHeader, StatusBadge } from '@/components/shared'
@@ -24,10 +24,10 @@ export function DashboardOverview() {
   const isLoading = statusQuery.isLoading || statusQuery.isFetching
 
   // Derive the candidate-visible state strictly from backend data.
-  //  - no interview record -> Pending
+  //  - no interview record -> No interview yet
   //  - interview exists, not completed -> In Review
   //  - backend status completed -> Completed
-  const isPending = !status && !statusQuery.isLoading
+  const hasNoInterview = !status && !statusQuery.isLoading
   const isCompleted = status?.status === 'completed'
 
   const handleRefresh = async () => {
@@ -73,8 +73,8 @@ export function DashboardOverview() {
               </div>
             </CardContent>
           </Card>
-        ) : isPending ? (
-          /* PENDING — no interview record exists yet. */
+        ) : hasNoInterview ? (
+          /* NO INTERVIEW — no interview record exists yet. */
           <Card>
             <CardContent className="flex flex-col items-center p-10 text-center">
               <motion.div
@@ -87,34 +87,24 @@ export function DashboardOverview() {
                   <Inbox className="h-8 w-8" />
                 </span>
                 <div className="mt-5">
-                  <StatusBadge status="pending" />
+                  <StatusBadge status="uploaded" />
                 </div>
-                <h2 className="mt-4 font-display text-xl font-bold text-foreground">Interview Pending</h2>
+                <h2 className="mt-4 font-display text-xl font-bold text-foreground">No interview yet</h2>
                 <p className="mt-2 max-w-md text-sm leading-relaxed text-muted-foreground">
-                  No interview has been uploaded yet. Please wait until the recruiter uploads your
-                  interview.
+                  No interview has been uploaded yet. You can start a live AI interview right now,
+                  or wait until the recruiter uploads your interview.
                 </p>
-                <Button className="mt-8" disabled>
-                  <FileText />
-                  No Results Yet
-                </Button>
+                <div className="mt-8 flex flex-wrap justify-center gap-3">
+                  <Button onClick={() => navigate('/dashboard/live-interview')}>
+                    <Video />
+                    Start Live Interview
+                  </Button>
+                  <Button variant="outline" disabled>
+                    <FileText />
+                    No Results Yet
+                  </Button>
+                </div>
               </motion.div>
-            </CardContent>
-          </Card>
-        ) : status?.status === 'failed' ? (
-          /* FAILED — surfaced as-is so the candidate can contact their recruiter. */
-          <Card className="border-destructive/30">
-            <CardContent className="flex flex-col items-center gap-4 p-10 text-center">
-              <span className="flex h-16 w-16 items-center justify-center rounded-2xl bg-destructive/10">
-                <AlertTriangle className="h-8 w-8 text-destructive" />
-              </span>
-              <h2 className="font-display text-xl font-bold text-foreground">Processing Failed</h2>
-              <p className="max-w-md text-sm text-muted-foreground">
-                {status.failure_reason || status.error_message || 'The interview could not be processed.'}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                Contact your recruiter to re-upload the recording.
-              </p>
             </CardContent>
           </Card>
         ) : isCompleted ? (
@@ -134,12 +124,21 @@ export function DashboardOverview() {
                   Duration: {formatDuration(status.duration_seconds)}
                 </p>
 
-                <div className="mt-6 flex flex-wrap gap-3">
-                  <Button onClick={() => navigate('/dashboard/results')}>
-                    <FileText />
-                    View Results
-                  </Button>
-                </div>
+                {status.has_speech === false ? (
+                  <div className="mt-6">
+                    <p className="text-sm leading-relaxed text-muted-foreground">
+                      No speech was detected in your recording, so no evaluation could be
+                      generated. Please contact your recruiter to re-upload.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="mt-6 flex flex-wrap gap-3">
+                    <Button onClick={() => navigate('/dashboard/results')}>
+                      <FileText />
+                      View Results
+                    </Button>
+                  </div>
+                )}
               </CardContent>
 
               <div className="flex flex-col items-center justify-center gap-3 border-t border-border/60 bg-gradient-to-br from-success/10 to-transparent p-6 md:border-l md:border-t-0 md:p-10">
@@ -148,40 +147,42 @@ export function DashboardOverview() {
                 </span>
                 <p className="text-center text-sm font-semibold text-foreground">Evaluation complete</p>
                 <p className="max-w-[220px] text-center text-xs text-muted-foreground">
-                  Your full AI evaluation is ready on the Results page.
+                  {status.has_speech === false
+                    ? 'The recording contained no audible speech.'
+                    : 'Your full AI evaluation is ready on the Results page.'}
                 </p>
               </div>
             </div>
           </Card>
         ) : (
-          /* IN REVIEW — interview exists, processing in progress. */
+          /* IN REVIEW — interview exists, processing in progress. Failed
+             interviews are shown as "Under Review" too — the candidate never
+             sees a failure state; the recruiter handles it on the admin side
+             and the outcome appears here when ready. */
           <Card className="overflow-hidden">
             <div className="grid gap-0 md:grid-cols-[1fr_auto]">
               <CardContent className="flex flex-col justify-center p-6 md:p-8">
                 <div className="flex flex-wrap items-center gap-3">
-                  <StatusBadge status={status?.status ?? 'processing'} />
+                  <span className="inline-flex items-center rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-semibold text-primary">
+                    Under Review
+                  </span>
                 </div>
                 <h2 className="mt-4 font-display text-xl font-bold text-foreground sm:text-2xl">
                   {status?.title || 'Interview in review'}
                 </h2>
                 <p className="mt-1 text-sm text-muted-foreground">{status?.job_title}</p>
-                <p className="mt-3 flex items-center gap-2 text-sm text-muted-foreground">
-                  <Loader2 className="h-4 w-4 animate-spin" />
+                <p className="mt-3 text-sm text-muted-foreground">
                   Our AI is currently evaluating your interview. Results will appear automatically.
                 </p>
 
                 <div className="mt-6 flex flex-wrap gap-3">
-                  <Button disabled>
-                    <Loader2 className="animate-spin" />
-                    Processing...
-                  </Button>
+                  <Button disabled>Processing...</Button>
                 </div>
               </CardContent>
 
               <div className="flex flex-col items-center justify-center gap-3 border-t border-border/60 bg-gradient-to-br from-primary/5 to-transparent p-6 md:border-l md:border-t-0 md:p-10">
-                <span className="relative flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
-                  <span className="absolute inset-0 animate-pulse-ring rounded-full bg-primary/30" />
-                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                <span className="flex h-16 w-16 items-center justify-center rounded-full bg-primary/10 text-primary">
+                  <FileText className="h-8 w-8" />
                 </span>
                 <p className="max-w-[220px] text-center text-xs text-muted-foreground">
                   This usually takes a few minutes. You can close this page and check back later.
@@ -207,7 +208,7 @@ export function DashboardOverview() {
             <div className="min-w-0">
               <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Interview status</p>
               <p className="mt-0.5 truncate font-display text-lg font-bold capitalize text-foreground">
-                {isPending ? 'Pending' : isCompleted ? 'Completed' : status?.status === 'failed' ? 'Failed' : 'In Review'}
+                {hasNoInterview ? 'No Interview' : isCompleted ? 'Completed' : 'Under Review'}
               </p>
               <p className="truncate text-xs text-muted-foreground">
                 {status?.job_title || 'No interview yet'}

@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.logging import get_logger
 from app.dependencies.auth import get_current_user
+from app.models.interview import InterviewStatus
 from app.models.user import User
 from app.repositories.interview import InterviewRepository
 from app.schemas.interview import (
@@ -49,6 +50,8 @@ def _status_out(interview) -> InterviewStatusOut:
         failure_stage=interview.failure_stage,
         processing_finished_at=interview.processing_finished_at,
         recommendation=rec.verdict.value if rec else None,
+        has_speech=interview.has_speech,
+        interview_type=interview.interview_type or "recorded",
     )
 
 
@@ -70,11 +73,24 @@ async def get_interview_status(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Get the status of the candidate's most recent interview."""
+    """Get the status of the candidate's most recent interview.
+
+    A live interview that was started but never submitted (uploaded with no
+    file) is treated as if it does not exist — it would otherwise show as
+    "In Review" forever on every login.
+    """
     repo = InterviewRepository(db)
     interview = await repo.latest_for_candidate(current_user.id)
     if interview is None:
         raise NotFoundError("No interview found for this candidate")
+
+    if interview.interview_type == "live" and interview.status == InterviewStatus.UPLOADED:
+        from app.repositories.interview_file import InterviewFileRepository
+
+        has_file = bool(await InterviewFileRepository(db).list_by_interview(interview.id))
+        if not has_file:
+            raise NotFoundError("No interview found for this candidate")
+
     return _status_out(interview)
 
 
@@ -116,6 +132,8 @@ async def get_interview_result(
         duration_seconds=duration,
         recommendation=verdict,
         message=message,
+        has_speech=interview.has_speech,
+        interview_type=interview.interview_type or "recorded",
     )
 
 

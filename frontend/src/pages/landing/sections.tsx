@@ -1,22 +1,36 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
-import { RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, ResponsiveContainer } from 'recharts'
 import { ArrowRight, BadgeCheck, PlayCircle, Sparkles, Upload, FileText, Brain, LineChart, Trophy, Plus } from 'lucide-react'
 import { CTAButton } from '@/components/shared'
-import { CircularProgress } from '@/components/shared'
+import { HologramVisual } from '@/components/hero/HologramVisual'
 
-const HERO_RADAR = [
-  { axis: 'Technical', score: 92 },
-  { axis: 'Communication', score: 85 },
-  { axis: 'Problem Solving', score: 82 },
-  { axis: 'Confidence', score: 80 },
-  { axis: 'Experience', score: 88 },
-]
+/* Per-word headline reveal: rise with a crisp settle and gradient highlight on key words */
+function Word({ children, gradient }: { children: React.ReactNode; gradient?: boolean }) {
+  return (
+    <motion.span
+      variants={{
+        hidden: { opacity: 0, y: 16, filter: 'blur(4px)' },
+        show: { opacity: 1, y: 0, filter: 'blur(0px)', transition: { duration: 0.5, ease: [0.22, 1, 0.36, 1] } },
+      }}
+      className={gradient ? 'relative inline-block text-gradient animate-gradient-shift' : 'inline-block'}
+    >
+      {gradient && (
+        <motion.span
+          initial={{ scaleX: 0 }}
+          animate={{ scaleX: 1 }}
+          transition={{ delay: 1.1, duration: 0.6, ease: 'easeOut' }}
+          className="absolute -bottom-1 left-0 right-0 h-[3px] origin-left rounded-full bg-gradient-to-r from-primary via-blue-400 to-primary opacity-60"
+        />
+      )}
+      {children}
+    </motion.span>
+  )
+}
 
 export function Hero() {
   return (
-    <section className="relative overflow-hidden pb-24 pt-32 md:pb-32 md:pt-40">
+    <section className="relative overflow-hidden pb-20 pt-24 md:pb-28 md:pt-28">
       {/* Background decorations */}
       <div className="pointer-events-none absolute inset-0 -z-10">
         <div className="absolute -top-40 left-1/2 h-[560px] w-[900px] -translate-x-1/2 rounded-full bg-gradient-to-br from-primary/20 via-blue-400/10 to-transparent blur-3xl" />
@@ -25,7 +39,7 @@ export function Hero() {
         <div className="absolute inset-0 bg-[linear-gradient(to_right,rgb(15_23_42/0.04)_1px,transparent_1px),linear-gradient(to_bottom,rgb(15_23_42/0.04)_1px,transparent_1px)] bg-[size:56px_56px] [mask-image:radial-gradient(ellipse_60%_60%_at_50%_0%,#000_70%,transparent_110%)] dark:bg-[linear-gradient(to_right,rgb(255_255_255/0.04)_1px,transparent_1px),linear-gradient(to_bottom,rgb(255_255_255/0.04)_1px,transparent_1px)]" />
       </div>
 
-      <div className="mx-auto grid max-w-7xl items-center gap-16 px-4 sm:px-6 lg:grid-cols-2 lg:px-8">
+      <div className="mx-auto grid max-w-7xl items-center gap-16 px-4 sm:px-6 lg:grid-cols-2 lg:gap-20 lg:px-8">
         <div>
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -38,123 +52,58 @@ export function Hero() {
           </motion.div>
 
           <motion.h1
-            initial={{ opacity: 0, y: 24 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.1 }}
-            className="mt-6 font-display text-4xl font-extrabold leading-[1.1] tracking-tight text-foreground sm:text-5xl lg:text-6xl"
+            initial="hidden"
+            animate="show"
+            variants={{ hidden: {}, show: { transition: { staggerChildren: 0.09, delayChildren: 0.15 } } }}
+            className="mt-4 font-display text-4xl font-extrabold leading-[1.1] tracking-tight text-foreground sm:text-5xl lg:text-6xl"
           >
-            Your AI-powered <span className="text-gradient">talent evaluation</span> partner
+            <span className="block">
+              <Word>AI-powered</Word>{' '}
+              <Word gradient>hiring intelligence</Word>{' '}
+              <Word>for</Word>{' '}
+              <Word>smarter</Word>{' '}
+              <Word>talent</Word>{' '}
+              <Word>decisions</Word>
+            </span>
           </motion.h1>
 
           <motion.p
             initial={{ opacity: 0, y: 24 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.2 }}
-            className="mt-6 max-w-xl text-lg leading-relaxed text-muted-foreground"
+            className="mt-5 max-w-xl text-lg leading-relaxed text-pretty text-muted-foreground"
           >
             Upload interview recordings and get deep, data-driven insights — speech analysis,
             sentiment detection, skill scoring, and hiring recommendations in minutes.
           </motion.p>
-
-          <motion.div
-            initial={{ opacity: 0, y: 24 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.3 }}
-            className="mt-8 flex flex-wrap items-center gap-4"
-          >
-            <CTAButton to="/register">Start Interview</CTAButton>
-            <CTAButton to="/login" variant="outline">
-              For Recruiters
-            </CTAButton>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.8, delay: 0.5 }}
-            className="mt-10 flex flex-wrap items-center gap-x-8 gap-y-3 text-sm text-muted-foreground"
-          >
-            <span className="inline-flex items-center gap-2">
-              <BadgeCheck className="h-4 w-4 text-success" /> Free to get started
-            </span>
-            <span className="inline-flex items-center gap-2">
-              <BadgeCheck className="h-4 w-4 text-success" /> 30-minute interviews
-            </span>
-            <span className="inline-flex items-center gap-2">
-              <BadgeCheck className="h-4 w-4 text-success" /> Instant AI reports
-            </span>
-          </motion.div>
         </div>
 
-        {/* Hero visual: animated score card */}
+        {/* Hero visual: AI brain inside a premium floating glass frame */}
         <motion.div
-          initial={{ opacity: 0, scale: 0.92 }}
+          initial={{ opacity: 0, scale: 0.96 }}
           animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.7, delay: 0.3 }}
-          className="relative mx-auto w-full max-w-md"
+          transition={{ duration: 0.7, delay: 0.3, ease: [0.22, 1, 0.36, 1] }}
+          className="relative mx-auto flex w-full max-w-[600px] items-center justify-center"
         >
-          <div className="glass-strong animate-float rounded-3xl p-8 shadow-card">
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Interview Score</p>
-                <p className="mt-0.5 text-xs text-muted-foreground">Senior Software Engineer</p>
-              </div>
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-success/10 px-3 py-1 text-xs font-semibold text-success">
-                <Trophy className="h-3.5 w-3.5" />
-                Recommended
-              </span>
-            </div>
-
-            <div className="mt-6 flex items-center justify-center">
-              <CircularProgress value={87} size={180} label="Overall" />
-            </div>
-
-            <div className="mt-6 h-48 w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <RadarChart data={HERO_RADAR} outerRadius="78%">
-                  <PolarGrid stroke="currentColor" className="text-slate-300 dark:text-slate-600" />
-                  <PolarAngleAxis dataKey="axis" tick={{ fill: '#94a3b8', fontSize: 11 }} />
-                  <PolarRadiusAxis domain={[0, 100]} tick={false} axisLine={false} />
-                  <Radar dataKey="score" stroke="#2563EB" fill="#2563EB" fillOpacity={0.35} strokeWidth={2} />
-                </RadarChart>
-              </ResponsiveContainer>
-            </div>
-
-            <div className="mt-4 grid grid-cols-2 gap-3">
-              <div className="rounded-xl bg-muted/60 p-3">
-                <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Technical</p>
-                <p className="mt-0.5 font-display text-lg font-bold text-foreground">92/100</p>
-              </div>
-              <div className="rounded-xl bg-muted/60 p-3">
-                <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Communication</p>
-                <p className="mt-0.5 font-display text-lg font-bold text-foreground">85/100</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Floating chips */}
-          <motion.div
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.9 }}
-            className="absolute -left-6 -top-6 hidden rounded-2xl glass-strong px-4 py-3 shadow-card sm:block"
-          >
-            <p className="flex items-center gap-2 text-xs font-semibold text-foreground">
-              <Upload className="h-4 w-4 text-primary" /> Upload
-            </p>
-          </motion.div>
-          <motion.div
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 1.1 }}
-            className="absolute -bottom-6 -right-4 hidden rounded-2xl glass-strong px-4 py-3 shadow-card sm:block"
-          >
-            <p className="flex items-center gap-2 text-xs font-semibold text-foreground">
-              <Brain className="h-4 w-4 text-primary" /> AI Analysis
-            </p>
-          </motion.div>
+          <HologramVisual />
         </motion.div>
       </div>
+
+      {/* Scroll cue */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 1.6, duration: 1 }}
+        className="pointer-events-none absolute bottom-6 left-1/2 hidden -translate-x-1/2 md:block"
+      >
+        <div className="flex h-10 w-6 items-start justify-center rounded-full border-2 border-muted-foreground/30 p-1.5">
+          <motion.div
+            animate={{ y: [0, 8, 0] }}
+            transition={{ duration: 1.6, repeat: Infinity, ease: 'easeInOut' }}
+            className="h-2 w-1 rounded-full bg-primary"
+          />
+        </div>
+      </motion.div>
     </section>
   )
 }
@@ -178,12 +127,30 @@ export function HowItWorks() {
           <h2 className="mt-4 font-display text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
             From recording to recommendation in minutes
           </h2>
+          <motion.div
+            initial={{ scaleX: 0 }}
+            whileInView={{ scaleX: 1 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.7, ease: 'easeOut' }}
+            className="mx-auto mt-3 h-1 w-20 origin-center rounded-full bg-gradient-to-r from-primary via-blue-400 to-primary"
+          />
           <p className="mt-4 text-muted-foreground">
             A fully automated pipeline that turns raw interview recordings into actionable hiring intelligence.
           </p>
         </div>
 
-        <div className="mt-14 grid gap-6 sm:grid-cols-2 lg:grid-cols-5">
+        <div className="relative mt-14 grid gap-6 sm:grid-cols-2 lg:grid-cols-5">
+          {/* Animated connector line on large screens */}
+          <div className="pointer-events-none absolute left-[10%] right-[10%] top-14 hidden h-0.5 lg:block">
+            <div className="h-full w-full origin-left bg-gradient-to-r from-primary/10 via-primary/30 to-primary/10" />
+            <motion.div
+              initial={{ scaleX: 0 }}
+              whileInView={{ scaleX: 1 }}
+              viewport={{ once: true }}
+              transition={{ duration: 1.4, ease: 'easeOut' }}
+              className="absolute inset-0 origin-left bg-gradient-to-r from-primary via-blue-400 to-primary"
+            />
+          </div>
           {STEPS.map((step, i) => (
             <motion.div
               key={step.title}
@@ -193,10 +160,12 @@ export function HowItWorks() {
               transition={{ delay: i * 0.08, duration: 0.5 }}
               className="group relative rounded-2xl border border-border/60 bg-card p-6 text-center shadow-soft transition-all duration-300 hover:-translate-y-1.5 hover:shadow-card"
             >
-              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-primary/10 to-blue-400/10 text-primary transition-colors group-hover:from-primary group-hover:to-primary-dark group-hover:text-white">
+              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-primary/10 to-blue-400/10 text-primary transition-all duration-300 group-hover:scale-110 group-hover:from-primary group-hover:to-primary-dark group-hover:text-white group-hover:shadow-glow">
                 <step.icon className="h-7 w-7" />
               </div>
-              <span className="absolute right-4 top-4 text-xs font-bold text-muted-foreground/50">0{i + 1}</span>
+              <span className="absolute right-4 top-4 bg-gradient-to-r from-primary to-blue-400 bg-clip-text text-xs font-bold text-transparent">
+                0{i + 1}
+              </span>
               <h3 className="mt-4 font-display text-base font-bold text-foreground">{step.title}</h3>
               <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">{step.description}</p>
             </motion.div>
@@ -208,6 +177,16 @@ export function HowItWorks() {
 }
 
 const FEATURES = [
+  {
+    icon: Upload,
+    title: 'Instant Uploads',
+    description: 'Drag and drop MP4, MOV, MP3, WAV and more. Processing starts automatically.',
+  },
+  {
+    icon: PlayCircle,
+    title: 'Full Transcripts',
+    description: 'Timestamped, speaker-labeled transcripts with every insight backed by evidence.',
+  },
   {
     icon: Brain,
     title: 'Deep AI Analysis',
@@ -224,19 +203,9 @@ const FEATURES = [
     description: 'Beautiful, downloadable PDF reports with executive summaries and evidence.',
   },
   {
-    icon: Upload,
-    title: 'Instant Uploads',
-    description: 'Drag and drop MP4, MOV, MP3, WAV and more. Processing starts automatically.',
-  },
-  {
     icon: BadgeCheck,
     title: 'Hiring Recommendations',
     description: 'Clear verdicts: Recommended, Not Recommended, or Need Further Review.',
-  },
-  {
-    icon: PlayCircle,
-    title: 'Full Transcripts',
-    description: 'Timestamped, speaker-labeled transcripts with every insight backed by evidence.',
   },
 ]
 
@@ -251,6 +220,13 @@ export function Features() {
           <h2 className="mt-4 font-display text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
             Everything you need to evaluate talent
           </h2>
+          <motion.div
+            initial={{ scaleX: 0 }}
+            whileInView={{ scaleX: 1 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.7, ease: 'easeOut' }}
+            className="mx-auto mt-3 h-1 w-20 origin-center rounded-full bg-gradient-to-r from-primary via-blue-400 to-primary"
+          />
           <p className="mt-4 text-muted-foreground">
             Built for recruiters and candidates who want clarity, speed and fairness in hiring.
           </p>
@@ -264,9 +240,14 @@ export function Features() {
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
               transition={{ delay: i * 0.06, duration: 0.5 }}
-              className="group rounded-2xl border border-border/60 bg-card p-7 shadow-soft transition-all duration-300 hover:-translate-y-1 hover:border-primary/30 hover:shadow-glow"
+              onMouseMove={(e) => {
+                const r = e.currentTarget.getBoundingClientRect()
+                e.currentTarget.style.setProperty('--spot-x', `${e.clientX - r.left}px`)
+                e.currentTarget.style.setProperty('--spot-y', `${e.clientY - r.top}px`)
+              }}
+              className="spotlight-card group relative rounded-2xl border border-border/60 bg-card p-7 shadow-soft transition-all duration-300 hover:-translate-y-1 hover:border-primary/30 hover:shadow-glow"
             >
-              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary transition-all duration-300 group-hover:scale-110 group-hover:bg-primary group-hover:text-white">
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary transition-all duration-300 group-hover:scale-110 group-hover:bg-primary group-hover:text-white group-hover:shadow-glow">
                 <feature.icon className="h-6 w-6" />
               </div>
               <h3 className="mt-5 font-display text-lg font-bold text-foreground">{feature.title}</h3>
@@ -327,6 +308,13 @@ export function Pricing() {
           <h2 className="mt-4 font-display text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
             Simple, transparent pricing
           </h2>
+          <motion.div
+            initial={{ scaleX: 0 }}
+            whileInView={{ scaleX: 1 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.7, ease: 'easeOut' }}
+            className="mx-auto mt-3 h-1 w-20 origin-center rounded-full bg-gradient-to-r from-primary via-blue-400 to-primary"
+          />
           <p className="mt-4 text-muted-foreground">Start free. Scale when you're ready.</p>
         </div>
 
@@ -340,7 +328,7 @@ export function Pricing() {
               transition={{ delay: i * 0.08, duration: 0.5 }}
               className={`relative flex flex-col rounded-3xl p-8 transition-all duration-300 ${
                 plan.highlight
-                  ? 'border-2 border-primary bg-card shadow-glow lg:-translate-y-3'
+                  ? 'animate-border-spin shadow-glow lg:-translate-y-3'
                   : 'border border-border/60 bg-card shadow-soft hover:-translate-y-1 hover:shadow-card'
               }`}
             >
@@ -418,6 +406,13 @@ export function FAQ() {
           <h2 className="mt-4 font-display text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
             Frequently asked questions
           </h2>
+          <motion.div
+            initial={{ scaleX: 0 }}
+            whileInView={{ scaleX: 1 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.7, ease: 'easeOut' }}
+            className="mx-auto mt-3 h-1 w-20 origin-center rounded-full bg-gradient-to-r from-primary via-blue-400 to-primary"
+          />
         </div>
 
         <div className="mt-12 space-y-4">
@@ -466,8 +461,9 @@ export function CTA() {
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-primary via-primary to-primary-dark px-8 py-16 text-center shadow-glow sm:px-16">
           <div className="pointer-events-none absolute inset-0">
-            <div className="absolute -left-20 -top-20 h-64 w-64 rounded-full bg-white/10 blur-3xl" />
-            <div className="absolute -bottom-24 -right-16 h-72 w-72 rounded-full bg-blue-300/20 blur-3xl" />
+            <div className="absolute -left-20 -top-20 h-64 w-64 animate-glow-pulse rounded-full bg-white/10 blur-3xl" />
+            <div className="absolute -bottom-24 -right-16 h-72 w-72 animate-glow-pulse rounded-full bg-blue-300/20 blur-3xl [animation-delay:2s]" />
+            <div className="absolute inset-0 bg-[linear-gradient(to_right,rgb(255_255_255/0.06)_1px,transparent_1px),linear-gradient(to_bottom,rgb(255_255_255/0.06)_1px,transparent_1px)] bg-[size:56px_56px] [mask-image:radial-gradient(ellipse_70%_70%_at_50%_50%,#000_60%,transparent_100%)]" />
           </div>
           <div className="relative">
             <h2 className="mx-auto max-w-2xl font-display text-3xl font-bold tracking-tight text-white sm:text-4xl">
@@ -479,7 +475,7 @@ export function CTA() {
             <div className="mt-8 flex flex-wrap items-center justify-center gap-4">
               <Link
                 to="/register"
-                className="group inline-flex h-12 items-center gap-2 rounded-xl bg-white px-7 text-sm font-semibold text-primary shadow-lg transition-all hover:scale-[1.03] active:scale-[0.98]"
+                className="animate-shine group inline-flex h-12 items-center gap-2 rounded-xl bg-white px-7 text-sm font-semibold text-primary shadow-lg transition-all hover:scale-[1.03] active:scale-[0.98]"
               >
                 Get started free
                 <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />

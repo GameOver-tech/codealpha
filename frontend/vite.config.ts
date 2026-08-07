@@ -4,6 +4,13 @@ import react from '@vitejs/plugin-react'
 
 export default defineConfig({
   plugins: [react()],
+  // Force dep re-optimization on every dev start so a prior `vite build`
+  // (which rewrites .vite/deps in production mode) never leaves a stale
+  // cache where NODE_ENV-based branches (e.g. React's index.js) resolve
+  // to null in the dev server.
+  optimizeDeps: {
+    force: true,
+  },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),

@@ -15,6 +15,7 @@ export interface TokenResponse {
   access_token: string
   token_type?: string
   expires_in?: number
+  refresh_token?: string
 }
 
 export interface MessageResponse {
@@ -78,6 +79,8 @@ export interface InterviewStatus {
   failure_stage: string
   processing_finished_at: string | null
   recommendation: string | null
+  has_speech: boolean
+  interview_type?: string
 }
 
 export type RecommendationVerdict = 'Recommended' | 'Not Recommended' | 'Need Further Review'
@@ -182,6 +185,8 @@ export interface CandidateSummary {
   duration_seconds: number
   recommendation: string | null
   message: string
+  has_speech: boolean
+  interview_type?: string
 }
 
 export interface TranscriptSegment {
@@ -217,6 +222,8 @@ export interface AnalysisBundle {
   weaknesses: string[]
   recommendation: Recommendation | null
   report: Report | null
+  has_speech: boolean
+  evaluation_criteria: string[]
 }
 
 export interface Profile {
@@ -291,6 +298,8 @@ export interface AdminInterview {
   failure_stage: string
   processing_finished_at: string | null
   created_at: string | null
+  has_speech: boolean
+  interview_type?: string
 }
 
 export interface RecommendationMessage {
@@ -322,6 +331,8 @@ export interface AdminDashboardRecent {
   recommendation: RecommendationVerdict | null
   profile_picture_url: string | null
   created_at: string | null
+  has_speech: boolean
+  interview_type?: string
 }
 
 export interface AdminDashboard {
@@ -334,6 +345,39 @@ export interface RegisteredCandidate {
   id: string
   full_name: string
   email: string
+}
+
+export interface AdminCandidateLatestInterview {
+  id: string
+  job_title: string
+  status: InterviewStatusValue
+  admin_status: string
+  overall_score: number | null
+  recommendation: RecommendationVerdict | null
+  created_at: string | null
+}
+
+/** One row per registered candidate (with or without interviews). */
+export interface AdminCandidate {
+  id: string
+  full_name: string
+  email: string
+  phone: string | null
+  gender: string | null
+  is_active: boolean
+  created_at: string | null
+  profile_picture_url: string | null
+  interview_count: number
+  has_interview: boolean
+  latest_interview: AdminCandidateLatestInterview | null
+}
+
+export interface CandidateUpdatePayload {
+  first_name?: string
+  last_name?: string
+  phone?: string
+  gender?: string
+  is_active?: boolean
 }
 
 export type ScoreMap = Partial<Record<keyof Scores, number>>

@@ -9,7 +9,6 @@ import {
   Trophy,
   AlertTriangle,
   CheckCircle2,
-  Loader2,
   Clock,
   Inbox,
 } from 'lucide-react'
@@ -20,14 +19,14 @@ import { useInterviewStatus } from '@/hooks'
 import type { InterviewStatusValue } from '@/types'
 
 /**
- * The three candidate-visible interview states.
+ * The candidate-visible interview states.
  *
  * Determined ONLY from backend data:
- *  - PENDING    -> no interview record exists for the candidate
+ *  - NO_INTERVIEW -> no interview record exists for the candidate
  *  - IN_REVIEW  -> interview exists but processing has not finished
  *  - COMPLETED  -> backend status is "completed" (result is ready)
  */
-type CandidateState = 'pending' | 'in_review' | 'completed'
+type CandidateState = 'none' | 'in_review' | 'completed'
 
 const STAGE_STEPS: { stage: string; label: string; icon: typeof Upload; progress: number }[] = [
   { stage: 'uploaded', label: 'Uploaded', icon: Upload, progress: 10 },
@@ -61,7 +60,7 @@ export function CandidateProcessing() {
   const { data: status, isLoading, isError, refetch, isFetching } = useInterviewStatus()
 
   // Derive the candidate-visible state strictly from backend data.
-  let state: CandidateState = 'pending'
+  let state: CandidateState = 'none'
   if (status) {
     state = status.status === 'completed' ? 'completed' : 'in_review'
   }
@@ -83,15 +82,15 @@ export function CandidateProcessing() {
         <PageHeader title="Interview Status" />
         <Card>
           <CardContent className="flex flex-col items-center gap-6 p-10">
-            <Loader2 className="h-12 w-12 animate-spin text-primary" />
+            <p className="text-sm text-muted-foreground">Loading your interview status…</p>
           </CardContent>
         </Card>
       </div>
     )
   }
 
-  // PENDING — no interview record exists yet.
-  if (isError || !status || state === 'pending') {
+  // NO INTERVIEW — no interview record exists yet.
+  if (isError || !status || state === 'none') {
     return (
       <div className="space-y-6">
         <PageHeader title="Interview Status" description="Track your interview evaluation." />
@@ -106,10 +105,7 @@ export function CandidateProcessing() {
               <span className="flex h-16 w-16 items-center justify-center rounded-2xl bg-muted text-muted-foreground">
                 <Inbox className="h-8 w-8" />
               </span>
-              <div className="mt-5 flex items-center gap-2">
-                <StatusBadge status="pending" />
-              </div>
-              <h2 className="mt-4 font-display text-xl font-bold text-foreground">Interview Pending</h2>
+              <h2 className="mt-4 font-display text-xl font-bold text-foreground">No interview yet</h2>
               <p className="mt-1 text-sm text-muted-foreground">Waiting for interview upload.</p>
               <p className="mt-4 max-w-md text-sm leading-relaxed text-muted-foreground">
                 No interview has been uploaded yet. Please wait until the recruiter uploads your
@@ -169,40 +165,51 @@ export function CandidateProcessing() {
                 <StatusBadge status="completed" />
               </div>
               <h2 className="mt-4 font-display text-xl font-bold text-foreground">Completed</h2>
-              <p className="mt-4 max-w-md text-sm leading-relaxed text-muted-foreground">
-                Your interview evaluation has been completed successfully. Click “View Results” to
-                see your complete AI evaluation.
-              </p>
+              {status.has_speech === false ? (
+                <p className="mt-4 max-w-md text-sm leading-relaxed text-muted-foreground">
+                  Your interview was received, but no speech was detected in the recording, so no
+                  evaluation could be generated. Please contact your recruiter to re-upload.
+                </p>
+              ) : (
+                <p className="mt-4 max-w-md text-sm leading-relaxed text-muted-foreground">
+                  Your interview evaluation has been completed successfully. Click “View Results” to
+                  see your complete AI evaluation.
+                </p>
+              )}
 
-              {/* Completed pipeline timeline */}
-              <div className="mt-8 w-full space-y-3 rounded-2xl border border-border/60 bg-muted/40 p-5 text-left">
-                {COMPLETED_STEPS.map((label, i) => (
-                  <motion.div
-                    key={label}
-                    initial={{ opacity: 0, x: -12 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: i * 0.06 }}
-                    className="flex items-center gap-3"
-                  >
-                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-success text-white">
-                      <CheckCircle2 className="h-4 w-4" />
-                    </span>
-                    <p className="text-sm font-semibold text-foreground">{label}</p>
-                  </motion.div>
-                ))}
-                <div className="pt-2">
-                  <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
-                    <div className="h-full w-full rounded-full bg-gradient-to-r from-success to-emerald-400" />
+              {/* Completed pipeline timeline — skipped when no speech was detected */}
+              {status.has_speech !== false && (
+                <div className="mt-8 w-full space-y-3 rounded-2xl border border-border/60 bg-muted/40 p-5 text-left">
+                  {COMPLETED_STEPS.map((label, i) => (
+                    <motion.div
+                      key={label}
+                      initial={{ opacity: 0, x: -12 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: i * 0.06 }}
+                      className="flex items-center gap-3"
+                    >
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-success text-white">
+                        <CheckCircle2 className="h-4 w-4" />
+                      </span>
+                      <p className="text-sm font-semibold text-foreground">{label}</p>
+                    </motion.div>
+                  ))}
+                  <div className="pt-2">
+                    <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+                      <div className="h-full w-full rounded-full bg-gradient-to-r from-success to-emerald-400" />
+                    </div>
+                    <p className="mt-1.5 text-right text-xs font-medium text-success">100% complete</p>
                   </div>
-                  <p className="mt-1.5 text-right text-xs font-medium text-success">100% complete</p>
                 </div>
-              </div>
+              )}
 
               <div className="mt-8 flex flex-wrap justify-center gap-3">
-                <Button onClick={() => navigate('/dashboard/results')}>
-                  <Trophy />
-                  View Results
-                </Button>
+                {status.has_speech !== false && (
+                  <Button onClick={() => navigate('/dashboard/results')}>
+                    <Trophy />
+                    View Results
+                  </Button>
+                )}
               </div>
             </motion.div>
           </CardContent>
@@ -273,9 +280,8 @@ export function CandidateProcessing() {
         <Card className="h-fit">
           <CardContent className="flex flex-col items-center p-8 text-center">
             <div className="relative">
-              <span className="absolute inset-0 animate-pulse-ring rounded-full bg-primary/30" />
-              <span className="relative flex h-20 w-20 items-center justify-center rounded-full bg-primary/10">
-                <Loader2 className="h-10 w-10 animate-spin text-primary" />
+              <span className="flex h-20 w-20 items-center justify-center rounded-full bg-primary/10 text-primary">
+                <FileText className="h-10 w-10" />
               </span>
             </div>
             <div className="mt-5 flex items-center gap-2">

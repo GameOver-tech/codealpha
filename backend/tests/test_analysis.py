@@ -12,12 +12,11 @@ from app.ai import analyze_sentiment, analyze_speech
 from app.ai.deepgram import (
     _build_full_text,
     _map_segments,
-    _validate_transcript,
+    _has_usable_speech,
     extract_audio,
     _is_video,
     probe_media_duration,
 )
-from app.utils.exceptions import TranscriptionError
 
 SEGMENTS = [
     {"start": 0.0, "end": 3.0, "text": "Good morning, thank you for the opportunity.",
@@ -54,21 +53,19 @@ def test_build_full_text_joins_segments():
     assert text == "First.\n\nSecond."
 
 
-def test_validate_transcript_rejects_empty():
-    with pytest.raises(TranscriptionError):
-        _validate_transcript("")
-    with pytest.raises(TranscriptionError):
-        _validate_transcript("   ")
+def test_has_usable_speech_rejects_empty():
+    assert _has_usable_speech("") is False
+    assert _has_usable_speech("   ") is False
 
 
-def test_validate_transcript_rejects_too_short():
-    with pytest.raises(TranscriptionError):
-        _validate_transcript("Hello.")
+def test_has_usable_speech_rejects_too_short():
+    assert _has_usable_speech("Hello.") is False
 
 
-def test_validate_transcript_accepts_real_content():
-    # No exception should be raised.
-    _validate_transcript("Thank you for joining. I have five years of experience building APIs.")
+def test_has_usable_speech_accepts_real_content():
+    assert _has_usable_speech(
+        "Thank you for joining. I have five years of experience building APIs."
+    ) is True
 
 
 def test_is_video():

@@ -1,14 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useDropzone } from 'react-dropzone'
 import { useQuery } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'framer-motion'
 import { UploadCloud, FileVideo, X, AlertTriangle, CheckCircle2, Mail, Search, Users } from 'lucide-react'
 import toast from 'react-hot-toast'
-import { Button, Card, CardContent, Input, Label, Textarea, Progress } from '@/components/ui'
+import { Button, Card, CardContent, Input, Label, Textarea, Progress, MultiSelect } from '@/components/ui'
 import { PageHeader } from '@/components/shared'
 import { adminApi, getErrorMessage } from '@/services/api'
 import { formatBytes, cn } from '@/lib/utils'
+import { EVALUATION_CRITERIA, DEFAULT_EVALUATION_CRITERIA } from '@/lib/evaluationCriteria'
 import type { RegisteredCandidate } from '@/types'
 
 const ACCEPTED_EXTENSIONS = ['mp4', 'mov', 'avi', 'mkv', 'mp3', 'wav', 'm4a', 'flac', 'aac']
@@ -16,6 +17,7 @@ const MAX_SIZE = 200 * 1024 * 1024 // 200 MB
 
 export function AdminUpload() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const [file, setFile] = useState<File | null>(null)
   const [selected, setSelected] = useState<RegisteredCandidate | null>(null)
   const [query, setQuery] = useState('')
@@ -23,6 +25,7 @@ export function AdminUpload() {
   const [highlighted, setHighlighted] = useState(0)
   const [jobTitle, setJobTitle] = useState('')
   const [jobDescription, setJobDescription] = useState('')
+  const [criteria, setCriteria] = useState<string[]>(DEFAULT_EVALUATION_CRITERIA)
   const [uploading, setUploading] = useState(false)
   const [progress, setProgress] = useState(0)
   const [error, setError] = useState<string | null>(null)
@@ -36,6 +39,19 @@ export function AdminUpload() {
     queryFn: async () => (await adminApi.registeredCandidates()).data,
     staleTime: 5 * 60 * 1000,
   })
+
+  // Preselect a candidate arriving via ?candidate=<email> (from the All
+  // Candidates view). Only auto-selects once — a manual pick wins afterwards.
+  const preselectedEmail = searchParams.get('candidate')
+  const appliedPreselection = useRef(false)
+  useEffect(() => {
+    if (appliedPreselection.current || !preselectedEmail || selected) return
+    const match = candidates.find((c) => c.email.toLowerCase() === preselectedEmail.toLowerCase())
+    if (match) {
+      setSelected(match)
+      appliedPreselection.current = true
+    }
+  }, [candidates, preselectedEmail, selected])
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -156,7 +172,13 @@ export function AdminUpload() {
     try {
       // The upload flow is unchanged — the selected candidate's email is
       // passed straight to the existing endpoint.
-      const res = await adminApi.upload(file, selected.email, jobTitle || 'Interview', jobDescription)
+      const res = await adminApi.upload(
+        file,
+        selected.email,
+        jobTitle || 'Interview',
+        jobDescription,
+        criteria,
+      )
       window.clearInterval(timer)
       setProgress(100)
       toast.success(`Upload successful! Processing started for ${res.candidate_email}.`)
@@ -176,6 +198,31 @@ export function AdminUpload() {
         title="Upload Interview"
         description="Submit a recording — processing starts automatically."
       />
+
+      {/* How it works — friendly onboarding hint for first-time admins. */}
+      <div className="rounded-xl border border-border/60 bg-muted/40 p-4">
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          How it works
+        </p>
+        <ol className="mt-2 grid gap-1.5 text-sm text-muted-foreground sm:grid-cols-2">
+          <li className="flex items-start gap-2">
+            <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[10px] font-bold text-primary">1</span>
+            Pick the candidate
+          </li>
+          <li className="flex items-start gap-2">
+            <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[10px] font-bold text-primary">2</span>
+            Choose a recording (audio or video)
+          </li>
+          <li className="flex items-start gap-2">
+            <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[10px] font-bold text-primary">3</span>
+            Select which skills to evaluate
+          </li>
+          <li className="flex items-start gap-2">
+            <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[10px] font-bold text-primary">4</span>
+            Submit — AI processes it automatically
+          </li>
+        </ol>
+      </div>
 
       <Card>
         <CardContent className="p-6 sm:p-8">
@@ -364,6 +411,20 @@ export function AdminUpload() {
               placeholder="Paste the job description so the AI can evaluate responses against it…"
               rows={5}
             />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="evaluation_criteria">Evaluation Criteria</Label>
+            <MultiSelect
+              id="evaluation_criteria"
+              options={EVALUATION_CRITERIA}
+              selected={criteria}
+              onChange={setCriteria}
+              placeholder="Select competencies…"
+            />
+            <p className="text-xs text-muted-foreground">
+              Select the competencies that should be evaluated for this interview. The AI, charts,
+              scores, reports, and PDF will be generated only for the selected criteria.
+            </p>
           </div>
           <Button
             size="lg"

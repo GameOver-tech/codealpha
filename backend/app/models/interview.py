@@ -3,7 +3,7 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, Enum, ForeignKey, String
+from sqlalchemy import JSON, Boolean, DateTime, Enum, ForeignKey, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -38,6 +38,11 @@ class Interview(UUIDMixin, TimestampMixin, Base):
     )
     job_title: Mapped[str] = mapped_column(String(255), default="", nullable=False)
     job_description: Mapped[str] = mapped_column(String(1000), default="", nullable=False)
+    # Competencies the AI should evaluate (technical_skills, communication, …).
+    # Empty list = evaluate all 10 criteria (backward compatible).
+    evaluation_criteria: Mapped[list[str]] = mapped_column(
+        JSON, default=list, nullable=False
+    )
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     processing_finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -49,10 +54,20 @@ class Interview(UUIDMixin, TimestampMixin, Base):
     processing_progress: Mapped[int] = mapped_column(default=0, nullable=False)  # 0-100
     current_stage: Mapped[str] = mapped_column(String(100), default="", nullable=False)
     # Admin review status — a human-set label the recruiter controls
-    # (Pending, Processing, Completed, Recommended, Not Recommended,
+    # (Processing, Completed, Recommended, Not Recommended,
     # Need Further Review, Rejected, Selected). Independent of the pipeline
     # `status` field so pipeline transitions never clobber it.
-    admin_status: Mapped[str] = mapped_column(String(50), default="Pending", nullable=False)
+    admin_status: Mapped[str] = mapped_column(String(50), default="Processing", nullable=False)
+    # Whether the uploaded recording contained audible speech. False means
+    # the pipeline completed without transcript/evaluation/PDF — the admin UI
+    # shows a "no speech detected" state instead of empty analysis.
+    has_speech: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    # How the interview was captured: "recorded" = admin-uploaded recording,
+    # "live" = candidate self-service live AI interview. The processing
+    # pipeline is identical for both.
+    interview_type: Mapped[str] = mapped_column(
+        String(20), default="recorded", nullable=False, server_default="recorded"
+    )
 
     files: Mapped[list["InterviewFile"]] = relationship(
         back_populates="interview", cascade="all, delete-orphan"
